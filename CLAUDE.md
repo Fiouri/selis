@@ -32,6 +32,13 @@ compile in CI but get no UI polish until P6.
   `apps/app/src/i18n/{el,en}.json` (ESLint `selis-i18n/no-hardcoded-strings` + parity test).
 - Secrets in the repo: keystores, Apple certificates, signing keys live in CI secrets only.
 
+## Runtime requirements
+
+- Android System WebView **≥ 111** (ES2022, CSP `'wasm-unsafe-eval'`, Tailwind v4 CSS).
+  `MainActivity.kt` shows a native "update WebView" dialog below that.
+- Render quality/memory adapt to device RAM (`packages/engine/src/limits.ts`); keep the
+  1000-page spike under budget on every tier when touching the viewer or engine.
+
 ## Never overwrite originals
 
 Imports copy the picked file into app data (`$APPDATA/library/<blake3>.pdf`); the source is

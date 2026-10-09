@@ -22,6 +22,8 @@ migrate later behind the same package boundary.
 `packages/engine` is the only code that imports `@embedpdf/*` (ESLint-enforced). Its typed API:
 
 ```ts
+engine.setLimits(renderLimitsFor(totalRamBytes)); // per-device tier (see below)
+await engine.warmUp();                   // optional: load/compile WASM ahead of open
 const doc = await engine.open(bytes);   // DocHandle { id, pageCount, pages, title }
 await doc.renderPage(i, scale);          // ImageBitmap
 await doc.renderPageImage(i, scale);     // ImageData (raw RGBA) — used by the viewer
@@ -33,8 +35,10 @@ Rules inside the engine:
 - The WASM binary is bundled with the app (Vite asset), never loaded from a CDN.
 - Font fallback is disabled (`fontFallback: null`) — EmbedPDF's default would fetch fonts from
   jsDelivr.
-- Renders are queued (visible pages first, newest first) and cancellable; a per-bitmap pixel
-  budget bounds memory.
+- Renders are queued (visible pages first, in request order) and cancellable.
+- Render limits come from device RAM (`limits.ts`): max render scale 2 / 1.5 / 1.25 for
+  > 8 / 6–8 / < 6 GB, a per-bitmap pixel budget, and an LRU cache of rendered pages bounded by
+  count and bytes. Rendered pixels travel as transferred RGBA buffers.
 - The PDFium build contains no V8/XFA (no V8, FXJS or XFA symbols in `pdfium.wasm`), so PDF
   JavaScript is never executed.
 
