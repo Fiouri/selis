@@ -19,6 +19,9 @@ packages/fixtures/out/
 # Tauri: generated schemas are reproducible
 apps/app/src-tauri/gen/schemas/
 
+# Local scratch (APKs, logs, screenshots, device dumps) — see CLAUDE.md
+.tmp/
+
 # Env / secrets — never commit signing material
 .env
 .env.*

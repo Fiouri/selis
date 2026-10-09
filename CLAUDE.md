@@ -79,6 +79,13 @@ crash, WebView memory < 600 MB (`adb shell dumpsys meminfo com.anywecon.selis` +
 
 ## Windows dev notes
 
+- **Scratch files go to `F:\Projects\Selis\.tmp`** (git-ignored): APKs, logs, screenshots,
+  UI dumps, spike JSON. Never write them to `%TEMP%` / `C:` (the C: drive fills up).
+  Maestro/adb copy APKs into the temp dir: run them with `TMP`/`TEMP` and
+  `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=...` pointing at `.tmp`, and `maestro test --debug-output .tmp/maestro`.
+- Android SDK, `~/.gradle`, `~/.android/avd` and the npm cache live on `F:\DevCache`
+  (the old paths are junctions). Mid-range proxy AVD: `selis-midrange-api36` (3 GB, 1080×2340).
+
 - TLS-intercepting proxy: `NODE_TLS_REJECT_UNAUTHORIZED=0` for npm/CLI,
   `GRADLE_OPTS=-Djavax.net.ssl.trustStoreType=Windows-ROOT` for Gradle.
 - Needs MSVC build tools **and the Windows 10/11 SDK** (without it nothing links).

@@ -6,6 +6,27 @@ Fixture: `packages/fixtures` → `large-1000.pdf` (1000 A4 pages, text + vector 
 Gate (docs/SPEC.md, P0): first page visible **< 1 s**, scroll top → bottom **without crash**,
 WebView memory **< 600 MB**.
 
+## P0 status (2026-10-10): DONE — except one item
+
+| P0 item | Status |
+| --- | --- |
+| Monorepo, Tauri 2 app (Android, iOS, Windows/macOS/Linux), strict CSP, least-privilege capabilities | done |
+| `packages/engine` (EmbedPDF v2 in a Web Worker), adaptive render limits, LRU page cache | done |
+| `packages/ui` tokens, PhoneShell (complete), TabletShell (basic), DesktopShell (placeholder) | done |
+| i18n el/en (ICU), Settings language + theme | done |
+| `selis-core` (SQLite migrations, atomic_write, BLAKE3), import/list/read via tauri-specta | done |
+| Mobile viewer (import → virtualized scroll → pinch-zoom), Android back, safe areas, edge-to-edge | done |
+| Fixtures corpus, CI (ubuntu / Android / iOS simulator / Windows) green, repo docs + ADRs | done |
+| Spike gate on emulators (2 GB, 3 GB mid-range proxy) and Galaxy S23 | done (pass) |
+| **Spike gate on a real mid-range Android device** | **open — must be measured before P1 closes** |
+
+P1 starts only after the UI mockups exist (docs/SPEC.md, "UI/UX design system → Διαδικασία").
+
+## Known issues
+
+- Dependabot alert `glib` 0.18 (RUSTSEC-2024-0429, `VariantStrIter` unsoundness): Linux desktop only,
+  transitive via Tauri's gtk-rs 0.18 stack, waiting for upstream — alert left open.
+
 ## Result: PASS on every target that can run the app — real mid-range device still open
 
 Final build (adaptive render limits, LRU page cache, engine warm-up):
