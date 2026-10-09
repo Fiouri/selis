@@ -117,7 +117,9 @@ jobs:
           rustup target add aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
-      - name: Generate gen/apple if it is not committed yet
+      # gen/apple is committed (generated on macOS; it cannot be generated on Windows).
+      # Regenerate only if it was deleted on purpose.
+      - name: Generate gen/apple if missing
         working-directory: apps/app
         run: |
           if [ ! -d src-tauri/gen/apple ]; then
@@ -127,12 +129,6 @@ jobs:
       # The Xcode "Build Rust Code" phase talks back to the Tauri CLI, so build through it.
       - name: Build for the iOS simulator (debug, no signing)
         run: npm run tauri -- ios build --target aarch64-sim --debug
-      - name: Upload generated Xcode project (commit it from here; it cannot be generated on Windows)
-        uses: actions/upload-artifact@v4
-        with:
-          name: gen-apple
-          path: apps/app/src-tauri/gen/apple
-          if-no-files-found: error
 
   windows:
     name: Windows compile check
