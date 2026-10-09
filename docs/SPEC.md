@@ -362,7 +362,7 @@ Public repo = δωρεάν GitHub Actions minutes, μαζί με macOS runners. 
 | Μεταφορά μέσω public relay της n0 | Εξάρτηση από τρίτο server, IP metadata | Toggle «μόνο τοπικό δίκτυο», custom relay URL |
 | Donation links στο iOS app | Απόρριψη στο review | Donations μόνο σε README και website |
 | «Υπογραφή» ≠ ψηφιακή υπογραφή | Νομική σύγχυση για χρήστες | Σαφές label «οπτική υπογραφή». PAdES εκτός v1 |
-| Όνομα Selis | Σύγκρουση trademark ή store | Έλεγχος πριν το πρώτο public commit |
+| Όνομα Selis | Σύγκρουση trademark ή store | Τυπικός έλεγχος πριν το P5. Το GitHub repo μετονομάζεται εύκολα, με αυτόματο redirect |
 
 **Αποφάσεις (9 Οκτωβρίου 2026):**
 
