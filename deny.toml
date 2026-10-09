@@ -5,11 +5,16 @@ all-features = false
 [advisories]
 version = 2
 yanked = "deny"
+# Vulnerabilities always fail. "Unmaintained" notices fail only for crates we
+# depend on directly; transitive ones (e.g. unic-*, paste via Tauri) are tracked upstream.
+unmaintained = "workspace"
 ignore = []
 
 [licenses]
 version = 2
 confidence-threshold = 0.9
+# ISC and OFL-1.1 (fonts) are pre-approved by docs/SPEC.md even if not in the tree yet.
+unused-allowed-license = "allow"
 # Permissive licenses only. GPL/AGPL/LGPL/SSPL are denied by omission.
 allow = [
   "Apache-2.0",
@@ -21,12 +26,9 @@ allow = [
   "ISC",
   "Zlib",
   "Unicode-3.0",
-  "Unicode-DFS-2016",
   "CC0-1.0",
   # Weak, file-level copyleft; present in Tauri's HTML tooling (cssparser, selectors).
   "MPL-2.0",
-  "BSL-1.0",
-  "CDLA-Permissive-2.0",
   "OFL-1.1",
 ]
 

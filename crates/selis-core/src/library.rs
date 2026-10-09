@@ -60,11 +60,15 @@ pub struct Document {
     pub title: String,
     pub kind: DocumentKind,
     pub blake3: String,
+    #[cfg_attr(feature = "specta", specta(type = specta_typescript::Number))]
     pub size_bytes: u64,
     pub page_count: Option<u32>,
-    /// Unix epoch milliseconds.
+    /// Unix epoch milliseconds (exported to TypeScript as `number`; < 2^53).
+    #[cfg_attr(feature = "specta", specta(type = specta_typescript::Number))]
     pub created_at: i64,
+    #[cfg_attr(feature = "specta", specta(type = specta_typescript::Number))]
     pub modified_at: i64,
+    #[cfg_attr(feature = "specta", specta(type = Option<specta_typescript::Number>))]
     pub last_opened_at: Option<i64>,
     pub favorite: bool,
 }
@@ -166,8 +170,8 @@ impl Library {
             favorite: false,
         };
         let location = format!("{FILES_DIR}/{file_name}");
-        let size_i64 = i64::try_from(size_bytes)
-            .map_err(|_| Error::InvalidArgument("file too large"))?;
+        let size_i64 =
+            i64::try_from(size_bytes).map_err(|_| Error::InvalidArgument("file too large"))?;
 
         let mut conn = self.conn();
         let tx = conn.transaction()?;
@@ -176,7 +180,15 @@ impl Library {
                 (id, title, kind, location, blake3, size_bytes, page_count,
                  created_at, modified_at, last_opened_at, favorite)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?7, NULL, 0)",
-            params![doc.id, doc.title, doc.kind.as_str(), location, hash, size_i64, now],
+            params![
+                doc.id,
+                doc.title,
+                doc.kind.as_str(),
+                location,
+                hash,
+                size_i64,
+                now
+            ],
         )?;
         tx.execute(
             "INSERT INTO versions (id, document_id, seq, blake3, size_bytes, created_at, label, file_path)
@@ -348,7 +360,9 @@ fn looks_like_pdf(head: &[u8]) -> bool {
 pub fn title_from_file_name(name: &str) -> String {
     let trimmed = name.trim();
     let stem = match trimmed.len().checked_sub(4) {
-        Some(cut) if trimmed.is_char_boundary(cut) && trimmed[cut..].eq_ignore_ascii_case(".pdf") => {
+        Some(cut)
+            if trimmed.is_char_boundary(cut) && trimmed[cut..].eq_ignore_ascii_case(".pdf") =>
+        {
             &trimmed[..cut]
         }
         _ => trimmed,
@@ -387,10 +401,16 @@ mod tests {
         assert!(!out.duplicate);
         assert_eq!(out.document.title, "Αναφορά");
         assert_eq!(out.document.size_bytes, bytes.len() as u64);
-        assert_eq!(out.document.blake3, blake3::hash(&bytes).to_hex().to_string());
+        assert_eq!(
+            out.document.blake3,
+            blake3::hash(&bytes).to_hex().to_string()
+        );
 
         let stored = lib.files_dir().join(format!("{}.pdf", out.document.blake3));
-        assert_eq!(std::fs::read(&stored).map_err(|e| Error::io(&stored, e))?, bytes);
+        assert_eq!(
+            std::fs::read(&stored).map_err(|e| Error::io(&stored, e))?,
+            bytes
+        );
 
         let versions: i64 = lib.conn().query_row(
             "SELECT COUNT(*) FROM versions WHERE document_id = ?1 AND seq = 1",
@@ -413,7 +433,10 @@ mod tests {
         assert_eq!(out.document.title, "Original File");
 
         let after = std::fs::metadata(&original).map_err(|e| Error::io(&original, e))?;
-        assert_eq!(std::fs::read(&original).map_err(|e| Error::io(&original, e))?, bytes);
+        assert_eq!(
+            std::fs::read(&original).map_err(|e| Error::io(&original, e))?,
+            bytes
+        );
         assert_eq!(
             before.modified().map_err(|e| Error::io(&original, e))?,
             after.modified().map_err(|e| Error::io(&original, e))?
@@ -444,7 +467,10 @@ mod tests {
             lib.import_reader(&b"PK\x03\x04 not a pdf"[..], "x"),
             Err(Error::NotPdf)
         ));
-        assert!(matches!(lib.import_reader(&b""[..], "x"), Err(Error::EmptyFile)));
+        assert!(matches!(
+            lib.import_reader(&b""[..], "x"),
+            Err(Error::EmptyFile)
+        ));
         assert!(lib.list_documents()?.is_empty());
         let files = std::fs::read_dir(lib.files_dir())
             .map_err(|e| Error::io(lib.files_dir(), e))?
@@ -490,10 +516,15 @@ mod tests {
     fn record_info_fills_untitled_only() -> Result<()> {
         let (_dir, lib) = lib()?;
         let untitled = lib.import_reader(pdf_bytes("u").as_slice(), "")?.document;
-        let named = lib.import_reader(pdf_bytes("n").as_slice(), "Named")?.document;
+        let named = lib
+            .import_reader(pdf_bytes("n").as_slice(), "Named")?
+            .document;
         let u = lib.record_document_info(&untitled.id, 12, Some("From Metadata"))?;
         let n = lib.record_document_info(&named.id, 3, Some("Ignored"))?;
-        assert_eq!((u.title.as_str(), u.page_count), ("From Metadata", Some(12)));
+        assert_eq!(
+            (u.title.as_str(), u.page_count),
+            ("From Metadata", Some(12))
+        );
         assert_eq!((n.title.as_str(), n.page_count), ("Named", Some(3)));
         Ok(())
     }
@@ -524,7 +555,9 @@ mod tests {
         let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
         let id = {
             let lib = Library::open(dir.path())?;
-            lib.import_reader(pdf_bytes("p").as_slice(), "p")?.document.id
+            lib.import_reader(pdf_bytes("p").as_slice(), "p")?
+                .document
+                .id
         };
         let lib = Library::open(dir.path())?;
         assert_eq!(lib.read_document(&id)?.document.title, "p");

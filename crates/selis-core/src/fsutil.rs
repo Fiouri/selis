@@ -16,8 +16,7 @@ const COPY_BUF_SIZE: usize = 256 * 1024;
 /// Atomically replaces `dest` with `bytes`.
 pub fn atomic_write(dest: &Path, bytes: &[u8]) -> Result<()> {
     let mut tmp = temp_in_parent(dest)?;
-    tmp.write_all(bytes)
-        .map_err(|e| Error::io(tmp.path(), e))?;
+    tmp.write_all(bytes).map_err(|e| Error::io(tmp.path(), e))?;
     commit(tmp, dest)
 }
 
@@ -78,7 +77,9 @@ fn temp_in_parent(dest: &Path) -> Result<NamedTempFile> {
 fn parent_dir(path: &Path) -> Result<&Path> {
     match path.parent() {
         Some(p) if !p.as_os_str().is_empty() => Ok(p),
-        _ => Err(Error::InvalidArgument("destination has no parent directory")),
+        _ => Err(Error::InvalidArgument(
+            "destination has no parent directory",
+        )),
     }
 }
 
@@ -113,9 +114,15 @@ mod tests {
         let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
         let dest = dir.path().join("a.bin");
         atomic_write(&dest, b"first")?;
-        assert_eq!(std::fs::read(&dest).map_err(|e| Error::io(&dest, e))?, b"first");
+        assert_eq!(
+            std::fs::read(&dest).map_err(|e| Error::io(&dest, e))?,
+            b"first"
+        );
         atomic_write(&dest, b"second")?;
-        assert_eq!(std::fs::read(&dest).map_err(|e| Error::io(&dest, e))?, b"second");
+        assert_eq!(
+            std::fs::read(&dest).map_err(|e| Error::io(&dest, e))?,
+            b"second"
+        );
         // No temp files left behind.
         let count = std::fs::read_dir(dir.path())
             .map_err(|e| Error::io(dir.path(), e))?
@@ -135,7 +142,9 @@ mod tests {
     #[test]
     fn hashed_temp_file_streams_and_hashes() -> Result<()> {
         let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
-        let data: Vec<u8> = (0..(COPY_BUF_SIZE * 3 + 17)).map(|i| (i % 251) as u8).collect();
+        let data: Vec<u8> = (0..(COPY_BUF_SIZE * 3 + 17))
+            .map(|i| (i % 251) as u8)
+            .collect();
         let tmp = HashedTempFile::from_reader(dir.path(), data.as_slice())?;
         assert_eq!(tmp.size_bytes, data.len() as u64);
         assert_eq!(tmp.hash.0, blake3::hash(&data));

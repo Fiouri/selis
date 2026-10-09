@@ -70,10 +70,16 @@ pub async fn update_settings(
     patch: SettingsPatch,
 ) -> CommandResult<Settings> {
     if let Some(locale) = patch.locale {
-        library.set_setting(KEY_LOCALE, &serde_json::to_value(locale).map_err(selis_core::Error::from)?)?;
+        library.set_setting(
+            KEY_LOCALE,
+            &serde_json::to_value(locale).map_err(selis_core::Error::from)?,
+        )?;
     }
     if let Some(theme) = patch.theme {
-        library.set_setting(KEY_THEME, &serde_json::to_value(theme).map_err(selis_core::Error::from)?)?;
+        library.set_setting(
+            KEY_THEME,
+            &serde_json::to_value(theme).map_err(selis_core::Error::from)?,
+        )?;
     }
     load(&library)
 }

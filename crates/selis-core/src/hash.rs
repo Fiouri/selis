@@ -51,7 +51,10 @@ mod tests {
     #[test]
     fn reader_and_bytes_agree() -> io::Result<()> {
         let data = vec![7u8; 200_000];
-        assert_eq!(Blake3Hash::of_reader(data.as_slice())?, Blake3Hash::of_bytes(&data));
+        assert_eq!(
+            Blake3Hash::of_reader(data.as_slice())?,
+            Blake3Hash::of_bytes(&data)
+        );
         Ok(())
     }
 

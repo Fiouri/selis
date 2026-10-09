@@ -12,4 +12,6 @@ pub mod library;
 pub use error::{Error, Result};
 pub use fsutil::atomic_write;
 pub use hash::Blake3Hash;
-pub use library::{Document, DocumentFile, DocumentKind, ImportOutcome, Library, title_from_file_name};
+pub use library::{
+    Document, DocumentFile, DocumentKind, ImportOutcome, Library, title_from_file_name,
+};

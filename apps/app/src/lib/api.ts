@@ -2,7 +2,9 @@
  * The UI's only door to the backend: typed commands from the generated
  * `ipc.ts`, with `Result` unwrapped into exceptions for TanStack Query.
  */
-import { type CommandError, commands, type ErrorCode, type Result } from "./ipc";
+import { type CommandError, commands, type ErrorCode } from "./ipc";
+
+type Result<T, E> = { status: "ok"; data: T } | { status: "error"; error: E };
 
 export class ApiError extends Error {
   readonly code: ErrorCode;

@@ -19,7 +19,10 @@ pub async fn import_document<R: Runtime>(
 ) -> CommandResult<ImportOutcome> {
     let source = source.trim().to_owned();
     if source.is_empty() {
-        return Err(CommandError::new(ErrorCode::InvalidArgument, "empty source"));
+        return Err(CommandError::new(
+            ErrorCode::InvalidArgument,
+            "empty source",
+        ));
     }
     let file_path = parse_source(&source)?;
     let title = title_for_source(&source);
@@ -49,7 +52,10 @@ pub async fn list_documents(library: State<'_, Arc<Library>>) -> CommandResult<V
 /// The returned path is readable through the asset protocol (library dir only).
 #[tauri::command]
 #[specta::specta]
-pub async fn read_document(library: State<'_, Arc<Library>>, id: String) -> CommandResult<DocumentFile> {
+pub async fn read_document(
+    library: State<'_, Arc<Library>>,
+    id: String,
+) -> CommandResult<DocumentFile> {
     Ok(library.read_document(&id)?)
 }
 
@@ -132,10 +138,15 @@ mod tests {
             "Selis Report"
         );
         assert_eq!(
-            title_for_source("content://com.android.providers.downloads.documents/document/msf%3A1000000033"),
+            title_for_source(
+                "content://com.android.providers.downloads.documents/document/msf%3A1000000033"
+            ),
             ""
         );
-        assert_eq!(title_for_source(r"C:\Users\me\Docs\Συμβόλαιο.pdf"), "Συμβόλαιο");
+        assert_eq!(
+            title_for_source(r"C:\Users\me\Docs\Συμβόλαιο.pdf"),
+            "Συμβόλαιο"
+        );
         assert_eq!(title_for_source("/home/me/notes.PDF"), "notes");
         assert_eq!(
             title_for_source("file:///private/var/mobile/Inbox/%CE%B1%CE%B2.pdf"),
