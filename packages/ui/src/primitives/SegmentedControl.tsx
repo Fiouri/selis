@@ -11,6 +11,14 @@ export type SegmentedControlProps<T extends string> = {
   testId?: string;
 };
 
+/** Four long (e.g. Greek) labels don't fit one row on a phone: use a balanced 2×2 grid there. */
+function columns(count: number): string {
+  if (count <= 1) return "grid-cols-1";
+  if (count === 2) return "grid-cols-2";
+  if (count === 3) return "grid-cols-3";
+  return "grid-cols-2 min-[480px]:grid-cols-4";
+}
+
 const NEXT_KEYS = new Set(["ArrowRight", "ArrowDown"]);
 const PREV_KEYS = new Set(["ArrowLeft", "ArrowUp"]);
 
@@ -39,7 +47,7 @@ export function SegmentedControl<T extends string>({ label, value, options, onCh
         aria-labelledby={labelId}
         data-testid={testId}
         onKeyDown={onKeyDown}
-        className="grid auto-cols-fr grid-flow-col gap-1 rounded-control bg-neutral-3 p-1"
+        className={cx("grid gap-1 rounded-control bg-neutral-3 p-1", columns(options.length))}
       >
         {options.map((option) => {
           const selected = option.value === value;
@@ -54,7 +62,7 @@ export function SegmentedControl<T extends string>({ label, value, options, onCh
               onClick={() => onChange(option.value)}
               className={cx(
                 "selis-focus min-h-11 rounded-[6px] px-2 text-sm font-medium transition-colors duration-150 ease-standard",
-                selected ? "bg-surface-raised text-neutral-12 shadow-1" : "text-neutral-11 hover:text-neutral-12",
+                selected ? "bg-accent-9 text-accent-contrast shadow-1" : "text-neutral-11 hover:bg-neutral-4 hover:text-neutral-12",
               )}
             >
               {option.label}

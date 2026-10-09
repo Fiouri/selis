@@ -86,7 +86,7 @@ function largePage(index: number, total: number): string {
   // A simple vector figure that varies per page (exercises path rendering).
   const bars = 12;
   for (let b = 0; b < bars; b++) {
-    const height = 20 + ((index * 7 + b * 13) % 120);
+    const height = 12 + ((index * 7 + b * 13) % 72);
     const shade = (0.55 + (b % 4) * 0.1).toFixed(2);
     lines.push(`q ${shade} ${shade} ${shade} rg ${48 + b * 40} 120 28 ${height} re f Q`);
   }

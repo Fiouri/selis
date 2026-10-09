@@ -1,14 +1,32 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import pkg from "./package.json" with { type: "json" };
+import tauriConf from "./src-tauri/tauri.conf.json" with { type: "json" };
+
+/**
+ * The mock (browser) build gets the same CSP as the Tauri app, as a <meta>, so
+ * Playwright exercises the worker + WASM under the production policy. Only
+ * blob: is added (mock documents are blob URLs); frame-ancestors is header-only.
+ */
+function mockCsp(): Plugin {
+  const directives = Object.entries(tauriConf.app.security.csp)
+    .filter(([name]) => name !== "frame-ancestors")
+    .map(([name, value]) => (name === "connect-src" ? `${name} ${value} blob:` : `${name} ${value}`));
+  return {
+    name: "selis-mock-csp",
+    transformIndexHtml: () => [
+      { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: directives.join("; ") }, injectTo: "head-prepend" },
+    ],
+  };
+}
 
 // Set by `tauri dev` / `tauri android dev` so a device can reach the dev server.
 const host = process.env.TAURI_DEV_HOST;
 const platform = process.env.TAURI_ENV_PLATFORM;
 
-export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss()],
+export default defineConfig(({ mode, command }) => ({
+  plugins: [react(), tailwindcss(), ...(mode === "mock" && command === "build" ? [mockCsp()] : [])],
   clearScreen: false,
   envPrefix: ["VITE_", "TAURI_ENV_"],
   define: {
