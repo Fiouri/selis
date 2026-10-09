@@ -83,7 +83,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - name: Android NDK
         run: sdkmanager --install "ndk;${NDK_VERSION}"
       - name: Rust toolchain + Android targets
