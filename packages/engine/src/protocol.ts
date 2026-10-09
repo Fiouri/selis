@@ -5,13 +5,13 @@ export const MAX_BITMAP_PIXELS = 16_777_216;
 
 export type WorkerRequest =
   | { type: "open"; reqId: number; bytes: ArrayBuffer; password?: string }
-  | { type: "render"; reqId: number; docId: string; index: number; scale: number }
+  | { type: "render"; reqId: number; docId: string; index: number; scale: number; prefetch: boolean }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
 
 export type WorkerResponse =
   | { type: "opened"; reqId: number; docId: string; pages: PageSize[]; title: string | null }
-  | { type: "rendered"; reqId: number; bitmap: ImageBitmap }
+  | { type: "rendered"; reqId: number; width: number; height: number; pixels: ArrayBuffer }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };
 

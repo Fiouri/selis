@@ -3,8 +3,8 @@
  * PDF engine worker: EmbedPDF's PDFium build (WASM) runs here, off the UI thread.
  * - WASM is loaded from the app bundle (never a CDN).
  * - Font fallback is disabled: no network requests, ever.
- * - Renders are queued LIFO (newest request = what the user is looking at) and
- *   can be cancelled while queued.
+ * - Renders are queued: visible pages before prefetch pages, newest first
+ *   (= what the user is looking at now); queued renders can be cancelled.
  */
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import { type PdfDocumentObject, PdfErrorCode, type PdfErrorReason } from "@embedpdf/models";
@@ -113,11 +113,21 @@ async function runRender(job: RenderJob): Promise<void> {
     const raw = await engine
       .renderPageRaw(doc, page, { scaleFactor: scale, dpr: 1, withAnnotations: true, withForms: true })
       .toPromise();
-    const bitmap = await createImageBitmap(new ImageData(raw.data, raw.width, raw.height));
-    post({ type: "rendered", reqId: job.reqId, bitmap }, [bitmap]);
+    // Raw RGBA, transferred (zero-copy). ImageBitmaps created here would each pin a
+    // shared-memory/GPU resource in the WebView until GC; plain buffers do not.
+    const pixels = raw.data.buffer;
+    post({ type: "rendered", reqId: job.reqId, width: raw.width, height: raw.height, pixels }, [pixels]);
   } catch (err) {
     post({ type: "error", reqId: job.reqId, ...toError(err) });
   }
+}
+
+/** Newest visible-page job, else newest prefetch job. */
+function takeNext(): RenderJob | undefined {
+  for (let i = queue.length - 1; i >= 0; i--) {
+    if (!queue[i]?.prefetch) return queue.splice(i, 1)[0];
+  }
+  return queue.pop();
 }
 
 /** Yields to the event loop between renders so cancels can arrive. */
@@ -125,7 +135,7 @@ function drain(): void {
   if (draining) return;
   draining = true;
   setTimeout(async () => {
-    const job = queue.pop();
+    const job = takeNext();
     if (job) await runRender(job);
     draining = false;
     if (queue.length > 0) drain();

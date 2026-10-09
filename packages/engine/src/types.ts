@@ -20,6 +20,8 @@ export type OpenOptions = {
 export type RenderOptions = {
   /** Aborting drops a queued render; the promise rejects with code "cancelled". */
   signal?: AbortSignal;
+  /** Prefetch renders (off-screen buffer pages) yield to visible ones. */
+  prefetch?: boolean;
 };
 
 /** An open document inside the engine worker. */
@@ -35,6 +37,11 @@ export interface DocHandle {
    * The caller owns the bitmap and must `close()` it (or transfer it) when done.
    */
   renderPage(index: number, scale: number, options?: RenderOptions): Promise<ImageBitmap>;
+  /**
+   * Same as `renderPage` but returns raw RGBA pixels. Preferred for on-screen
+   * pages drawn into reused canvases: no per-render GPU/shared-memory resource.
+   */
+  renderPageImage(index: number, scale: number, options?: RenderOptions): Promise<ImageData>;
   close(): Promise<void>;
 }
 

@@ -55,17 +55,21 @@ export class WorkerPdfEngine implements PdfEngine {
   private makeHandle(docId: string, pages: PageSize[], title: string | null): DocHandle {
     let closed = false;
     const frozenPages = Object.freeze(pages.map((p) => Object.freeze({ ...p })));
-    return {
+    const handle: DocHandle = {
       id: docId,
       pageCount: frozenPages.length,
       pages: frozenPages,
       title,
-      renderPage: (index, scale, options: RenderOptions = {}) => {
+      renderPageImage: (index, scale, options: RenderOptions = {}) => {
         if (closed) return Promise.reject(new EngineError("closed", "document is closed"));
         if (!Number.isInteger(index) || index < 0 || index >= frozenPages.length) {
           return Promise.reject(new RangeError(`page index ${index} out of range`));
         }
-        return this.render(docId, index, scale, options.signal);
+        return this.render(docId, index, scale, options.signal, options.prefetch ?? false);
+      },
+      renderPage: async (index, scale, options: RenderOptions = {}) => {
+        const image = await handle.renderPageImage(index, scale, options);
+        return createImageBitmap(image);
       },
       close: async () => {
         if (closed) return;
@@ -73,9 +77,16 @@ export class WorkerPdfEngine implements PdfEngine {
         await this.request((reqId) => ({ type: "close", reqId, docId }));
       },
     };
+    return handle;
   }
 
-  private async render(docId: string, index: number, scale: number, signal?: AbortSignal): Promise<ImageBitmap> {
+  private async render(
+    docId: string,
+    index: number,
+    scale: number,
+    signal: AbortSignal | undefined,
+    prefetch: boolean,
+  ): Promise<ImageData> {
     if (signal?.aborted) throw new EngineError("cancelled", "aborted");
     let reqId = 0;
     const onAbort = () => {
@@ -85,14 +96,10 @@ export class WorkerPdfEngine implements PdfEngine {
     try {
       const msg = await this.request<Extract<WorkerResponse, { type: "rendered" }>>((id) => {
         reqId = id;
-        return { type: "render", reqId: id, docId, index, scale };
+        return { type: "render", reqId: id, docId, index, scale, prefetch };
       });
-      // Aborted after the worker finished: free the bitmap right away.
-      if (signal?.aborted) {
-        msg.bitmap.close();
-        throw new EngineError("cancelled", "aborted");
-      }
-      return msg.bitmap;
+      if (signal?.aborted) throw new EngineError("cancelled", "aborted");
+      return new ImageData(new Uint8ClampedArray(msg.pixels), msg.width, msg.height);
     } finally {
       signal?.removeEventListener("abort", onAbort);
     }
@@ -114,11 +121,7 @@ export class WorkerPdfEngine implements PdfEngine {
 
   private onMessage(msg: WorkerResponse): void {
     const pending = this.pending.get(msg.reqId);
-    if (!pending) {
-      // Late reply for a request we gave up on: release GPU/CPU memory.
-      if (msg.type === "rendered") msg.bitmap.close();
-      return;
-    }
+    if (!pending) return; // Late reply for a request we gave up on; the buffer is simply dropped.
     this.pending.delete(msg.reqId);
     if (msg.type === "error") pending.reject(new EngineError(msg.code, msg.message));
     else pending.resolve(msg);

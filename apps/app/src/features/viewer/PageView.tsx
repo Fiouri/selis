@@ -2,6 +2,13 @@ import { clampScale, type DocHandle, EngineError, renderScale } from "@selis/eng
 import { Skeleton } from "@selis/ui";
 import { memo, useEffect, useRef, useState } from "react";
 import { reportFirstPage } from "../../lib/perf";
+import { isMobilePlatform } from "../../lib/platform";
+
+/**
+ * Render resolution cap. Above 2× the gain in sharpness is marginal on phones,
+ * while pixel count (and WebView GPU memory) grows with the square.
+ */
+const MAX_RENDER_DPR = isMobilePlatform ? 2 : 3;
 
 type Props = {
   doc: DocHandle;
@@ -14,12 +21,16 @@ type Props = {
   maxPixels: number;
   label: string;
   active?: boolean;
+  /** Off-screen buffer page: rendered after the visible ones. */
+  prefetch?: boolean;
   onClick?: (index: number) => void;
 };
 
 /**
- * One page box. Its bitmap lives only while the page is mounted (inside the
- * render window); unmounting aborts pending renders and frees the canvas.
+ * One page box, drawn into a canvas that the viewer recycles between pages
+ * (slot pool): the canvas backing store is reused instead of allocating a new
+ * GPU/shared-memory resource per render. Unmounting aborts pending renders and
+ * frees the canvas.
  */
 export const PageView = memo(function PageView({
   doc,
@@ -31,50 +42,47 @@ export const PageView = memo(function PageView({
   maxPixels,
   label,
   active = false,
+  prefetch = false,
   onClick,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [ready, setReady] = useState(false);
+  // Which page the canvas currently shows; a recycled canvas shows a skeleton until redrawn.
+  const [drawnIndex, setDrawnIndex] = useState<number | null>(null);
+  const ready = drawnIndex === index;
   const renderWidth = Math.round(width);
 
   useEffect(() => {
     const page = doc.pages[index];
     if (!page || renderWidth <= 0) return;
     const controller = new AbortController();
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR);
     const scale = clampScale(page, renderScale(page, renderWidth, dpr), maxPixels);
 
     const draw = async () => {
-      let bitmap: ImageBitmap;
+      let image: ImageData;
       try {
-        bitmap = await doc.renderPage(index, scale, { signal: controller.signal });
+        image = await doc.renderPageImage(index, scale, { signal: controller.signal, prefetch });
       } catch (err) {
         if (err instanceof EngineError && (err.code === "cancelled" || err.code === "closed")) return;
         console.warn(`selis: render failed for page ${index + 1}`, err);
         return;
       }
       const canvas = canvasRef.current;
-      if (controller.signal.aborted || !canvas) {
-        bitmap.close();
-        return;
-      }
-      // Swap in the new bitmap only now: the previous one stays visible
-      // (CSS-scaled) during zoom changes, so there is no blank flash.
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const ctx = canvas.getContext("bitmaprenderer");
-      if (ctx) {
-        ctx.transferFromImageBitmap(bitmap);
-      } else {
-        canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
-        bitmap.close();
-      }
-      setReady(true);
+      if (controller.signal.aborted || !canvas) return;
+      // Draw only now: the previous content stays visible (CSS-scaled) during
+      // zoom changes, so there is no blank flash. Resize only when needed so the
+      // backing store is reused.
+      if (canvas.width !== image.width) canvas.width = image.width;
+      if (canvas.height !== image.height) canvas.height = image.height;
+      canvas.getContext("2d", { alpha: false })?.putImageData(image, 0, 0);
+      setDrawnIndex(index);
       reportFirstPage(index);
     };
     void draw();
 
     return () => controller.abort();
+    // `prefetch` is a scheduling hint only; a change must not trigger a re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, index, renderWidth, maxPixels]);
 
   // Release the backing store as soon as the page leaves the render window.

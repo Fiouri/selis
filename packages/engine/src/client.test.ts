@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { WorkerPdfEngine, type WorkerLike } from "./client";
 import type { WorkerRequest, WorkerResponse } from "./protocol";
 import { EngineError } from "./types";
@@ -26,8 +26,27 @@ class FakeWorker implements WorkerLike {
   }
 }
 
-function fakeBitmap(close = vi.fn()): ImageBitmap {
-  return { width: 10, height: 10, close };
+beforeAll(() => {
+  // Node has no ImageData / createImageBitmap; minimal stand-ins for the client logic.
+  class ImageDataStub {
+    readonly data: Uint8ClampedArray;
+    readonly width: number;
+    readonly height: number;
+    constructor(data: Uint8ClampedArray, width: number, height: number) {
+      this.data = data;
+      this.width = width;
+      this.height = height;
+    }
+  }
+  vi.stubGlobal("ImageData", ImageDataStub);
+  vi.stubGlobal(
+    "createImageBitmap",
+    vi.fn((image: ImageData) => Promise.resolve({ width: image.width, height: image.height, close: vi.fn() })),
+  );
+});
+
+function rendered(reqId: number, width = 2, height = 3): WorkerResponse {
+  return { type: "rendered", reqId, width, height, pixels: new ArrayBuffer(width * height * 4) };
 }
 
 function openedEngine() {
@@ -45,44 +64,45 @@ function openedEngine() {
 describe("WorkerPdfEngine", () => {
   it("opens a document and exposes page info", async () => {
     const { worker, engine } = openedEngine();
-    const bytes = new ArrayBuffer(8);
-    const doc = await engine.open(bytes);
+    const doc = await engine.open(new ArrayBuffer(8));
     expect(doc.pageCount).toBe(1);
     expect(doc.pages[0]).toEqual({ width: 100, height: 200 });
     expect(doc.title).toBe("T");
     expect(worker.sent[0]).toMatchObject({ type: "open" });
   });
 
-  it("resolves renders with the transferred bitmap", async () => {
+  it("renders raw pixels and ImageBitmaps", async () => {
     const { worker, engine } = openedEngine();
     const doc = await engine.open(new ArrayBuffer(8));
-    const bitmap = fakeBitmap();
-    worker.autoReply = (req) => (req.type === "render" ? { type: "rendered", reqId: req.reqId, bitmap } : null);
-    await expect(doc.renderPage(0, 1.5)).resolves.toBe(bitmap);
-    expect(worker.sent.at(-1)).toMatchObject({ type: "render", docId: "doc-1", index: 0, scale: 1.5 });
+    worker.autoReply = (req) => (req.type === "render" ? rendered(req.reqId) : null);
+
+    const image = await doc.renderPageImage(0, 1.5);
+    expect([image.width, image.height, image.data.length]).toEqual([2, 3, 24]);
+    expect(worker.sent.at(-1)).toMatchObject({ type: "render", docId: "doc-1", index: 0, scale: 1.5, prefetch: false });
+
+    const bitmap = await doc.renderPage(0, 1, { prefetch: true });
+    expect([bitmap.width, bitmap.height]).toEqual([2, 3]);
+    expect(worker.sent.at(-1)).toMatchObject({ prefetch: true });
   });
 
   it("rejects out-of-range pages without asking the worker", async () => {
     const { worker, engine } = openedEngine();
     const doc = await engine.open(new ArrayBuffer(8));
     const before = worker.sent.length;
-    await expect(doc.renderPage(5, 1)).rejects.toBeInstanceOf(RangeError);
+    await expect(doc.renderPageImage(5, 1)).rejects.toBeInstanceOf(RangeError);
     expect(worker.sent.length).toBe(before);
   });
 
-  it("sends cancel on abort and frees late bitmaps", async () => {
+  it("sends cancel on abort and drops late results", async () => {
     const { worker, engine } = openedEngine();
     const doc = await engine.open(new ArrayBuffer(8));
     const controller = new AbortController();
-    const promise = doc.renderPage(0, 1, { signal: controller.signal });
+    const promise = doc.renderPageImage(0, 1, { signal: controller.signal });
     const render = worker.sent.at(-1) as Extract<WorkerRequest, { type: "render" }>;
     controller.abort();
     expect(worker.sent.at(-1)).toEqual({ type: "cancel", reqId: render.reqId });
-    // The worker had already finished: the bitmap must be closed, not leaked.
-    const close = vi.fn();
-    worker.reply({ type: "rendered", reqId: render.reqId, bitmap: fakeBitmap(close) });
+    worker.reply(rendered(render.reqId));
     await expect(promise).rejects.toMatchObject({ code: "cancelled" });
-    expect(close).toHaveBeenCalled();
   });
 
   it("maps worker errors to EngineError", async () => {
@@ -98,11 +118,11 @@ describe("WorkerPdfEngine", () => {
     const { worker, engine } = openedEngine();
     const doc = await engine.open(new ArrayBuffer(8));
     await doc.close();
-    await expect(doc.renderPage(0, 1)).rejects.toMatchObject({ code: "closed" });
+    await expect(doc.renderPageImage(0, 1)).rejects.toMatchObject({ code: "closed" });
 
     const doc2 = await engine.open(new ArrayBuffer(8));
     worker.autoReply = null;
-    const pending = doc2.renderPage(0, 1);
+    const pending = doc2.renderPageImage(0, 1);
     engine.destroy();
     await expect(pending).rejects.toMatchObject({ code: "closed" });
     expect(worker.terminated).toBe(true);

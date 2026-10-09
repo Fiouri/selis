@@ -39,6 +39,25 @@ type Props = {
   ariaLabel?: string | undefined;
 };
 
+/**
+ * Keeps each page in the window on its previous slot and gives new pages the
+ * slots freed by pages that left. Mutates and returns `slots`.
+ */
+export function assignSlots(slots: Map<number, number>, range: PageRange): Map<number, number> {
+  for (const page of slots.keys()) {
+    if (page < range.first || page > range.last) slots.delete(page);
+  }
+  const used = new Set(slots.values());
+  let candidate = 0;
+  for (let i = range.first; i <= range.last; i++) {
+    if (slots.has(i)) continue;
+    while (used.has(candidate)) candidate++;
+    slots.set(i, candidate);
+    used.add(candidate);
+  }
+  return slots;
+}
+
 type Anchor = { page: number; fracY: number; screenY: number; fracX: number; screenX: number };
 
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
@@ -80,8 +99,10 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const contentRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(1);
-  const [win, setWin] = useState<PageRange | null>(null);
+  const [win, setWin] = useState<{ visible: PageRange; window: PageRange } | null>(null);
   const pendingAnchor = useRef<Anchor | null>(null);
+  /** Page → canvas slot. Slots are React keys, so canvases are recycled across pages. */
+  const slots = useRef(new Map<number, number>());
   const gestureActive = useRef(false);
 
   const fitWidth = Math.max(0, viewport.width - 2 * gutter);
@@ -104,8 +125,19 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
     const el = scrollerRef.current;
     if (!el || el.clientHeight === 0) return;
     const y = Math.max(0, el.scrollTop - insetTop);
-    const next = renderWindow(visibleRange(layout, y, el.clientHeight), doc.pageCount, buffer);
-    setWin((prev) => (prev && next && prev.first === next.first && prev.last === next.last ? prev : next));
+    const visible = visibleRange(layout, y, el.clientHeight);
+    const renderable = renderWindow(visible, doc.pageCount, buffer);
+    const next = visible && renderable ? { visible, window: renderable } : null;
+    setWin((prev) =>
+      prev &&
+      next &&
+      prev.window.first === next.window.first &&
+      prev.window.last === next.window.last &&
+      prev.visible.first === next.visible.first &&
+      prev.visible.last === next.visible.last
+        ? prev
+        : next,
+    );
     onPageChange?.(Math.max(0, pageAt(layout, y + el.clientHeight / 3)));
   }, [layout, insetTop, doc.pageCount, buffer, onPageChange]);
 
@@ -261,11 +293,12 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
 
   const pages = [];
   if (win && fitWidth > 0) {
-    for (let i = win.first; i <= win.last; i++) {
+    const assigned = assignSlots(slots.current, win.window);
+    for (let i = win.window.first; i <= win.window.last; i++) {
       const width = layout.widths[i] ?? 0;
       pages.push(
         <PageView
-          key={i}
+          key={assigned.get(i)}
           doc={doc}
           index={i}
           top={insetTop + (layout.tops[i] ?? 0)}
@@ -275,6 +308,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
           maxPixels={maxPixels}
           label={t("viewer.pageLabel", { page: i + 1 })}
           active={activePage === i}
+          prefetch={i < win.visible.first || i > win.visible.last}
           {...(onPageClick ? { onClick: onPageClick } : {})}
         />,
       );
