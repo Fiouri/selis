@@ -19,6 +19,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::library::record_document_info,
         commands::settings::get_settings,
         commands::settings::update_settings,
+        commands::device::device_memory::<tauri::Wry>,
     ])
 }
 

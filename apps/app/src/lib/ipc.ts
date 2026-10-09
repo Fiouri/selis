@@ -25,6 +25,8 @@ export const commands = {
 	recordDocumentInfo: (id: string, pageCount: number, pdfTitle: string | null) => typedError<Document, CommandError>(__TAURI_INVOKE("record_document_info", { id, pageCount, pdfTitle })),
 	getSettings: () => typedError<Settings, CommandError>(__TAURI_INVOKE("get_settings")),
 	updateSettings: (patch: SettingsPatch) => typedError<Settings, CommandError>(__TAURI_INVOKE("update_settings", { patch })),
+	/**  Total device RAM, used by the UI to pick render limits (resolution, cache size). */
+	deviceMemory: () => typedError<DeviceMemory, CommandError>(__TAURI_INVOKE("device_memory")),
 };
 
 /* Types */
@@ -32,6 +34,12 @@ export type CommandError = {
 	code: ErrorCode,
 	/**  Developer-facing detail, never shown verbatim to users. */
 	message: string,
+};
+
+export type DeviceMemory = {
+	/**  Total RAM visible to the OS, in bytes (below the marketed size). */
+	totalBytes: number,
+	source: MemorySource,
 };
 
 /**  A library entry as exposed to the UI. */
@@ -68,6 +76,12 @@ export type ImportOutcome = {
 };
 
 export type LocalePref = "system" | "el" | "en";
+
+export type MemorySource = 
+/**  Android `ActivityManager.MemoryInfo.totalMem`. */
+"activityManager" | 
+/**  `sysinfo` (desktop, iOS). */
+"sysinfo";
 
 export type Settings = {
 	locale: LocalePref,

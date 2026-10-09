@@ -5,6 +5,7 @@ const APP_COMMANDS: &[&str] = &[
     "record_document_info",
     "get_settings",
     "update_settings",
+    "device_memory",
 ];
 
 fn main() {
