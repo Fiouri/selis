@@ -69,6 +69,31 @@ test("import → full-bleed viewer → scroll 1000 pages → back", async ({ pag
   await expect(page.getByRole("button", { name: /Open Selis 1000-page fixture|Open large-1000/ })).toContainText("1,000 pages");
 });
 
+test("opening renders only the visible pages plus one buffer page, visible first", async ({ page }) => {
+  await page.addInitScript(() => {
+    const requests: Array<{ page: number; prefetch: boolean }> = [];
+    (window as unknown as { __renderRequests: typeof requests }).__renderRequests = requests;
+    // Called below with .call(this), so the unbound reference is intended.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const original = Worker.prototype.postMessage as (this: Worker, message: unknown, transfer?: Transferable[]) => void;
+    Worker.prototype.postMessage = function (this: Worker, message: unknown, transfer?: Transferable[]) {
+      const m = message as { type?: string; index?: number; prefetch?: boolean };
+      if (m.type === "render") requests.push({ page: (m.index ?? 0) + 1, prefetch: m.prefetch ?? false });
+      original.call(this, message, transfer ?? []);
+    } as typeof Worker.prototype.postMessage;
+  });
+  await page.goto("/");
+  await importFixture(page, "large-1000.pdf");
+  await firstPageRendered(page);
+  await page.waitForTimeout(500);
+  const requests = await page.evaluate(
+    () => (window as unknown as { __renderRequests: Array<{ page: number; prefetch: boolean }> }).__renderRequests,
+  );
+  expect(requests.length).toBeLessThanOrEqual(4);
+  expect(requests[0]).toEqual({ page: 1, prefetch: false });
+  expect(requests.filter((r) => !r.prefetch).map((r) => r.page)).toEqual([1, 2].slice(0, requests.filter((r) => !r.prefetch).length));
+});
+
 test("pinch zoom scales only the document", async ({ page, browserName }, info) => {
   test.skip(browserName !== "chromium", "multi-touch is driven through the Chrome DevTools Protocol");
   await page.goto("/");

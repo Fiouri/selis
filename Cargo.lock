@@ -2841,6 +2841,7 @@ name = "selis-app"
 version = "0.1.0"
 dependencies = [
  "jni",
+ "objc2-foundation",
  "selis-core",
  "serde",
  "serde_json",

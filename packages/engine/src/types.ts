@@ -53,6 +53,8 @@ export interface PdfEngine {
   readonly limits: RenderLimits;
   /** Applies limits for this device (see `renderLimitsFor`). */
   setLimits(limits: RenderLimits): void;
+  /** Loads and compiles the PDF engine ahead of the first `open` (idempotent). */
+  warmUp(): Promise<void>;
   /** Terminates the worker and frees all WASM memory. */
   destroy(): void;
 }

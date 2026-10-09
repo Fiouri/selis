@@ -52,6 +52,20 @@ export class WorkerPdfEngine implements PdfEngine {
     return this.makeHandle(msg.docId, msg.pages, msg.title);
   }
 
+  private warming: Promise<void> | null = null;
+
+  warmUp(): Promise<void> {
+    this.warming ??= (async () => {
+      try {
+        await this.request((reqId) => ({ type: "warmup", reqId }));
+      } catch (err) {
+        this.warming = null; // allow a retry
+        throw err;
+      }
+    })();
+    return this.warming;
+  }
+
   get limits(): RenderLimits {
     return this.currentLimits;
   }

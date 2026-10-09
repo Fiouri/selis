@@ -10,6 +10,18 @@ export function getEngine(): PdfEngine {
   return engine;
 }
 
+/**
+ * Starts loading/compiling the PDF engine in the background — call when a document
+ * is about to be opened (picker shown, viewer navigated to), never at app launch.
+ */
+export function warmUpEngine(): void {
+  getEngine()
+    .warmUp()
+    .catch((err: unknown) => {
+      console.warn("selis: engine warm-up failed (will retry on open)", err);
+    });
+}
+
 /** Limits for the current device (conservative until `installRenderLimits` resolves). */
 export function currentRenderLimits(): RenderLimits {
   return limits;

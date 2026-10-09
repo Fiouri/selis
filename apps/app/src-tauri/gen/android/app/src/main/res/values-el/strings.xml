@@ -1,0 +1,6 @@
+<resources>
+    <string name="webview_outdated_title">Ενημέρωσε το Android System WebView</string>
+    <string name="webview_outdated_message">Το Selis χρειάζεται Android System WebView %1$d ή νεότερο για να εμφανίζει έγγραφα. Αυτή η συσκευή έχει την έκδοση %2$s.</string>
+    <string name="webview_outdated_update">Ενημέρωση</string>
+    <string name="webview_outdated_close">Κλείσιμο</string>
+</resources>

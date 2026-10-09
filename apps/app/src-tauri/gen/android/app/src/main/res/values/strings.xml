@@ -1,4 +1,8 @@
 <resources>
     <string name="app_name">"Selis"</string>
     <string name="main_activity_title">"Selis"</string>
+    <string name="webview_outdated_title">Update Android System WebView</string>
+    <string name="webview_outdated_message">Selis needs Android System WebView %1$d or newer to display documents. This device has version %2$s.</string>
+    <string name="webview_outdated_update">Update</string>
+    <string name="webview_outdated_close">Close</string>
 </resources>

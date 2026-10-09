@@ -99,7 +99,10 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const contentRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(1);
-  const [win, setWin] = useState<{ visible: PageRange; window: PageRange } | null>(null);
+  // The render window is tied to the layout it was computed for: a window from a
+  // stale layout (e.g. before the width was measured, when every page is 0 px tall)
+  // would mount and render dozens of pages at once.
+  const [win, setWin] = useState<{ visible: PageRange; window: PageRange; layout: PageLayout } | null>(null);
   const pendingAnchor = useRef<Anchor | null>(null);
   /** Page → canvas slot. Slots are React keys, so canvases are recycled across pages. */
   const slots = useRef(new Map<number, number>());
@@ -124,13 +127,18 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const update = useCallback(() => {
     const el = scrollerRef.current;
     if (!el || el.clientHeight === 0) return;
+    if (fitWidth <= 0) {
+      setWin(null);
+      return;
+    }
     const y = Math.max(0, el.scrollTop - insetTop);
     const visible = visibleRange(layout, y, el.clientHeight);
     const renderable = renderWindow(visible, doc.pageCount, buffer);
-    const next = visible && renderable ? { visible, window: renderable } : null;
+    const next = visible && renderable ? { visible, window: renderable, layout } : null;
     setWin((prev) =>
       prev &&
       next &&
+      prev.layout === next.layout &&
       prev.window.first === next.window.first &&
       prev.window.last === next.window.last &&
       prev.visible.first === next.visible.first &&
@@ -139,7 +147,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
         : next,
     );
     onPageChange?.(Math.max(0, pageAt(layout, y + el.clientHeight / 3)));
-  }, [layout, insetTop, doc.pageCount, buffer, onPageChange]);
+  }, [layout, fitWidth, insetTop, doc.pageCount, buffer, onPageChange]);
 
   // After a zoom commit, restore the focal point, then recompute the window.
   useLayoutEffect(() => {
@@ -292,7 +300,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   );
 
   const pages = [];
-  if (win && fitWidth > 0) {
+  if (win && win.layout === layout && fitWidth > 0) {
     const assigned = assignSlots(slots.current, win.window);
     for (let i = win.window.first; i <= win.window.last; i++) {
       const width = layout.widths[i] ?? 0;

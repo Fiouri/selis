@@ -80,8 +80,10 @@ export type LocalePref = "system" | "el" | "en";
 export type MemorySource = 
 /**  Android `ActivityManager.MemoryInfo.totalMem`. */
 "activityManager" | 
-/**  `sysinfo` (desktop, iOS). */
-"sysinfo";
+/**  `sysinfo` (desktop). */
+"sysinfo" | 
+/**  iOS `NSProcessInfo.physicalMemory`. */
+"processInfo";
 
 export type Settings = {
 	locale: LocalePref,

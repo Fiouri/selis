@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Document, type ImportOutcome } from "../../lib/api";
+import { warmUpEngine } from "../../lib/engine";
 import { pickPdf } from "../../lib/files";
 
 export const documentsKey = ["documents"] as const;
@@ -20,6 +21,7 @@ export function useImportDocument() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (): Promise<ImportOutcome | null> => {
+      warmUpEngine(); // the picker is open for seconds: get the engine ready meanwhile
       const source = await pickPdf();
       if (!source) return null;
       return api.importDocument(source);

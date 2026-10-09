@@ -106,6 +106,23 @@ describe("WorkerPdfEngine", () => {
     await expect(promise).rejects.toMatchObject({ code: "cancelled" });
   });
 
+  it("warms up once and allows a retry after failure", async () => {
+    const worker = new FakeWorker();
+    let fail = true;
+    worker.autoReply = (req) =>
+      req.type === "warmup"
+        ? fail
+          ? { type: "error", reqId: req.reqId, code: "init", message: "no wasm" }
+          : { type: "ready", reqId: req.reqId }
+        : null;
+    const engine = new WorkerPdfEngine(worker);
+    await expect(engine.warmUp()).rejects.toMatchObject({ code: "init" });
+    fail = false;
+    await engine.warmUp();
+    await engine.warmUp();
+    expect(worker.sent.filter((m) => m.type === "warmup")).toHaveLength(2);
+  });
+
   it("maps worker errors to EngineError", async () => {
     const worker = new FakeWorker();
     worker.autoReply = (req) => ({ type: "error", reqId: req.reqId, code: "password", message: "needs password" });

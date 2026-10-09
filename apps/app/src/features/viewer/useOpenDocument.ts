@@ -2,7 +2,7 @@ import { type DocHandle, EngineError, type EngineErrorCode } from "@selis/engine
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api, type Document } from "../../lib/api";
-import { getEngine } from "../../lib/engine";
+import { getEngine, warmUpEngine } from "../../lib/engine";
 import { readDocumentBytes } from "../../lib/files";
 import { markStep, markViewerStart } from "../../lib/perf";
 import { documentsKey } from "../library/queries";
@@ -22,6 +22,7 @@ export function useOpenDocument(docId: string): OpenState {
     let handle: DocHandle | null = null;
     // Callers key the viewer by document id, so state starts as "loading" for each document.
     markViewerStart();
+    warmUpEngine(); // WASM compile overlaps the IPC call and the file read below
 
     void (async () => {
       try {

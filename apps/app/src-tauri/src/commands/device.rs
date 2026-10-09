@@ -11,8 +11,10 @@ use super::{CommandError, CommandResult, ErrorCode};
 pub enum MemorySource {
     /// Android `ActivityManager.MemoryInfo.totalMem`.
     ActivityManager,
-    /// `sysinfo` (desktop, iOS).
+    /// `sysinfo` (desktop).
     Sysinfo,
+    /// iOS `NSProcessInfo.physicalMemory`.
+    ProcessInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -89,7 +91,22 @@ mod platform {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(target_os = "ios")]
+mod platform {
+    use objc2_foundation::NSProcessInfo;
+    use tauri::{Runtime, Webview};
+
+    use super::{CommandResult, DeviceMemory, MemorySource};
+
+    pub fn total_memory<R: Runtime>(_webview: &Webview<R>) -> CommandResult<DeviceMemory> {
+        Ok(DeviceMemory {
+            total_bytes: NSProcessInfo::processInfo().physicalMemory(),
+            source: MemorySource::ProcessInfo,
+        })
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod platform {
     use sysinfo::{MemoryRefreshKind, RefreshKind, System};
     use tauri::{Runtime, Webview};

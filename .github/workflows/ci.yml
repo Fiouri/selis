@@ -94,9 +94,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
       - name: Build debug APK
-        env:
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
-        run: npm run tauri -- android build --debug --apk
+        # ANDROID_HOME comes from the runner image, so it is only visible to the shell.
+        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --debug --apk
       - uses: actions/upload-artifact@v4
         with:
           name: selis-android-debug-apk

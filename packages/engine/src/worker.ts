@@ -3,8 +3,9 @@
  * PDF engine worker: EmbedPDF's PDFium build (WASM) runs here, off the UI thread.
  * - WASM is loaded from the app bundle (never a CDN).
  * - Font fallback is disabled: no network requests, ever.
- * - Renders are queued: visible pages before prefetch pages, newest first
- *   (= what the user is looking at now); queued renders can be cancelled.
+ * - Renders are queued: visible pages before prefetch pages, in request order.
+ *   Pages that scroll away cancel their queued renders, so the queue only holds
+ *   what is (about to be) on screen.
  */
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import { type PdfDocumentObject, PdfErrorCode, type PdfErrorReason } from "@embedpdf/models";
@@ -25,12 +26,10 @@ let nextDocId = 1;
 
 function native(): Promise<PdfiumNative> {
   nativePromise ??= (async () => {
-    const response = await fetch(wasmUrl);
-    if (!response.ok) throw new Error(`failed to load PDFium WASM (${response.status})`);
-    const wasmBinary = await response.arrayBuffer();
-    const module = await init({ wasmBinary });
-    const engine = new PdfiumNative(module, { fontFallback: null });
-    return engine;
+    // Pointing emscripten at the bundled URL (instead of passing bytes) lets it use
+    // WebAssembly.instantiateStreaming: compilation overlaps the read.
+    const module = await init({ locateFile: () => wasmUrl });
+    return new PdfiumNative(module, { fontFallback: null });
   })();
   return nativePromise;
 }
@@ -122,12 +121,10 @@ async function runRender(job: RenderJob): Promise<void> {
   }
 }
 
-/** Newest visible-page job, else newest prefetch job. */
+/** Oldest visible-page job, else oldest prefetch job. */
 function takeNext(): RenderJob | undefined {
-  for (let i = queue.length - 1; i >= 0; i--) {
-    if (!queue[i]?.prefetch) return queue.splice(i, 1)[0];
-  }
-  return queue.pop();
+  const visible = queue.findIndex((job) => !job.prefetch);
+  return queue.splice(visible >= 0 ? visible : 0, 1)[0];
 }
 
 /** Yields to the event loop between renders so cancels can arrive. */
@@ -165,6 +162,16 @@ async function handleClose(req: Extract<WorkerRequest, { type: "close" }>): Prom
 self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   const req = event.data;
   switch (req.type) {
+    case "warmup":
+      void (async () => {
+        try {
+          await native();
+          post({ type: "ready", reqId: req.reqId });
+        } catch (err) {
+          post({ type: "error", reqId: req.reqId, code: "init", message: toError(err).message });
+        }
+      })();
+      break;
     case "open":
       void handleOpen(req);
       break;

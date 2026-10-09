@@ -4,12 +4,14 @@ import type { EngineErrorCode, PageSize } from "./types";
 export const MAX_BITMAP_PIXELS = 16_777_216;
 
 export type WorkerRequest =
+  | { type: "warmup"; reqId: number }
   | { type: "open"; reqId: number; bytes: ArrayBuffer; password?: string }
   | { type: "render"; reqId: number; docId: string; index: number; scale: number; prefetch: boolean }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
 
 export type WorkerResponse =
+  | { type: "ready"; reqId: number }
   | { type: "opened"; reqId: number; docId: string; pages: PageSize[]; title: string | null }
   | { type: "rendered"; reqId: number; width: number; height: number; pixels: ArrayBuffer }
   | { type: "closed"; reqId: number }

@@ -1,10 +1,14 @@
 package com.anywecon.selis
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -19,6 +23,8 @@ import androidx.core.view.WindowInsetsCompat
  * - Back gestures are handled by WryActivity: it calls WebView.goBack() while the
  *   page has history, so in-app navigation uses the History API and the activity
  *   only finishes from the root screen.
+ * - The UI needs a modern WebView (ES2022, 'wasm-unsafe-eval', Tailwind v4 CSS). On an
+ *   outdated one (no Play updates) a native dialog explains it instead of a blank screen.
  */
 class MainActivity : TauriActivity() {
   @Volatile private var insetsJson: String = "{\"top\":0,\"right\":0,\"bottom\":0,\"left\":0}"
@@ -26,6 +32,36 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+    warnIfWebViewOutdated()
+  }
+
+  private fun warnIfWebViewOutdated() {
+    val version = WebView.getCurrentWebViewPackage()?.versionName ?: return
+    val major = version.substringBefore('.').toIntOrNull() ?: return
+    if (major >= MIN_WEBVIEW_MAJOR) return
+    AlertDialog.Builder(this)
+      .setTitle(R.string.webview_outdated_title)
+      .setMessage(getString(R.string.webview_outdated_message, MIN_WEBVIEW_MAJOR, version))
+      .setCancelable(false)
+      .setPositiveButton(R.string.webview_outdated_update) { _, _ ->
+        openStore("com.google.android.webview")
+        finish()
+      }
+      .setNegativeButton(R.string.webview_outdated_close) { _, _ -> finish() }
+      .show()
+  }
+
+  private fun openStore(packageName: String) {
+    try {
+      startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")))
+    } catch (_: ActivityNotFoundException) {
+      // No store app (e.g. de-Googled device): the user updates WebView their own way.
+    }
+  }
+
+  private companion object {
+    /** Chromium 111: ES2022 syntax, CSP 'wasm-unsafe-eval' (97+), color-mix()/@property (111+). */
+    const val MIN_WEBVIEW_MAJOR = 111
   }
 
   override fun onWebViewCreate(webView: WebView) {
