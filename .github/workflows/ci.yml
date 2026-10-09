@@ -83,9 +83,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
-      - name: Android NDK
-        run: sdkmanager --install "ndk;${NDK_VERSION}"
+      - name: Android NDK (the runner image ships the SDK in $ANDROID_HOME)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}"
       - name: Rust toolchain + Android targets
         run: |
           rustup show active-toolchain || rustup toolchain install
@@ -124,16 +125,9 @@ jobs:
             brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
             npx tauri ios init --ci
           fi
-      - name: Build frontend
-        run: npm run build:web -w @selis/app
-      - name: xcodebuild (simulator, signing disabled)
-        working-directory: apps/app/src-tauri/gen/apple
-        run: |
-          project=$(ls -d *.xcodeproj | head -1)
-          scheme=$(xcodebuild -list -json -project "$project" | python3 -c 'import json,sys; s=json.load(sys.stdin)["project"]["schemes"]; print(next((x for x in s if x.endswith("_iOS")), s[0]))')
-          xcodebuild -project "$project" -scheme "$scheme" \
-            -sdk iphonesimulator -configuration debug -destination 'generic/platform=iOS Simulator' \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
+      # The Xcode "Build Rust Code" phase talks back to the Tauri CLI, so build through it.
+      - name: Build for the iOS simulator (debug, no signing)
+        run: npm run tauri -- ios build --target aarch64-sim --debug
       - name: Upload generated Xcode project (commit it from here; it cannot be generated on Windows)
         uses: actions/upload-artifact@v4
         with:

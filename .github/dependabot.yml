@@ -10,6 +10,11 @@ updates:
       embedpdf:
         patterns: ["@embedpdf/*"]
     ignore:
+      # typescript-eslint supports TypeScript < 6.1; Node is pinned to 22 (.nvmrc).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
       # Tauri moves as one line (CLI, JS, plugins, crates) — upgrade deliberately (ADR 0001).
       - dependency-name: "@tauri-apps/*"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
