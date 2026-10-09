@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  NDK_VERSION: 27.3.13750724
+
+jobs:
+  checks:
+    name: Tier 1 (tsc, eslint, vitest, rust, deny) + Playwright
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Tauri Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+      - run: npm run fixtures
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+      - run: cargo fmt --all --check
+      - name: Build the frontend (required by tauri::generate_context!)
+        run: npm run build:web -w @selis/app
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - name: Generated IPC bindings are up to date
+        run: git diff --exit-code -- apps/app/src/lib/ipc.ts
+
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+      - name: Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+        working-directory: apps/app
+      - name: Playwright mobile smoke (Pixel 7, iPhone 15; mock IPC)
+        run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            apps/app/playwright-report
+            apps/app/test-results
+          if-no-files-found: ignore
+
+  android:
+    name: Android debug APK
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Android NDK
+        run: sdkmanager --install "ndk;${NDK_VERSION}"
+      - name: Rust toolchain + Android targets
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+      - name: Build debug APK
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+        run: npm run tauri -- android build --debug --apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: selis-android-debug-apk
+          path: apps/app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS simulator build (no signing)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Rust toolchain + iOS simulator target
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+      - name: Generate gen/apple if it is not committed yet
+        working-directory: apps/app
+        run: |
+          if [ ! -d src-tauri/gen/apple ]; then
+            brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+            npx tauri ios init --ci
+          fi
+      - name: Build frontend
+        run: npm run build:web -w @selis/app
+      - name: xcodebuild (simulator, signing disabled)
+        working-directory: apps/app/src-tauri/gen/apple
+        run: |
+          project=$(ls -d *.xcodeproj | head -1)
+          scheme=$(xcodebuild -list -json -project "$project" | python3 -c 'import json,sys; s=json.load(sys.stdin)["project"]["schemes"]; print(next((x for x in s if x.endswith("_iOS")), s[0]))')
+          xcodebuild -project "$project" -scheme "$scheme" \
+            -sdk iphonesimulator -configuration debug -destination 'generic/platform=iOS Simulator' \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
+      - name: Upload generated Xcode project (commit it from here; it cannot be generated on Windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gen-apple
+          path: apps/app/src-tauri/gen/apple
+          if-no-files-found: error
+
+  windows:
+    name: Windows compile check
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Rust toolchain
+        run: rustup show active-toolchain; if ($LASTEXITCODE -ne 0) { rustup toolchain install }
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+      - run: npm run tauri -- build --no-bundle

@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      tauri:
+        patterns: ["@tauri-apps/*"]
+      embedpdf:
+        patterns: ["@embedpdf/*"]
+    ignore:
+      # Tauri moves as one line (CLI, JS, plugins, crates) — upgrade deliberately (ADR 0001).
+      - dependency-name: "@tauri-apps/*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # EmbedPDF v3 is not production-ready (ADR 0002).
+      - dependency-name: "@embedpdf/*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "tauri*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: gradle
+    directory: /apps/app/src-tauri/gen/android
+    schedule:
+      interval: monthly

@@ -1,0 +1,28 @@
+# P0 smoke on Android: launch → import the 1000-page fixture through the system
+# picker (SAF) → scroll → back to the library.
+# Prerequisite: ./push-fixtures.sh <serial> (copies + media-scans packages/fixtures/out).
+appId: com.anywecon.selis
+name: Import, scroll, back
+---
+- clearState
+- launchApp
+- assertVisible: "Your library is empty"
+- tapOn: "Import PDF"
+# DocumentsUI lists the media-scanned fixtures under Recent.
+- tapOn: "large-1000.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 1000"
+    timeout: 15000
+- repeat:
+    times: 8
+    commands:
+      - swipe:
+          start: "50%, 80%"
+          end: "50%, 15%"
+          duration: 150
+- assertVisible:
+    text: 'Page \d+ of 1000'
+- assertNotVisible: "Page 1 of 1000"
+- back
+- assertVisible: "1 document"
+- assertVisible: "Open Selis 1000-page fixture"

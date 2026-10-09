@@ -52,11 +52,16 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$APPDATA/library/*.pdf"],
+          "allow": [
+            "$APPDATA/library/*.pdf"
+          ],
           "requireLiteralLeadingDot": true
         }
       },
-      "capabilities": ["mobile", "desktop"]
+      "capabilities": [
+        "mobile",
+        "desktop"
+      ]
     }
   },
   "bundle": {
@@ -74,13 +79,7 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "android": {
-      "minSdkVersion": 26
-    },
-    "iOS": {
-      "minimumSystemVersion": "15.0"
-    }
+    ]
   },
   "plugins": {}
 }
