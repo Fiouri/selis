@@ -1,14 +1,8 @@
 import { clampScale, type DocHandle, EngineError, renderScale } from "@selis/engine";
 import { Skeleton } from "@selis/ui";
 import { memo, useEffect, useRef, useState } from "react";
+import { currentRenderLimits } from "../../lib/engine";
 import { reportFirstPage } from "../../lib/perf";
-import { isMobilePlatform } from "../../lib/platform";
-
-/**
- * Render resolution cap. Above 2× the gain in sharpness is marginal on phones,
- * while pixel count (and WebView GPU memory) grows with the square.
- */
-const MAX_RENDER_DPR = isMobilePlatform ? 2 : 3;
 
 type Props = {
   doc: DocHandle;
@@ -55,7 +49,9 @@ export const PageView = memo(function PageView({
     const page = doc.pages[index];
     if (!page || renderWidth <= 0) return;
     const controller = new AbortController();
-    const dpr = Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR);
+    // Resolution cap from the device's memory tier (2 / 1.5 / 1.25): pixel count,
+    // and with it WebView memory, grows with its square.
+    const dpr = Math.min(window.devicePixelRatio || 1, currentRenderLimits().maxRenderScale);
     const scale = clampScale(page, renderScale(page, renderWidth, dpr), maxPixels);
 
     const draw = async () => {

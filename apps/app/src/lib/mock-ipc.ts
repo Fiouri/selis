@@ -111,6 +111,11 @@ export function installMockIpc(): void {
         return loadSettings();
       case "update_settings":
         return updateSettings(args.patch as SettingsPatch);
+      case "device_memory": {
+        // navigator.deviceMemory is Chromium-only and capped at 8 (GiB).
+        const gib = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+        return { totalBytes: gib * 1024 ** 3, source: "sysinfo" };
+      }
       default:
         return fail("invalidArgument", `unknown command ${cmd}`);
     }

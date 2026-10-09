@@ -30,6 +30,7 @@ export const api = {
     unwrap(commands.recordDocumentInfo(id, pageCount, pdfTitle)),
   getSettings: () => unwrap(commands.getSettings()),
   updateSettings: (patch: Parameters<typeof commands.updateSettings>[0]) => unwrap(commands.updateSettings(patch)),
+  deviceMemory: () => unwrap(commands.deviceMemory()),
 };
 
 /** i18n key for a user-facing error message. */

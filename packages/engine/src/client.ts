@@ -1,4 +1,6 @@
-import type { WorkerRequest, WorkerResponse } from "./protocol";
+import { DEFAULT_RENDER_LIMITS, type RenderLimits } from "./limits";
+import { LruCache } from "./lru";
+import { clampScale, type WorkerRequest, type WorkerResponse } from "./protocol";
 import {
   type DocHandle,
   EngineError,
@@ -27,9 +29,14 @@ export class WorkerPdfEngine implements PdfEngine {
   private readonly pending = new Map<number, Pending>();
   private nextReqId = 1;
   private destroyed = false;
+  private currentLimits: RenderLimits;
+  /** Recently rendered pages (doc:page:scale → RGBA), bounded by count and bytes. */
+  private cache: LruCache<string, ImageData>;
 
-  constructor(worker: WorkerLike) {
+  constructor(worker: WorkerLike, limits: RenderLimits = DEFAULT_RENDER_LIMITS) {
     this.worker = worker;
+    this.currentLimits = limits;
+    this.cache = WorkerPdfEngine.makeCache(limits);
     this.worker.onmessage = (event) => this.onMessage(event.data);
     this.worker.onerror = (event) => this.failAll(new EngineError("init", event.message || "engine worker crashed"));
   }
@@ -45,11 +52,26 @@ export class WorkerPdfEngine implements PdfEngine {
     return this.makeHandle(msg.docId, msg.pages, msg.title);
   }
 
+  get limits(): RenderLimits {
+    return this.currentLimits;
+  }
+
+  /** Applies new limits; the page cache is rebuilt (and emptied) with the new bounds. */
+  setLimits(limits: RenderLimits): void {
+    this.currentLimits = limits;
+    this.cache = WorkerPdfEngine.makeCache(limits);
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
     this.worker.terminate();
+    this.cache.clear();
     this.failAll(new EngineError("closed", "engine destroyed"));
+  }
+
+  private static makeCache(limits: RenderLimits): LruCache<string, ImageData> {
+    return new LruCache<string, ImageData>(limits.cacheMaxPages, limits.cacheMaxBytes, (image) => image.data.byteLength);
   }
 
   private makeHandle(docId: string, pages: PageSize[], title: string | null): DocHandle {
@@ -65,7 +87,9 @@ export class WorkerPdfEngine implements PdfEngine {
         if (!Number.isInteger(index) || index < 0 || index >= frozenPages.length) {
           return Promise.reject(new RangeError(`page index ${index} out of range`));
         }
-        return this.render(docId, index, scale, options.signal, options.prefetch ?? false);
+        const page = frozenPages[index] as PageSize;
+        const effective = clampScale(page, scale, this.currentLimits.maxBitmapPixels);
+        return this.render(docId, index, effective, options.signal, options.prefetch ?? false);
       },
       renderPage: async (index, scale, options: RenderOptions = {}) => {
         const image = await handle.renderPageImage(index, scale, options);
@@ -74,6 +98,7 @@ export class WorkerPdfEngine implements PdfEngine {
       close: async () => {
         if (closed) return;
         closed = true;
+        this.cache.deleteWhere((key) => key.startsWith(`${docId}:`));
         await this.request((reqId) => ({ type: "close", reqId, docId }));
       },
     };
@@ -88,6 +113,9 @@ export class WorkerPdfEngine implements PdfEngine {
     prefetch: boolean,
   ): Promise<ImageData> {
     if (signal?.aborted) throw new EngineError("cancelled", "aborted");
+    const key = `${docId}:${index}:${scale.toFixed(4)}`;
+    const cached = this.cache.get(key);
+    if (cached) return cached;
     let reqId = 0;
     const onAbort = () => {
       if (reqId) this.worker.postMessage({ type: "cancel", reqId });
@@ -98,8 +126,11 @@ export class WorkerPdfEngine implements PdfEngine {
         reqId = id;
         return { type: "render", reqId: id, docId, index, scale, prefetch };
       });
+      const image = new ImageData(new Uint8ClampedArray(msg.pixels), msg.width, msg.height);
+      // Cache even if the caller gave up: scrolling back to it will be instant.
+      this.cache.set(key, image);
       if (signal?.aborted) throw new EngineError("cancelled", "aborted");
-      return new ImageData(new Uint8ClampedArray(msg.pixels), msg.width, msg.height);
+      return image;
     } finally {
       signal?.removeEventListener("abort", onAbort);
     }
@@ -134,7 +165,7 @@ export class WorkerPdfEngine implements PdfEngine {
 }
 
 /** Starts the engine worker. One engine per app is enough. */
-export function createPdfEngine(): PdfEngine {
+export function createPdfEngine(limits: RenderLimits = DEFAULT_RENDER_LIMITS): PdfEngine {
   const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module", name: "selis-pdf-engine" });
-  return new WorkerPdfEngine(worker);
+  return new WorkerPdfEngine(worker, limits);
 }

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { initI18n, resolveLocale } from "./i18n";
+import { installRenderLimits } from "./lib/engine";
 import { installNativeInsets } from "./lib/platform";
 import { installHistorySync } from "./state/navigation";
 import { installSettings, useSettings } from "./state/settings";
@@ -17,6 +18,7 @@ installNativeInsets();
 installHistorySync();
 await initI18n(resolveLocale(useSettings.getState().locale, navigator.languages));
 installSettings();
+void installRenderLimits();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root missing from index.html");

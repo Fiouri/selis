@@ -1,4 +1,6 @@
 /** Page size in PDF points (1/72 in), after the page's own /Rotate is applied. */
+import type { RenderLimits } from "./limits";
+
 export type PageSize = { readonly width: number; readonly height: number };
 
 export type EngineErrorCode = "password" | "format" | "closed" | "cancelled" | "init" | "unknown";
@@ -47,6 +49,10 @@ export interface DocHandle {
 
 export interface PdfEngine {
   open(bytes: ArrayBuffer, options?: OpenOptions): Promise<DocHandle>;
+  /** Current render limits (resolution cap, bitmap budget, page cache bounds). */
+  readonly limits: RenderLimits;
+  /** Applies limits for this device (see `renderLimitsFor`). */
+  setLimits(limits: RenderLimits): void;
   /** Terminates the worker and frees all WASM memory. */
   destroy(): void;
 }

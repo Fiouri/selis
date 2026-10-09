@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { WorkerPdfEngine, type WorkerLike } from "./client";
+import { renderLimitsFor } from "./limits";
 import type { WorkerRequest, WorkerResponse } from "./protocol";
 import { EngineError } from "./types";
 
@@ -112,6 +113,35 @@ describe("WorkerPdfEngine", () => {
     const err = await engine.open(new ArrayBuffer(1)).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(EngineError);
     expect((err as EngineError).code).toBe("password");
+  });
+
+  it("serves repeated renders from the LRU cache and purges it on close", async () => {
+    const { worker, engine } = openedEngine();
+    const doc = await engine.open(new ArrayBuffer(8));
+    const base = worker.autoReply;
+    worker.autoReply = (req) => (req.type === "render" ? rendered(req.reqId) : (base?.(req) ?? null));
+    const first = await doc.renderPageImage(0, 1);
+    const renders = () => worker.sent.filter((m) => m.type === "render").length;
+    expect(renders()).toBe(1);
+    expect(await doc.renderPageImage(0, 1)).toBe(first);
+    expect(renders()).toBe(1);
+    await doc.renderPageImage(0, 1.5); // different scale → new render
+    expect(renders()).toBe(2);
+    await doc.close();
+    const doc2 = await engine.open(new ArrayBuffer(8)); // same docId from the fake worker
+    await doc2.renderPageImage(0, 1);
+    expect(renders()).toBe(3);
+  });
+
+  it("clamps the render scale to the bitmap budget of the current limits", async () => {
+    const { worker, engine } = openedEngine();
+    engine.setLimits({ ...renderLimitsFor(null), maxBitmapPixels: 100 * 200 * 4 });
+    const doc = await engine.open(new ArrayBuffer(8));
+    worker.autoReply = (req) => (req.type === "render" ? rendered(req.reqId) : null);
+    await doc.renderPageImage(0, 10); // 100×200 pt page at 10× = 2 MP > budget
+    const sent = worker.sent.at(-1) as Extract<WorkerRequest, { type: "render" }>;
+    expect(sent.scale).toBeCloseTo(2);
+    expect(engine.limits.maxBitmapPixels).toBe(80_000);
   });
 
   it("refuses renders after close and fails pending work on destroy", async () => {

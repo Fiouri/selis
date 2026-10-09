@@ -5,11 +5,9 @@ import { useTranslation } from "react-i18next";
 import { DocumentGlyph } from "../components/Illustrations";
 import { PdfViewer, type PdfViewerHandle } from "../features/viewer/PdfViewer";
 import { type OpenState, useOpenDocument } from "../features/viewer/useOpenDocument";
-import { isMobilePlatform } from "../lib/platform";
+import { currentRenderLimits } from "../lib/engine";
 import { useNavigation } from "../state/navigation";
 
-/** Per-bitmap pixel budget: ~32 MB RGBA on mobile, ~64 MB on desktop. */
-export const PAGE_PIXEL_BUDGET = isMobilePlatform ? 8_000_000 : 16_000_000;
 const THUMB_PIXEL_BUDGET = 250_000;
 
 function errorBody(state: Extract<OpenState, { status: "error" }>): string {
@@ -94,7 +92,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
         insetTop={barHeight}
         insetBottom={variant === "phone" ? 72 : 16}
         gutter={variant === "phone" ? 8 : 24}
-        maxPixels={PAGE_PIXEL_BUDGET}
+        maxPixels={currentRenderLimits().maxBitmapPixels}
         onPageChange={onPageChange}
         onTap={variant === "phone" ? toggleChrome : undefined}
         testId="pdf-viewer"
