@@ -1,0 +1,35 @@
+{
+  "name": "selis",
+  "private": true,
+  "description": "Selis \u2014 free, open-source PDF editor. No account, no cloud, no tracking.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18 <23",
+    "npm": ">=10"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && npm run typecheck --workspaces --if-present",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "fixtures": "npm run generate -w @selis/fixtures",
+    "e2e": "npm run e2e -w @selis/app",
+    "tauri": "npm run tauri -w @selis/app --",
+    "verify:tier1": "npm run typecheck && npm run lint && npm run test && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && cargo deny check"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "eslint": "10.12.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "jiti": "2.7.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.1",
+    "vitest": "5.0.3"
+  }
+}

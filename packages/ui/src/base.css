@@ -1,0 +1,65 @@
+/* Base element styles shared by every shell. Import after tokens.css. */
+html {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  background: var(--surface-app);
+  color: var(--neutral-12);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body {
+  /* No rubber-band / overscroll glow on the chrome. */
+  overscroll-behavior: none;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  /* Disable browser pinch/double-tap zoom; the viewer implements its own zoom. */
+  touch-action: pan-x pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#root {
+  height: 100%;
+}
+
+.selis-focus:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.selis-skeleton {
+  background: linear-gradient(90deg, var(--neutral-3) 0%, var(--neutral-4) 50%, var(--neutral-3) 100%);
+  background-size: 200% 100%;
+  animation: selis-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes selis-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selis-skeleton {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}

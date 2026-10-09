@@ -1,0 +1,32 @@
+[package]
+name = "selis-app"
+description = "Selis — free, open-source PDF editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[lib]
+# `_lib` suffix avoids a name clash with the bin target on Windows.
+name = "selis_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "~2.6", features = [] }
+
+[dependencies]
+selis-core = { workspace = true, features = ["specta"] }
+serde.workspace = true
+serde_json.workspace = true
+specta.workspace = true
+specta-typescript.workspace = true
+tauri = { version = "~2.11.6", features = ["protocol-asset"] }
+tauri-plugin-dialog = "~2.7.3"
+tauri-plugin-fs = "~2.5.2"
+tauri-specta.workspace = true
+
+[lints]
+workspace = true

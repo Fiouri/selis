@@ -1,0 +1,36 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+coverage/
+
+# Rust
+target/
+
+# Playwright / Maestro
+playwright-report/
+test-results/
+apps/app/e2e/.maestro-out/
+
+# Generated fixtures (regenerate with `npm run fixtures`)
+packages/fixtures/out/
+
+# Tauri: generated schemas are reproducible
+apps/app/src-tauri/gen/schemas/
+
+# Env / secrets — never commit signing material
+.env
+.env.*
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+keystore.properties
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

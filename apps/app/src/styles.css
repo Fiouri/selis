@@ -1,0 +1,30 @@
+@import "tailwindcss";
+@import "@selis/ui/fonts.css";
+@import "@selis/ui/tokens.css";
+@import "@selis/ui/theme.css";
+@import "@selis/ui/base.css";
+
+/* Tailwind must see the classes used inside the shared UI package. */
+@source "../../../packages/ui/src";
+
+.selis-viewer-scroller {
+  /* Native one-finger panning; two-finger pinch is handled in JS (no page zoom). */
+  touch-action: pan-x pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.selis-enter {
+  animation: selis-enter var(--duration-base) var(--ease-standard) both;
+}
+
+@keyframes selis-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

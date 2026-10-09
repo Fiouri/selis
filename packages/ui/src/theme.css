@@ -1,0 +1,71 @@
+/*
+ * Tailwind v4 bridge: exposes the tokens as utilities (bg-neutral-2, text-accent-11,
+ * rounded-card, shadow-2, ...). Import after "tailwindcss".
+ */
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-neutral-1: var(--neutral-1);
+  --color-neutral-2: var(--neutral-2);
+  --color-neutral-3: var(--neutral-3);
+  --color-neutral-4: var(--neutral-4);
+  --color-neutral-5: var(--neutral-5);
+  --color-neutral-6: var(--neutral-6);
+  --color-neutral-7: var(--neutral-7);
+  --color-neutral-8: var(--neutral-8);
+  --color-neutral-9: var(--neutral-9);
+  --color-neutral-10: var(--neutral-10);
+  --color-neutral-11: var(--neutral-11);
+  --color-neutral-12: var(--neutral-12);
+  --color-accent-3: var(--accent-3);
+  --color-accent-4: var(--accent-4);
+  --color-accent-7: var(--accent-7);
+  --color-accent-9: var(--accent-9);
+  --color-accent-10: var(--accent-10);
+  --color-accent-11: var(--accent-11);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-success-3: var(--success-3);
+  --color-success-9: var(--success-9);
+  --color-success-11: var(--success-11);
+  --color-warning-3: var(--warning-3);
+  --color-warning-9: var(--warning-9);
+  --color-warning-11: var(--warning-11);
+  --color-danger-3: var(--danger-3);
+  --color-danger-9: var(--danger-9);
+  --color-danger-11: var(--danger-11);
+  --color-surface-app: var(--surface-app);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-page-canvas: var(--page-canvas);
+
+  --font-sans: var(--font-sans);
+
+  --text-xs: var(--text-xs);
+  --text-xs--line-height: var(--leading-normal);
+  --text-sm: var(--text-sm);
+  --text-sm--line-height: var(--leading-normal);
+  --text-md: var(--text-md);
+  --text-md--line-height: var(--leading-normal);
+  --text-lg: var(--text-lg);
+  --text-lg--line-height: var(--leading-tight);
+  --text-xl: var(--text-xl);
+  --text-xl--line-height: var(--leading-tight);
+  --text-2xl: var(--text-2xl);
+  --text-2xl--line-height: var(--leading-tight);
+
+  --spacing: 4px;
+
+  --radius-control: var(--radius-control);
+  --radius-card: var(--radius-card);
+  --radius-sheet: var(--radius-sheet);
+
+  --shadow-1: var(--shadow-1);
+  --shadow-2: var(--shadow-2);
+  --shadow-3: var(--shadow-3);
+
+  --ease-standard: var(--ease-standard);
+  --ease-spring: var(--ease-spring);
+}

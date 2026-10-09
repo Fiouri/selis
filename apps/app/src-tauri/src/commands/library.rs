@@ -1,0 +1,152 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use selis_core::{Document, DocumentFile, ImportOutcome, Library, title_from_file_name};
+use tauri::{AppHandle, Runtime, State};
+use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
+
+use super::{CommandError, CommandResult, ErrorCode};
+
+/// Imports the file the user picked (a filesystem path on desktop, a
+/// `content://` URI from the Storage Access Framework on Android, a file URL on
+/// iOS) by copying it into the app library. The source is opened read-only.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_document<R: Runtime>(
+    app: AppHandle<R>,
+    library: State<'_, Arc<Library>>,
+    source: String,
+) -> CommandResult<ImportOutcome> {
+    let source = source.trim().to_owned();
+    if source.is_empty() {
+        return Err(CommandError::new(ErrorCode::InvalidArgument, "empty source"));
+    }
+    let file_path = parse_source(&source)?;
+    let title = title_for_source(&source);
+    let library = Arc::clone(&library);
+
+    // Copy + hash can take seconds for large files: keep it off the async workers.
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut opts = OpenOptions::new();
+        opts.read(true);
+        let file = app
+            .fs()
+            .open(file_path, opts)
+            .map_err(|e| CommandError::new(ErrorCode::Io, format!("cannot open source: {e}")))?;
+        Ok(library.import_reader(file, &title)?)
+    })
+    .await
+    .map_err(|e| CommandError::new(ErrorCode::Internal, format!("import task failed: {e}")))?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_documents(library: State<'_, Arc<Library>>) -> CommandResult<Vec<Document>> {
+    Ok(library.list_documents()?)
+}
+
+/// Resolves a library document to its stored copy for the viewer.
+/// The returned path is readable through the asset protocol (library dir only).
+#[tauri::command]
+#[specta::specta]
+pub async fn read_document(library: State<'_, Arc<Library>>, id: String) -> CommandResult<DocumentFile> {
+    Ok(library.read_document(&id)?)
+}
+
+/// Saves page count (and the PDF's own title when the file name was unusable)
+/// once the engine has opened the document.
+#[tauri::command]
+#[specta::specta]
+pub async fn record_document_info(
+    library: State<'_, Arc<Library>>,
+    id: String,
+    page_count: u32,
+    pdf_title: Option<String>,
+) -> CommandResult<Document> {
+    Ok(library.record_document_info(&id, page_count, pdf_title.as_deref())?)
+}
+
+fn parse_source(source: &str) -> CommandResult<FilePath> {
+    if source.contains("://") {
+        source
+            .parse::<FilePath>()
+            .map_err(|e| CommandError::new(ErrorCode::InvalidArgument, format!("bad URI: {e}")))
+    } else {
+        Ok(FilePath::Path(PathBuf::from(source)))
+    }
+}
+
+/// Best-effort display name. SAF URIs often encode the file name in the last
+/// segment (`.../document/primary%3ADownload%2FReport.pdf`); opaque ones
+/// (`msf:123`) yield an empty title and the PDF metadata title is used later.
+fn title_for_source(source: &str) -> String {
+    let decoded = percent_decode(source);
+    let last = decoded
+        .rsplit(['/', '\\', ':'])
+        .find(|s| !s.is_empty())
+        .unwrap_or_default();
+    if source.contains("://") && !last.to_ascii_lowercase().ends_with(".pdf") {
+        return String::new();
+    }
+    title_from_file_name(last)
+}
+
+fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(h), Some(l)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2]))
+        {
+            out.push(h << 4 | l);
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn titles_from_sources() {
+        assert_eq!(
+            title_for_source(
+                "content://com.android.externalstorage.documents/document/primary%3ADownload%2FSelis%20Report.pdf"
+            ),
+            "Selis Report"
+        );
+        assert_eq!(
+            title_for_source("content://com.android.providers.downloads.documents/document/msf%3A1000000033"),
+            ""
+        );
+        assert_eq!(title_for_source(r"C:\Users\me\Docs\Συμβόλαιο.pdf"), "Συμβόλαιο");
+        assert_eq!(title_for_source("/home/me/notes.PDF"), "notes");
+        assert_eq!(
+            title_for_source("file:///private/var/mobile/Inbox/%CE%B1%CE%B2.pdf"),
+            "αβ"
+        );
+    }
+
+    #[test]
+    fn percent_decode_handles_truncated_escapes() {
+        assert_eq!(percent_decode("a%2"), "a%2");
+        assert_eq!(percent_decode("%zz"), "%zz");
+        assert_eq!(percent_decode("%41%42"), "AB");
+    }
+}

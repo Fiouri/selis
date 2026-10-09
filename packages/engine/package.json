@@ -1,0 +1,22 @@
+{
+  "name": "@selis/engine",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "The only module that talks to EmbedPDF. Headless PDFium (WASM) in a Web Worker behind a typed API.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json"
+  },
+  "dependencies": {
+    "@embedpdf/engines": "2.15.1",
+    "@embedpdf/models": "2.15.1",
+    "@embedpdf/pdfium": "2.15.1"
+  },
+  "devDependencies": {
+    "@selis/fixtures": "0.1.0"
+  }
+}

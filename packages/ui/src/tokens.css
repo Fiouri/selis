@@ -1,0 +1,244 @@
+/*
+ * Selis design tokens — "calm paper". The document is the hero; chrome recedes.
+ *
+ * Neutrals: 12 warm steps (1–2 backgrounds, 3–5 component fills, 6–8 borders,
+ * 9–10 solid, 11–12 text). One accent: deep ink blue. Themes: light, dark, sepia.
+ * Applied via <html data-theme="light|dark|sepia">; without it, the OS preference wins.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Warm neutrals — light */
+  --neutral-1: #fdfcfa;
+  --neutral-2: #f8f6f2;
+  --neutral-3: #f1eee8;
+  --neutral-4: #eae6df;
+  --neutral-5: #e2ddd4;
+  --neutral-6: #d8d1c6;
+  --neutral-7: #c9c0b2;
+  --neutral-8: #b1a696;
+  --neutral-9: #8a8071;
+  --neutral-10: #7c7365;
+  --neutral-11: #5f574c;
+  --neutral-12: #211f1a;
+
+  /* Accent — deep ink blue */
+  --accent-3: #e9eef9;
+  --accent-4: #dce4f5;
+  --accent-7: #9fb3e3;
+  --accent-9: #24438f;
+  --accent-10: #1c387c;
+  --accent-11: #2b4ea6;
+  --accent-contrast: #ffffff;
+
+  /* Semantic */
+  --success-3: #e5f3e9;
+  --success-9: #2f7d4a;
+  --success-11: #23683b;
+  --warning-3: #fbf0d9;
+  --warning-9: #b7791f;
+  --warning-11: #8a5a12;
+  --danger-3: #fbe9e7;
+  --danger-9: #c0392b;
+  --danger-11: #a12f23;
+
+  /* Surfaces */
+  --surface-app: var(--neutral-1);
+  --surface-raised: #ffffff;
+  --surface-overlay: rgb(33 31 26 / 0.4);
+  --page-canvas: var(--neutral-3);
+  --focus-ring: var(--accent-9);
+
+  /* Elevation — soft shadows, floating elements only */
+  --shadow-1: 0 1px 2px rgb(33 31 26 / 0.06), 0 1px 1px rgb(33 31 26 / 0.04);
+  --shadow-2: 0 4px 12px rgb(33 31 26 / 0.08), 0 1px 3px rgb(33 31 26 / 0.06);
+  --shadow-3: 0 12px 32px rgb(33 31 26 / 0.12), 0 2px 6px rgb(33 31 26 / 0.06);
+
+  /* Typography */
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --leading-tight: 1.4;
+  --leading-normal: 1.5;
+
+  /* Spacing — 4 px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius */
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-sheet: 20px;
+
+  /* Motion — 150–250 ms */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 250ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+
+  /* Touch & icons */
+  --touch-target: 44px;
+  --icon-size: 20px;
+  --icon-stroke: 1.75;
+
+  /*
+   * Safe areas. Native Android shells inject --native-inset-* (edge-to-edge),
+   * WebKit/Chromium provide env(); take whichever is larger.
+   */
+  --safe-top: max(env(safe-area-inset-top, 0px), var(--native-inset-top, 0px));
+  --safe-right: max(env(safe-area-inset-right, 0px), var(--native-inset-right, 0px));
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--native-inset-bottom, 0px));
+  --safe-left: max(env(safe-area-inset-left, 0px), var(--native-inset-left, 0px));
+
+  --tabbar-height: 56px;
+  --topbar-height: 52px;
+}
+
+/* Dark palette, shared by explicit selection and OS preference. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --neutral-1: #131210;
+  --neutral-2: #1a1916;
+  --neutral-3: #22201c;
+  --neutral-4: #292722;
+  --neutral-5: #312e28;
+  --neutral-6: #3b3730;
+  --neutral-7: #49443b;
+  --neutral-8: #605a4f;
+  --neutral-9: #6e675b;
+  --neutral-10: #7c7569;
+  --neutral-11: #b6ae9f;
+  --neutral-12: #eeeae2;
+
+  --accent-3: #18213a;
+  --accent-4: #1e2a4a;
+  --accent-7: #3a5394;
+  --accent-9: #4a6fd0;
+  --accent-10: #6286df;
+  --accent-11: #a9bdf2;
+  --accent-contrast: #ffffff;
+
+  --success-3: #142a1c;
+  --success-9: #3f9c5f;
+  --success-11: #8fd3a5;
+  --warning-3: #2f2412;
+  --warning-9: #d29a3a;
+  --warning-11: #f0c87e;
+  --danger-3: #3a1a16;
+  --danger-9: #d65a4b;
+  --danger-11: #f3a397;
+
+  --surface-app: var(--neutral-1);
+  --surface-raised: var(--neutral-2);
+  --surface-overlay: rgb(0 0 0 / 0.55);
+  --page-canvas: #0d0c0b;
+  --focus-ring: var(--accent-10);
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 4px 12px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.3);
+  --shadow-3: 0 12px 32px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Same as [data-theme="dark"]; applies before JS resolves the "system" theme. */
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --neutral-1: #131210;
+    --neutral-2: #1a1916;
+    --neutral-3: #22201c;
+    --neutral-4: #292722;
+    --neutral-5: #312e28;
+    --neutral-6: #3b3730;
+    --neutral-7: #49443b;
+    --neutral-8: #605a4f;
+    --neutral-9: #6e675b;
+    --neutral-10: #7c7569;
+    --neutral-11: #b6ae9f;
+    --neutral-12: #eeeae2;
+
+    --accent-3: #18213a;
+    --accent-4: #1e2a4a;
+    --accent-7: #3a5394;
+    --accent-9: #4a6fd0;
+    --accent-10: #6286df;
+    --accent-11: #a9bdf2;
+    --accent-contrast: #ffffff;
+
+    --success-3: #142a1c;
+    --success-9: #3f9c5f;
+    --success-11: #8fd3a5;
+    --warning-3: #2f2412;
+    --warning-9: #d29a3a;
+    --warning-11: #f0c87e;
+    --danger-3: #3a1a16;
+    --danger-9: #d65a4b;
+    --danger-11: #f3a397;
+
+    --surface-app: var(--neutral-1);
+    --surface-raised: var(--neutral-2);
+    --surface-overlay: rgb(0 0 0 / 0.55);
+    --page-canvas: #0d0c0b;
+    --focus-ring: var(--accent-10);
+
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 4px 12px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.3);
+    --shadow-3: 0 12px 32px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.3);
+  }
+}
+
+/* Sepia — warm paper for long reading. */
+:root[data-theme="sepia"] {
+  color-scheme: light;
+  --neutral-1: #f5eddc;
+  --neutral-2: #f0e6d1;
+  --neutral-3: #e9ddc5;
+  --neutral-4: #e2d4b9;
+  --neutral-5: #d9caab;
+  --neutral-6: #cebe9c;
+  --neutral-7: #bdab87;
+  --neutral-8: #a6926b;
+  --neutral-9: #836e4c;
+  --neutral-10: #766244;
+  --neutral-11: #5b4a31;
+  --neutral-12: #2c2415;
+
+  --accent-3: #e6e2d6;
+  --accent-4: #dcd8cc;
+  --accent-7: #9aa6c4;
+  --accent-9: #26407e;
+  --accent-10: #1f356a;
+  --accent-11: #2a4888;
+  --accent-contrast: #fffaf0;
+
+  --surface-app: var(--neutral-1);
+  --surface-raised: #faf4e6;
+  --surface-overlay: rgb(44 36 21 / 0.4);
+  --page-canvas: var(--neutral-4);
+  --focus-ring: var(--accent-9);
+
+  --shadow-1: 0 1px 2px rgb(44 36 21 / 0.08);
+  --shadow-2: 0 4px 12px rgb(44 36 21 / 0.1), 0 1px 3px rgb(44 36 21 / 0.08);
+  --shadow-3: 0 12px 32px rgb(44 36 21 / 0.14), 0 2px 6px rgb(44 36 21 / 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}

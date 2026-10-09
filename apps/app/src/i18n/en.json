@@ -1,0 +1,77 @@
+{
+  "app": {
+    "name": "Selis"
+  },
+  "tabs": {
+    "label": "Main navigation",
+    "library": "Library",
+    "recent": "Recent",
+    "transfer": "Transfer",
+    "settings": "Settings"
+  },
+  "library": {
+    "title": "Library",
+    "import": "Import PDF",
+    "importing": "Importing…",
+    "count": "{count, plural, =0 {No documents} one {# document} other {# documents}}",
+    "emptyTitle": "Your library is empty",
+    "emptyBody": "Import a PDF to start. It is copied into Selis; the original file is never changed.",
+    "untitled": "Untitled document",
+    "pages": "{count, plural, one {# page} other {# pages}}",
+    "imported": "Imported “{title}”",
+    "duplicate": "“{title}” is already in your library",
+    "openDocument": "Open {title}"
+  },
+  "recent": {
+    "title": "Recent",
+    "emptyTitle": "Nothing opened yet",
+    "emptyBody": "Documents you open appear here, newest first.",
+    "goToLibrary": "Go to Library"
+  },
+  "transfer": {
+    "title": "Transfer",
+    "emptyTitle": "Device-to-device transfer is coming",
+    "emptyBody": "Send documents straight to your other devices, no account and no cloud. Until then, nothing here uses the network.",
+    "goToLibrary": "Back to Library"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languageSystem": "System",
+    "languageEl": "Ελληνικά",
+    "languageEn": "English",
+    "theme": "Appearance",
+    "themeSystem": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSepia": "Sepia",
+    "privacyTitle": "Private by design",
+    "privacyBody": "No account, no tracking, no cloud. Your documents stay on this device.",
+    "version": "Version {version}"
+  },
+  "viewer": {
+    "back": "Back",
+    "loading": "Opening document…",
+    "pageIndicator": "Page {page} of {total}",
+    "pageLabel": "Page {page}",
+    "zoom": "{percent, number, ::percent}",
+    "errorTitle": "This document can’t be opened",
+    "errorPassword": "It is protected with a password. Password support is coming soon.",
+    "errorFormat": "The file looks damaged or is not a valid PDF.",
+    "errorGeneric": "Something went wrong while opening it.",
+    "selectDocument": "Select a document to read it here"
+  },
+  "desktop": {
+    "placeholderTitle": "Selis for desktop is on the way",
+    "placeholderBody": "The desktop layout arrives in a later release. Make the window narrower to use the mobile layout today."
+  },
+  "errors": {
+    "notPdf": "That file isn’t a PDF.",
+    "emptyFile": "That file is empty.",
+    "io": "The file couldn’t be read.",
+    "notFound": "The document is no longer available.",
+    "generic": "Something went wrong. Please try again.",
+    "dismiss": "Dismiss",
+    "retry": "Try again"
+  }
+}
