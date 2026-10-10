@@ -57,6 +57,13 @@ action (not in P0).
   command is deny-by-default (`build.rs` app manifest) and must be granted explicitly.
 - New architectural decisions get an ADR in `docs/adr/`.
 
+## Git workflow
+
+Every change goes branch → PR → `gh pr merge --auto --squash`; never push to `main` directly.
+`main` is protected (PR required, the 4 CI jobs required, branch up to date, no admin bypass),
+so the PR merges itself once CI is green and the head branch is deleted. Commit messages stay
+Conventional Commits.
+
 ## Verification
 
 Tier 1 — every change (`npm run verify:tier1` runs all of it):
