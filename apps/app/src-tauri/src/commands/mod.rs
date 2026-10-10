@@ -3,6 +3,7 @@
 
 pub mod device;
 pub mod library;
+pub mod picker;
 pub mod settings;
 
 use serde::Serialize;
@@ -17,6 +18,8 @@ pub enum ErrorCode {
     NotFound,
     Io,
     InvalidArgument,
+    /// The operation did not finish in time (nothing was written).
+    Timeout,
     Internal,
 }
 

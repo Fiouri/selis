@@ -27,6 +27,10 @@ export const commands = {
 	updateSettings: (patch: SettingsPatch) => typedError<Settings, CommandError>(__TAURI_INVOKE("update_settings", { patch })),
 	/**  Total device RAM, used by the UI to pick render limits (resolution, cache size). */
 	deviceMemory: () => typedError<DeviceMemory, CommandError>(__TAURI_INVOKE("device_memory")),
+	/**  Opens the system picker for one PDF. Cancel (or a picker failure) yields `Cancelled`. */
+	pickPdf: (requestId: number) => typedError<PickOutcome, CommandError>(__TAURI_INVOKE("pick_pdf", { requestId })),
+	/**  Returns (and clears) the outcome of picker request `request_id`, if it finished. */
+	takePickResult: (requestId: number) => typedError<{ status: "picked"; source: string } | { status: "cancelled" } | null, CommandError>(__TAURI_INVOKE("take_pick_result", { requestId })),
 };
 
 /* Types */
@@ -67,7 +71,9 @@ export type DocumentFile = {
 export type DocumentKind = "imported" | "linked";
 
 /**  Machine-readable error category; the UI maps it to a localized message. */
-export type ErrorCode = "notPdf" | "emptyFile" | "notFound" | "io" | "invalidArgument" | "internal";
+export type ErrorCode = "notPdf" | "emptyFile" | "notFound" | "io" | "invalidArgument" | 
+/**  The operation did not finish in time (nothing was written). */
+"timeout" | "internal";
 
 export type ImportOutcome = {
 	document: Document,
@@ -84,6 +90,8 @@ export type MemorySource =
 "sysinfo" | 
 /**  iOS `NSProcessInfo.physicalMemory`. */
 "processInfo";
+
+export type PickOutcome = { status: "picked"; source: string } | { status: "cancelled" };
 
 export type Settings = {
 	locale: LocalePref,

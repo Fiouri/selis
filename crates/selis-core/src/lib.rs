@@ -3,12 +3,14 @@
 //! This crate has no Tauri dependency so it can be tested on its own.
 //! Invariant: an original file supplied by the user is never written to.
 
+pub mod cancel;
 mod db;
 pub mod error;
 pub mod fsutil;
 pub mod hash;
 pub mod library;
 
+pub use cancel::{CancelToken, CancellableReader};
 pub use error::{Error, Result};
 pub use fsutil::atomic_write;
 pub use hash::Blake3Hash;

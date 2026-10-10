@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "mobile",
-  "description": "Least-privilege permissions for Android and iOS. No fs/shell/network access from the WebView.",
+  "description": "Least-privilege permissions for Android and iOS. No plugin, fs, shell or network access from the WebView: only the app commands below.",
   "platforms": [
     "android",
     "iOS"
@@ -10,13 +10,14 @@
     "main"
   ],
   "permissions": [
-    "dialog:allow-open",
     "allow-import-document",
     "allow-list-documents",
     "allow-read-document",
     "allow-record-document-info",
     "allow-get-settings",
     "allow-update-settings",
-    "allow-device-memory"
+    "allow-device-memory",
+    "allow-pick-pdf",
+    "allow-take-pick-result"
   ]
 }

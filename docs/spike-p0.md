@@ -26,6 +26,31 @@ P1 starts only after the UI mockups exist (docs/SPEC.md, "UI/UX design system �
 
 - Dependabot alert `glib` 0.18 (RUSTSEC-2024-0429, `VariantStrIter` unsoundness): Linux desktop only,
   transitive via Tauri's gtk-rs 0.18 stack, waiting for upstream — alert left open.
+- **Android import could hang on "Importing…" (fixed 2026-10-10).** Seen first with Dependabot PR #13
+  (material 1.14.0), but it is a latent race on `main`:
+  - *Repro* (Maestro import flow, cold start each run, `selis-midrange-api36`): `main` hung in
+    3/20 runs (15 %); `main` + material 1.14.0 (throwaway branch): 3/20 (15 %) — the same rate, so not a material bug.
+  - *Cause.* Traced with logcat + temporary instrumentation: the picker returns `RESULT_OK`,
+    `onActivityResult` fires, the dialog plugin's Kotlin `filePickerResult` runs and completes
+    `invoke.resolve(...)` — but the IPC reply of `plugin:dialog|open` never reaches the WebView: the
+    JS callback ids stay registered in `__TAURI_INTERNALS__.callbacks` (checked 3 s after resume),
+    so `runCallback` is never called. The reply is lost inside Tauri 2.11 / wry 0.55's
+    plugin → IPC → WebView path while the activity resumes (an `evaluateJavascript` issued while the
+    WebView is paused is *not* lost, so it is not a simple paused-WebView eval drop). Our UI awaited
+    that promise with no exit, so it waited forever. Upstream issue still to be filed.
+  - *Fix* (app side, independent of the upstream bug): the picker now runs from Rust
+    (`pick_pdf(requestId)`), which also stores the outcome; if the reply does not arrive within 2 s
+    of the app returning to the foreground, the UI fetches it with a fresh IPC call
+    (`take_pick_result`). The import flow is an explicit state machine
+    (idle → picking → importing → done | error | cancelled) where every busy state has an exit; a
+    picker cancel returns to idle (Android rejects with "File picker cancelled", previously shown as
+    an error); `import_document` has a 30 s deadline that cancels the copy (temp file discarded —
+    `atomic_write`/temp+rename means no partial file) and the UI offers a retry (el/en toast). The
+    WebView no longer needs `dialog:allow-open`.
+  - *Result:* Maestro import flow **20/20** on `main` with the fix. The recovery path is
+    exercised in practice: in the final verification runs logcat showed
+    `[selis:import] picker reply lost; recovered=picked` in 2 of 3 runs — the same reply loss also
+    hits app commands, and fetching the stored outcome with a fresh call always succeeded.
 
 ## Result: PASS on every target that can run the app — real mid-range device still open
 

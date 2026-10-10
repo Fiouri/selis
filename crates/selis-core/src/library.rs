@@ -460,6 +460,40 @@ mod tests {
         Ok(())
     }
 
+    /// A reader that fails part-way (e.g. a cancelled/timed-out import).
+    struct FailingReader {
+        sent: bool,
+    }
+
+    impl Read for FailingReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.sent {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "cancelled",
+                ));
+            }
+            self.sent = true;
+            let chunk = b"%PDF-1.7
+ partial";
+            buf[..chunk.len()].copy_from_slice(chunk);
+            Ok(chunk.len())
+        }
+    }
+
+    #[test]
+    fn interrupted_import_leaves_no_partial_file_and_no_row() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let err = lib.import_reader(FailingReader { sent: false }, "x").err();
+        assert!(matches!(err, Some(Error::Io { .. })));
+        assert!(lib.list_documents()?.is_empty());
+        let files = std::fs::read_dir(lib.files_dir())
+            .map_err(|e| Error::io(lib.files_dir(), e))?
+            .count();
+        assert_eq!(files, 0);
+        Ok(())
+    }
+
     #[test]
     fn rejects_non_pdf_and_empty() -> Result<()> {
         let (_dir, lib) = lib()?;

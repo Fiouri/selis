@@ -20,6 +20,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::settings::get_settings,
         commands::settings::update_settings,
         commands::device::device_memory::<tauri::Wry>,
+        commands::picker::pick_pdf::<tauri::Wry>,
+        commands::picker::take_pick_result,
     ])
 }
 
@@ -35,6 +37,7 @@ pub fn run() {
             let root = app.path().app_data_dir()?;
             let library = Library::open(root)?;
             app.manage(Arc::new(library));
+            app.manage(Arc::new(commands::picker::PickerState::default()));
             Ok(())
         })
         .run(tauri::generate_context!());

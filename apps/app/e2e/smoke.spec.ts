@@ -152,6 +152,40 @@ test("language and theme switches apply and persist", async ({ page }, info) => 
   await expect(page.getByRole("button", { name: "Ρυθμίσεις" })).toBeVisible();
 });
 
+test("cancelling the picker returns to idle without an error", async ({ page }) => {
+  await page.goto("/");
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Import PDF" }).click();
+  await chooser;
+  // The browser stand-in for the OS picker fires "cancel" when the user backs out.
+  await page.locator("[data-testid=file-input]").dispatchEvent("cancel");
+  await expect(page.getByRole("button", { name: "Import PDF" })).toBeEnabled();
+  await expect(page.getByTestId("toast")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Your library is empty" })).toBeVisible();
+});
+
+test("a hanging import times out with a retry that succeeds", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { __selisTest: object }).__selisTest = { importDelayMs: 3_000, importTimeoutMs: 400 };
+  });
+  await page.goto("/");
+  await importFixture(page, "mixed-sizes.pdf");
+  const toast = page.getByTestId("toast");
+  await expect(toast).toContainText("Importing took too long");
+  await expect(page.getByRole("button", { name: "Import PDF" })).toBeEnabled();
+
+  // The backend recovers; retry re-imports the same file without reopening the picker.
+  await page.evaluate(() => {
+    (window as unknown as { __selisTest: { importDelayMs: number; importTimeoutMs: number } }).__selisTest = {
+      importDelayMs: 0,
+      importTimeoutMs: 30_000,
+    };
+  });
+  await toast.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByTestId("viewer-screen")).toBeVisible();
+  await firstPageRendered(page);
+});
+
 test("back navigates within the app before leaving it", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Recent" }).click();

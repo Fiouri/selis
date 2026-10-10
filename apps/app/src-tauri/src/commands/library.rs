@@ -1,11 +1,18 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
-use selis_core::{Document, DocumentFile, ImportOutcome, Library, title_from_file_name};
+use selis_core::{
+    CancelToken, CancellableReader, Document, DocumentFile, ImportOutcome, Library,
+    title_from_file_name,
+};
 use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
 
 use super::{CommandError, CommandResult, ErrorCode};
+
+/// An import that has not finished by then is cancelled; the UI offers a retry.
+pub const IMPORT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Imports the file the user picked (a filesystem path on desktop, a
 /// `content://` URI from the Storage Access Framework on Android, a file URL on
@@ -27,19 +34,37 @@ pub async fn import_document<R: Runtime>(
     let file_path = parse_source(&source)?;
     let title = title_for_source(&source);
     let library = Arc::clone(&library);
+    let token = CancelToken::new();
+    let worker_token = token.clone();
 
     // Copy + hash can take seconds for large files: keep it off the async workers.
-    tauri::async_runtime::spawn_blocking(move || {
+    let task = tauri::async_runtime::spawn_blocking(move || {
         let mut opts = OpenOptions::new();
         opts.read(true);
         let file = app
             .fs()
             .open(file_path, opts)
             .map_err(|e| CommandError::new(ErrorCode::Io, format!("cannot open source: {e}")))?;
-        Ok(library.import_reader(file, &title)?)
-    })
-    .await
-    .map_err(|e| CommandError::new(ErrorCode::Internal, format!("import task failed: {e}")))?
+        let reader = CancellableReader::new(file, worker_token);
+        Ok(library.import_reader(reader, &title)?)
+    });
+
+    match tokio::time::timeout(IMPORT_TIMEOUT, task).await {
+        Ok(joined) => joined.map_err(|e| {
+            CommandError::new(ErrorCode::Internal, format!("import task failed: {e}"))
+        })?,
+        Err(_) => {
+            // Stops the copy at its next read; the temp file is dropped, never committed.
+            token.cancel();
+            Err(CommandError::new(
+                ErrorCode::Timeout,
+                format!(
+                    "import did not finish within {} s",
+                    IMPORT_TIMEOUT.as_secs()
+                ),
+            ))
+        }
+    }
 }
 
 #[tauri::command]

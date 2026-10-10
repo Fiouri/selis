@@ -31,6 +31,8 @@ export const api = {
   getSettings: () => unwrap(commands.getSettings()),
   updateSettings: (patch: Parameters<typeof commands.updateSettings>[0]) => unwrap(commands.updateSettings(patch)),
   deviceMemory: () => unwrap(commands.deviceMemory()),
+  pickPdf: (requestId: number) => unwrap(commands.pickPdf(requestId)),
+  takePickResult: (requestId: number) => unwrap(commands.takePickResult(requestId)),
 };
 
 /** i18n key for a user-facing error message. */
@@ -45,6 +47,8 @@ export function errorMessageKey(err: unknown): string {
         return "errors.io";
       case "notFound":
         return "errors.notFound";
+      case "timeout":
+        return "errors.importTimeout";
       case "invalidArgument":
       case "internal":
         return "errors.generic";

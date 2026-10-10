@@ -27,6 +27,7 @@ tauri = { version = "~2.11.6", features = ["protocol-asset"] }
 tauri-plugin-dialog = "~2.7.3"
 tauri-plugin-fs = "~2.5.2"
 tauri-specta.workspace = true
+tokio = { version = "1.53.2", default-features = false, features = ["time"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 # Same version as wry, whose JNI handle we receive.

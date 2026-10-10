@@ -19,7 +19,6 @@
     "@selis/ui": "0.1.0",
     "@tanstack/react-query": "5.104.1",
     "@tauri-apps/api": "2.11.1",
-    "@tauri-apps/plugin-dialog": "2.7.3",
     "i18next": "26.4.2",
     "i18next-icu": "2.5.0",
     "intl-messageformat": "12.1.3",

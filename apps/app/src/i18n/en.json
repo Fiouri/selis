@@ -72,6 +72,8 @@
     "notFound": "The document is no longer available.",
     "generic": "Something went wrong. Please try again.",
     "dismiss": "Dismiss",
-    "retry": "Try again"
+    "retry": "Try again",
+    "importTimeout": "Importing took too long, so nothing was added. Try again.",
+    "pickerLost": "The file picker didn’t return a file. Try again."
   }
 }

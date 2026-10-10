@@ -39,7 +39,14 @@ async function hashHex(bytes: ArrayBuffer): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Playwright knob: simulate a slow import (e.g. a stuck SAF descriptor). */
+function mockImportDelayMs(): number {
+  return (window as unknown as { __selisTest?: { importDelayMs?: number } }).__selisTest?.importDelayMs ?? 0;
+}
+
 async function importDocument(source: string): Promise<ImportOutcome> {
+  const delay = mockImportDelayMs();
+  if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
   const file = files.get(source) ?? fail("io", "unknown mock source");
   const bytes = await file.arrayBuffer();
   if (bytes.byteLength === 0) fail("emptyFile", "empty");
