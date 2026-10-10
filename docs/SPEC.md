@@ -104,7 +104,7 @@ selis/
 
 **Κανόνες ορίων:**
 
-- Το UI δεν αγγίζει filesystem ή network απευθείας. Μόνο μέσω `lib/ipc.ts` (generated).
+- Το UI δεν αγγίζει filesystem ή network απευθείας. Μόνο μέσω `lib/ipc/` (generated bindings + reliability layer, ADR 0005).
 - Τα `commands/` είναι thin: validate input → καλούν crate → επιστρέφουν typed result.
 - Το `packages/engine` είναι ο μόνος που μιλά με EmbedPDF. Αν αλλάξει engine, αλλάζει μόνο αυτό.
 - Κάθε αρχιτεκτονική απόφαση γράφεται ως ADR στο `docs/adr/` (π.χ. 0001-tauri-for-all-platforms).

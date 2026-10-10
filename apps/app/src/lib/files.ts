@@ -11,12 +11,12 @@ import { isTauri } from "./platform";
  * Opens the system picker for one PDF and resolves to a source string for
  * `api.importDocument`, or null if the user cancelled.
  *
- * In Tauri the picker runs from Rust (`pick_pdf`), which also keeps the outcome so
- * `recoverPick` can fetch it if this call's reply never reaches the WebView.
+ * In Tauri the picker runs from Rust (`pick_pdf`) as a long-running command, so a
+ * reply lost on the way back is recovered by the IPC layer (`lib/ipc/reliable.ts`).
  */
-export async function pickPdf(requestId: number): Promise<string | null> {
+export async function pickPdf(): Promise<string | null> {
   if (isTauri()) {
-    const outcome = await api.pickPdf(requestId);
+    const outcome = await api.pickPdf();
     return outcome.status === "picked" ? outcome.source : null;
   }
   const file = await pickWithInput();
@@ -24,19 +24,6 @@ export async function pickPdf(requestId: number): Promise<string | null> {
   // Loaded lazily so the mock backend never ships in the Tauri bundle's hot path.
   const { registerMockFile } = await import("./mock-ipc");
   return registerMockFile(file);
-}
-
-/**
- * Fetches a finished picker outcome with a fresh IPC call: a source, null for
- * cancelled, or undefined if the picker has not produced one (truly lost).
- */
-export async function recoverPick(requestId: number): Promise<string | null | undefined> {
-  if (!isTauri()) return undefined;
-  const outcome = await api.takePickResult(requestId);
-  // Local diagnostics only (logcat): shows how often the upstream reply loss happens.
-  console.info(`[selis:import] picker reply lost; recovered=${outcome === null ? "no" : outcome.status}`);
-  if (outcome === null) return undefined;
-  return outcome.status === "picked" ? outcome.source : null;
 }
 
 function pickWithInput(): Promise<File | null> {

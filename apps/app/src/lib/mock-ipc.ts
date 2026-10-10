@@ -1,9 +1,19 @@
 /**
  * In-memory backend for the browser build (`vite --mode mock`): lets Playwright
- * and UI work run without Rust. Mirrors the command contract of `ipc.ts`.
+ * and UI work run without Rust. Mirrors the command contract of the bindings,
+ * including the per-request-id result store behind `take_result`.
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
-import type { CommandError, Document, DocumentFile, ImportOutcome, Settings, SettingsPatch } from "./ipc";
+import type {
+  CommandError,
+  Document,
+  DocumentFile,
+  ImportOutcome,
+  Settings,
+  SettingsPatch,
+  StoredResult,
+  TakeResult,
+} from "./ipc";
 
 const SETTINGS_KEY = "selis.mock.settings";
 
@@ -39,13 +49,51 @@ async function hashHex(bytes: ArrayBuffer): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Playwright knob: simulate a slow import (e.g. a stuck SAF descriptor). */
-function mockImportDelayMs(): number {
-  return (window as unknown as { __selisTest?: { importDelayMs?: number } }).__selisTest?.importDelayMs ?? 0;
+type MockKnobs = {
+  /** Simulate a slow import (e.g. a stuck SAF descriptor). */
+  importDelayMs?: number;
+  /** Commands whose reply is dropped (the Android lost-reply bug); Rust still finishes. */
+  dropReplies?: string[];
+};
+
+function knobs(): MockKnobs {
+  return (window as unknown as { __selisTest?: MockKnobs }).__selisTest ?? {};
+}
+
+/** Like Rust's `RequestResults`: run once per request id, keep the result. */
+const requests = new Map<string, { promise: Promise<unknown>; result: StoredResult | null }>();
+
+function runOnce<T>(command: string, requestId: string, work: () => Promise<T>): Promise<T> {
+  let entry = requests.get(requestId);
+  if (!entry) {
+    const promise = work();
+    const created = { promise: promise as Promise<unknown>, result: null as StoredResult | null };
+    void (async () => {
+      try {
+        created.result = { status: "ok", data: await promise };
+      } catch (error) {
+        created.result = { status: "error", error: error as CommandError };
+      }
+    })();
+    requests.set(requestId, created);
+    entry = created;
+  }
+  const reply = entry.promise as Promise<T>;
+  if (knobs().dropReplies?.includes(command)) {
+    console.info(`[mock-ipc] dropping the reply of ${command}`);
+    return new Promise<T>(() => undefined);
+  }
+  return reply;
+}
+
+function takeResult(requestId: string): TakeResult {
+  const entry = requests.get(requestId);
+  if (!entry) return { status: "unknown" };
+  return entry.result ? { status: "done", result: entry.result } : { status: "pending" };
 }
 
 async function importDocument(source: string): Promise<ImportOutcome> {
-  const delay = mockImportDelayMs();
+  const delay = knobs().importDelayMs ?? 0;
   if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
   const file = files.get(source) ?? fail("io", "unknown mock source");
   const bytes = await file.arrayBuffer();
@@ -107,7 +155,9 @@ export function installMockIpc(): void {
     const args = (payload ?? {}) as Record<string, unknown>;
     switch (cmd) {
       case "import_document":
-        return importDocument(String(args.source));
+        return runOnce(cmd, String(args.requestId), () => importDocument(String(args.source)));
+      case "take_result":
+        return takeResult(String(args.requestId));
       case "list_documents":
         return sortedDocs();
       case "read_document":

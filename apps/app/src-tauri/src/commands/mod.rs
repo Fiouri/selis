@@ -4,6 +4,7 @@
 pub mod device;
 pub mod library;
 pub mod picker;
+pub mod requests;
 pub mod settings;
 
 use serde::Serialize;
@@ -23,7 +24,7 @@ pub enum ErrorCode {
     Internal,
 }
 
-#[derive(Debug, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
     pub code: ErrorCode,

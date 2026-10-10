@@ -2,6 +2,7 @@
 //! delegate to `selis-core`. Nothing here opens a network connection.
 
 mod commands;
+mod requests;
 
 use std::sync::Arc;
 
@@ -21,7 +22,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::settings::update_settings,
         commands::device::device_memory::<tauri::Wry>,
         commands::picker::pick_pdf::<tauri::Wry>,
-        commands::picker::take_pick_result,
+        commands::requests::take_result,
     ])
 }
 
@@ -37,7 +38,7 @@ pub fn run() {
             let root = app.path().app_data_dir()?;
             let library = Library::open(root)?;
             app.manage(Arc::new(library));
-            app.manage(Arc::new(commands::picker::PickerState::default()));
+            app.manage(Arc::new(requests::RequestResults::default()));
             Ok(())
         })
         .run(tauri::generate_context!());
@@ -52,10 +53,11 @@ pub fn run() {
 mod tests {
     use specta_typescript::Typescript;
 
-    /// Regenerates `apps/app/src/lib/ipc.ts`. CI fails if the committed file differs.
+    /// Regenerates `apps/app/src/lib/ipc/bindings.ts`. CI fails if the committed file differs.
     #[test]
     fn export_bindings() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/ipc.ts");
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/ipc/bindings.ts");
         super::specta_builder()
             .export(
                 Typescript::default()

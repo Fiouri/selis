@@ -21,7 +21,7 @@ the same terms.
   (ICU message format). The linter and tests fail otherwise.
 - **Accessibility:** 44×44 pt touch targets, WCAG 2.2 AA contrast, labels for icon buttons.
 - **Boundaries:** only `packages/engine` uses EmbedPDF; the UI calls Rust only through the
-  generated `apps/app/src/lib/ipc.ts`.
+  generated bindings in `apps/app/src/lib/ipc/` (via `lib/api.ts`).
 
 ## Development
 
@@ -35,7 +35,9 @@ npm run e2e                 # Playwright mobile smoke (mock backend)
 Android: `npm run tauri -- android dev`. See the README for prerequisites.
 
 If you change a Tauri command, regenerate the bindings with
-`cargo test -p selis-app export_bindings` and commit `apps/app/src/lib/ipc.ts`.
+`cargo test -p selis-app export_bindings` and commit `apps/app/src/lib/ipc/bindings.ts`.
+Long-running commands take a `request_id` and run through `RequestResults::run_once`
+(docs/adr/0005-ipc-reliability.md).
 
 ## Commits and pull requests
 

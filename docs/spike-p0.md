@@ -37,20 +37,64 @@ P1 starts only after the UI mockups exist (docs/SPEC.md, "UI/UX design system �
     so `runCallback` is never called. The reply is lost inside Tauri 2.11 / wry 0.55's
     plugin → IPC → WebView path while the activity resumes (an `evaluateJavascript` issued while the
     WebView is paused is *not* lost, so it is not a simple paused-WebView eval drop). Our UI awaited
-    that promise with no exit, so it waited forever. Upstream issue still to be filed.
-  - *Fix* (app side, independent of the upstream bug): the picker now runs from Rust
-    (`pick_pdf(requestId)`), which also stores the outcome; if the reply does not arrive within 2 s
-    of the app returning to the foreground, the UI fetches it with a fresh IPC call
-    (`take_pick_result`). The import flow is an explicit state machine
-    (idle → picking → importing → done | error | cancelled) where every busy state has an exit; a
-    picker cancel returns to idle (Android rejects with "File picker cancelled", previously shown as
-    an error); `import_document` has a 30 s deadline that cancels the copy (temp file discarded —
-    `atomic_write`/temp+rename means no partial file) and the UI offers a retry (el/en toast). The
-    WebView no longer needs `dialog:allow-open`.
-  - *Result:* Maestro import flow **20/20** on `main` with the fix. The recovery path is
-    exercised in practice: in the final verification runs logcat showed
-    `[selis:import] picker reply lost; recovered=picked` in 2 of 3 runs — the same reply loss also
-    hits app commands, and fetching the stored outcome with a fresh call always succeeded.
+    that promise with no exit, so it waited forever.
+  - *Not specific to the dialog plugin:* after the picker moved into our own `pick_pdf` command,
+    the same loss hit that command's reply too.
+  - *Upstream status — fixed in the current Tauri line, so no issue was opened.* Minimal repro: a
+    fresh `create-tauri-app` (vanilla-ts) plus `tauri-plugin-dialog`, one button calling `open()`,
+    and a Maestro flow that cold-starts, picks a PDF and waits for the promise
+    (`clearState` → tap → pick → wait 15 s). 20 cold starts each on `selis-midrange-api36`:
+
+    | Versions | `open()` never settled |
+    | --- | --- |
+    | **tauri 2.11.6**, tauri-runtime-wry 2.11.4, **wry 0.55.1**, tauri-plugin-dialog 2.7.3 (our pins) | **6/20 (30 %)** |
+    | **tauri 2.12.2**, tauri-runtime-wry 2.12.1, **wry 0.57.0**, tauri-plugin-dialog 2.8.1 (current) | **0/20** |
+
+    In every failed run the file was picked and the page became visible again, but the promise was
+    still pending 20+ s later. Not bisected. Likely candidates are wry 0.56.0's Android lifecycle
+    changes ([wry#1720](https://github.com/tauri-apps/wry/pull/1720), `WryActivity` → tao 0.36
+    `onResume`) and [wry#1715](https://github.com/tauri-apps/wry/pull/1715) (REQUEST_HANDLER
+    mutex). Moving the pinned Tauri line to 2.12 should remove the root cause. That move is its
+    own change: CLI, crates and `@tauri-apps/*` go together (CLAUDE.md). Until then, and as a
+    guard afterwards, the IPC layer below stays.
+  - *Fix, first version (2026-10-10, `0500b32`)* — import-only. The picker ran from Rust with a
+    one-off outcome store (`take_pick_result`). The import became an explicit state machine
+    (idle → picking → importing → done | error | cancelled) where every busy state has an exit. A
+    picker cancel returns to idle; Android rejects with "File picker cancelled", which was shown as
+    an error before. `import_document` got a 30 s deadline that cancels the copy: the temp file
+    is discarded (`atomic_write`, temp + rename), so no partial file is left, and the UI offers a
+    retry (el/en toast). Maestro import flow went from 17/20 to **20/20**; the recovery path ran
+    in 2 of 3 verification runs.
+  - *Fix, generalized (2026-10-10)* — **IPC reliability layer** for every command
+    (docs/adr/0005-ipc-reliability.md):
+    - Long-running commands (`import_document`, `pick_pdf`, future save/transfer) take a
+      client request id.
+    - Rust stores each final result (`RequestResults`: TTL 5 min, at most 64 entries) and runs
+      the command at most once per id. A duplicate returns the stored result and never repeats
+      a write.
+    - `take_result(id) → Pending | Done | Unknown` lets the UI fetch a result whose reply was
+      lost. It is asked on resume (`visibilitychange`) and on a per-call deadline.
+    - Short commands get a 10 s timeout; read-only ones also get one retry.
+    - The one-off `take_pick_result` path was removed.
+    - Maestro gained `import-background-resume.yaml`: pick → home → relaunch mid-import.
+      Result on `selis-midrange-api36`, every run through `run.sh` (ANR check):
+      - `import-background-resume.yaml` **20/20**; `import-scroll-back.yaml` **20/20**; 0 ANRs.
+      - No reply was lost in these 40 runs (no `[selis:ipc] … recovered` line), so the recovery
+        path was not exercised by them.
+      - The store was exercised in the real WebView over CDP instead: `take_result` returns
+        unknown/done, a duplicate `import_document` with the same id returns the stored result
+        without running again (even with another `source`), and an id reused for `pick_pdf` is
+        rejected.
+      - An earlier 20× attempt went 18/20. Run 12 was a cold start of 8.6 s (normally ~1.1 s);
+        run 15 was an ANR caught by the new guard. Its trace shows the emulator's GPU pipe
+        stalled (`eglMakeCurrent → qemu_pipe_read`, with the launcher also in ANR). After a
+        cold boot of the AVD, and with the first assert waiting up to 20 s for a slow cold
+        start, the flows went 20/20.
+- **ANR guard for Maestro runs.** The emulator runs with `hide_error_dialogs=1` (otherwise System UI
+  ANR dialogs block the flows), which also hides *our* ANR dialogs, so a flow could pass while the
+  app was "not responding". `apps/app/e2e/maestro/run.sh <serial> <flow> [runs]` checks logcat
+  after every run and fails it on `ANR in com.anywecon.selis` (appId from the flow). Use it for
+  all Maestro runs.
 
 ## Result: PASS on every target that can run the app — real mid-range device still open
 

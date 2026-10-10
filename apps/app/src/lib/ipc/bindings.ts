@@ -10,8 +10,11 @@ export const commands = {
 	 *  Imports the file the user picked (a filesystem path on desktop, a
 	 *  `content://` URI from the Storage Access Framework on Android, a file URL on
 	 *  iOS) by copying it into the app library. The source is opened read-only.
+	 * 
+	 *  Runs once per `request_id`: a repeated call returns the first call's result
+	 *  (see `take_result`).
 	 */
-	importDocument: (source: string) => typedError<ImportOutcome, CommandError>(__TAURI_INVOKE("import_document", { source })),
+	importDocument: (requestId: string, source: string) => typedError<ImportOutcome, CommandError>(__TAURI_INVOKE("import_document", { requestId, source })),
 	listDocuments: () => typedError<Document[], CommandError>(__TAURI_INVOKE("list_documents")),
 	/**
 	 *  Resolves a library document to its stored copy for the viewer.
@@ -27,10 +30,17 @@ export const commands = {
 	updateSettings: (patch: SettingsPatch) => typedError<Settings, CommandError>(__TAURI_INVOKE("update_settings", { patch })),
 	/**  Total device RAM, used by the UI to pick render limits (resolution, cache size). */
 	deviceMemory: () => typedError<DeviceMemory, CommandError>(__TAURI_INVOKE("device_memory")),
-	/**  Opens the system picker for one PDF. Cancel (or a picker failure) yields `Cancelled`. */
-	pickPdf: (requestId: number) => typedError<PickOutcome, CommandError>(__TAURI_INVOKE("pick_pdf", { requestId })),
-	/**  Returns (and clears) the outcome of picker request `request_id`, if it finished. */
-	takePickResult: (requestId: number) => typedError<{ status: "picked"; source: string } | { status: "cancelled" } | null, CommandError>(__TAURI_INVOKE("take_pick_result", { requestId })),
+	/**
+	 *  Opens the system picker for one PDF. Cancel (or a picker failure) yields
+	 *  `Cancelled`. Runs once per `request_id`.
+	 */
+	pickPdf: (requestId: string) => typedError<PickOutcome, CommandError>(__TAURI_INVOKE("pick_pdf", { requestId })),
+	/**
+	 *  The state of a long-running request: still running, its final result, or
+	 *  unknown (never received, or expired). Read-only; a fresh call the UI makes
+	 *  when the original reply did not arrive.
+	 */
+	takeResult: (requestId: string) => typedError<TakeResult, CommandError>(__TAURI_INVOKE("take_result", { requestId })),
 };
 
 /* Types */
@@ -103,6 +113,23 @@ export type SettingsPatch = {
 	locale: LocalePref | null,
 	theme: ThemePref | null,
 };
+
+/**
+ *  A command's final result in the same shape the TypeScript bindings use for
+ *  `Result<T, CommandError>`.
+ */
+export type StoredResult = { status: "ok"; 
+/**  The command's own result type; the UI knows which command it called. */
+data: unknown } | { status: "error"; error: CommandError };
+
+/**  Answer of `take_result`. */
+export type TakeResult = 
+/**  The command is still running. */
+{ status: "pending" } | 
+/**  The command finished; this is what its reply carried. */
+{ status: "done"; result: StoredResult } | 
+/**  Never seen (the call did not reach Rust) or already expired. */
+{ status: "unknown" };
 
 export type ThemePref = "system" | "light" | "dark" | "sepia";
 

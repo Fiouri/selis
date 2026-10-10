@@ -1,35 +1,29 @@
 /**
- * Runs the import state machine (importMachine.ts): starts the picker, guards
- * against a lost picker result, imports with a deadline, and reports the outcome.
- * Dependencies are injected so every transition is unit-testable.
+ * Runs the import state machine (importMachine.ts): starts the picker, imports
+ * with a deadline, and reports the outcome. Lost IPC replies are recovered one
+ * layer down (lib/ipc/reliable.ts); a reply that stays lost arrives here as an
+ * error, so every state still has an exit. Dependencies are injected so every
+ * transition is unit-testable.
  */
 import type { ImportOutcome } from "../../lib/api";
 import { IDLE, type ImportEvent, importReducer, type ImportState } from "./importMachine";
 
 /** Rust cancels `import_document` after 30 s; the UI waits slightly longer for that reply. */
 export const IMPORT_TIMEOUT_MS = 32_000;
-/**
- * After the app is back in front, the picker reply should arrive within this
- * window; otherwise the outcome is fetched again from Rust (`recoverPick`).
- */
-export const PICKER_RESULT_GRACE_MS = 2_000;
 
 export type ImportErrorState = Extract<ImportState, { status: "error" }>;
 
 export type ImportDeps = {
   /** Opens the picker; resolves to a source or null (cancelled). */
-  pick: (requestId: number) => Promise<string | null>;
-  /** Re-fetches a finished picker outcome: source, null (cancelled) or undefined (none). */
-  recoverPick: (requestId: number) => Promise<string | null | undefined>;
+  pick: () => Promise<string | null>;
   importDocument: (source: string) => Promise<ImportOutcome>;
   isTimeoutError: (error: unknown) => boolean;
+  /** The picker's reply was lost and could not be recovered. */
+  isLostResponse: (error: unknown) => boolean;
   warmUp: () => void;
-  /** Calls `onLeave` when the app goes to the background and `onReturn` when it is back. */
-  watchForeground: (onLeave: () => void, onReturn: () => void) => () => void;
   setTimer: (fn: () => void, ms: number) => number;
   clearTimer: (id: number) => void;
   timeoutMs: number;
-  pickerGraceMs: number;
 };
 
 export type ImportHandlers = {
@@ -50,8 +44,6 @@ export class ImportController {
   private handlers: ImportHandlers | null = null;
   private cleanups: Array<() => void> = [];
   private readonly deps: ImportDeps;
-  /** Random per page load, so a Rust-side outcome from an earlier page is never mistaken for ours. */
-  private readonly requestBase = Math.floor(Math.random() * 1_000_000) * 1_000;
 
   constructor(deps: ImportDeps) {
     this.deps = deps;
@@ -115,48 +107,13 @@ export class ImportController {
 
   private runPick(attempt: number): void {
     const { deps } = this;
-    const requestId = this.requestBase + attempt;
     deps.warmUp(); // the picker is open for seconds: get the PDF engine ready meanwhile
-
-    const settle = (source: string | null) =>
-      this.send(source === null ? { type: "cancelled", attempt } : { type: "picked", attempt, source });
-
-    // Watchdog for a lost picker reply: once the app is back in front, the answer
-    // should arrive within the grace period. If not, ask Rust for the stored
-    // outcome with a fresh call; only if that has nothing (or never answers) is
-    // the result really lost.
-    let timer: number | null = null;
-    const clear = () => {
-      if (timer !== null) deps.clearTimer(timer);
-      timer = null;
-    };
-    const recover = async () => {
-      timer = deps.setTimer(() => this.send({ type: "resultLost", attempt }), deps.pickerGraceMs);
-      try {
-        const outcome = await deps.recoverPick(requestId);
-        if (outcome === undefined) this.send({ type: "resultLost", attempt });
-        else settle(outcome);
-      } catch {
-        this.send({ type: "resultLost", attempt });
-      }
-    };
-    const stopWatching = deps.watchForeground(clear, () => {
-      clear();
-      timer = deps.setTimer(() => {
-        timer = null;
-        void recover();
-      }, deps.pickerGraceMs);
-    });
-    this.cleanups.push(() => {
-      stopWatching();
-      clear();
-    });
-
     void (async () => {
       try {
-        settle(await deps.pick(requestId));
+        const source = await deps.pick();
+        this.send(source === null ? { type: "cancelled", attempt } : { type: "picked", attempt, source });
       } catch (error) {
-        this.send({ type: "pickFailed", attempt, error });
+        this.send(deps.isLostResponse(error) ? { type: "resultLost", attempt } : { type: "pickFailed", attempt, error });
       }
     })();
   }

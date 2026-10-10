@@ -1,0 +1,24 @@
+# Lost-reply guard on Android (docs/adr/0005-ipc-reliability.md): pick the
+# 1000-page fixture, leave the app right away (the picker/import replies are in
+# flight), come back, and the document must still open.
+# Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh (ANR check).
+appId: com.anywecon.selis
+name: Import, background, resume
+---
+- clearState
+- launchApp
+# A cold start on the 3 GB AVD can take several seconds before the WebView paints.
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "large-1000.pdf"
+- pressKey: home
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Page 1 of 1000"
+    timeout: 20000
+- back
+- assertVisible: "1 document"
+- assertVisible: "Open Selis 1000-page fixture"

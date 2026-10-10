@@ -6,7 +6,10 @@ name: Import, scroll, back
 ---
 - clearState
 - launchApp
-- assertVisible: "Your library is empty"
+# A cold start on the 3 GB AVD can take several seconds before the WebView paints.
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
 - tapOn: "Import PDF"
 # DocumentsUI lists the media-scanned fixtures under Recent.
 - tapOn: "large-1000.pdf"

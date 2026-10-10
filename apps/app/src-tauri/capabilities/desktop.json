@@ -19,6 +19,6 @@
     "allow-update-settings",
     "allow-device-memory",
     "allow-pick-pdf",
-    "allow-take-pick-result"
+    "allow-take-result"
   ]
 }

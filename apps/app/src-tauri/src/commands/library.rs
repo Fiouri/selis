@@ -10,6 +10,7 @@ use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
 
 use super::{CommandError, CommandResult, ErrorCode};
+use crate::requests::RequestResults;
 
 /// An import that has not finished by then is cancelled; the UI offers a retry.
 pub const IMPORT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -17,11 +18,27 @@ pub const IMPORT_TIMEOUT: Duration = Duration::from_secs(30);
 /// Imports the file the user picked (a filesystem path on desktop, a
 /// `content://` URI from the Storage Access Framework on Android, a file URL on
 /// iOS) by copying it into the app library. The source is opened read-only.
+///
+/// Runs once per `request_id`: a repeated call returns the first call's result
+/// (see `take_result`).
 #[tauri::command]
 #[specta::specta]
 pub async fn import_document<R: Runtime>(
     app: AppHandle<R>,
     library: State<'_, Arc<Library>>,
+    results: State<'_, Arc<RequestResults>>,
+    request_id: String,
+    source: String,
+) -> CommandResult<ImportOutcome> {
+    let library = Arc::clone(&library);
+    results
+        .run_once(&request_id, "import_document", import(app, library, source))
+        .await
+}
+
+async fn import<R: Runtime>(
+    app: AppHandle<R>,
+    library: Arc<Library>,
     source: String,
 ) -> CommandResult<ImportOutcome> {
     let source = source.trim().to_owned();
@@ -33,7 +50,6 @@ pub async fn import_document<R: Runtime>(
     }
     let file_path = parse_source(&source)?;
     let title = title_for_source(&source);
-    let library = Arc::clone(&library);
     let token = CancelToken::new();
     let worker_token = token.clone();
 

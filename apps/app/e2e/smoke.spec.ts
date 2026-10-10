@@ -186,6 +186,21 @@ test("a hanging import times out with a retry that succeeds", async ({ page }) =
   await firstPageRendered(page);
 });
 
+test("a lost import reply is recovered from the result store when the app resumes", async ({ page }) => {
+  // The backend finishes the import, but its reply never reaches the page (the Android bug).
+  await page.addInitScript(() => {
+    (window as unknown as { __selisTest: object }).__selisTest = { dropReplies: ["import_document"] };
+  });
+  await page.goto("/");
+  await importFixture(page, "mixed-sizes.pdf");
+  await expect(page.getByText("Importing…")).toBeVisible();
+  // App back in front: the IPC layer asks take_result instead of waiting forever.
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(page.getByTestId("viewer-screen")).toBeVisible({ timeout: 4_000 });
+  await firstPageRendered(page);
+  await expect(page.getByTestId("toast")).toHaveCount(0);
+});
+
 test("back navigates within the app before leaving it", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Recent" }).click();

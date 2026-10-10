@@ -50,7 +50,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - name: Generated IPC bindings are up to date
-        run: git diff --exit-code -- apps/app/src/lib/ipc.ts
+        run: git diff --exit-code -- apps/app/src/lib/ipc/bindings.ts
 
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:

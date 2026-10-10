@@ -8,8 +8,8 @@
  *                     └──failed / resultLost──▶ error ◀─────────────┘
  *   done | error | cancelled ──reset──▶ idle ;  error ──retry──▶ importing (same source)
  *
- * `resultLost` covers the Android race where the picker's activity result never
- * reaches the WebView (see docs/spike-p0.md, "Known issues").
+ * `resultLost`: the picker's IPC reply never reached the WebView and the IPC
+ * layer could not recover it either (docs/adr/0005-ipc-reliability.md).
  */
 import type { ImportOutcome } from "../../lib/api";
 

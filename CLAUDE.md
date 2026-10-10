@@ -16,7 +16,9 @@ compile in CI but get no UI polish until P6.
 - React 19 + TypeScript 6 (strict) + Vite 8, Tailwind v4, Zustand, TanStack Query, i18next + ICU.
 - PDF engine: EmbedPDF **v2** (PDFium WASM) inside `packages/engine` only, in a Web Worker.
 - Rust core: `crates/selis-core` (rusqlite bundled, BLAKE3, atomic writes). IPC types via
-  tauri-specta → `apps/app/src/lib/ipc.ts` (generated; never hand-edit).
+  tauri-specta → `apps/app/src/lib/ipc/bindings.ts` (generated; never hand-edit), wrapped by the
+  reliability layer `lib/ipc/reliable.ts` (ADR 0005: long-running commands take a `request_id`,
+  run once per id via `RequestResults::run_once`, and are recoverable with `take_result`).
 - Package manager: npm workspaces. Node 22 (`.nvmrc`), Rust 1.98.1 (`rust-toolchain.toml`).
 
 ## Forbidden
@@ -27,7 +29,7 @@ compile in CI but get no UI polish until P6.
 - Network at startup. Only `crates/selis-transfer` (P3) may open connections, and only while
   the Transfer screen is open.
 - Direct filesystem/network access from the UI. The UI talks to Rust through `lib/api.ts`
-  (wrapping generated `lib/ipc.ts`) and reads library files via the scoped asset protocol.
+  (wrapping `lib/ipc`) and reads library files via the scoped asset protocol.
 - Hardcoded UI strings: every user-visible string goes through `t()` with keys in
   `apps/app/src/i18n/{el,en}.json` (ESLint `selis-i18n/no-hardcoded-strings` + parity test).
 - Secrets in the repo: keystores, Apple certificates, signing keys live in CI secrets only.
@@ -63,13 +65,16 @@ Tier 1 — every change (`npm run verify:tier1` runs all of it):
 - `npm test` (vitest: engine with real PDFium WASM, fixtures, ui tokens, app)
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo test --workspace`, `cargo deny check`
-- If a Rust command signature changes: `cargo test -p selis-app export_bindings` and commit `ipc.ts`.
+- If a Rust command signature changes: `cargo test -p selis-app export_bindings` and commit
+  `lib/ipc/bindings.ts`.
 
 Tier 2 — end of every feature:
 
 - `npm run tauri -- android build --debug --apk` (NDK_HOME set)
 - Maestro on the emulator: `apps/app/e2e/maestro/push-fixtures.sh <serial>` then
-  `maestro test apps/app/e2e/maestro/import-scroll-back.yaml`
+  `apps/app/e2e/maestro/run.sh <serial> apps/app/e2e/maestro/<flow>.yaml [runs]` for
+  `import-scroll-back.yaml` and `import-background-resume.yaml` (fails a run on
+  "ANR in com.anywecon.selis" in logcat — the emulator hides ANR dialogs)
 - Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC): `npm run e2e`
 - Windows compile check: `npm run tauri -- build --no-bundle`
 - Visual changes: inspect screenshots (Playwright `test-results/screenshots`, device `adb exec-out screencap`).

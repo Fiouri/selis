@@ -7,7 +7,7 @@ const APP_COMMANDS: &[&str] = &[
     "update_settings",
     "device_memory",
     "pick_pdf",
-    "take_pick_result",
+    "take_result",
 ];
 
 fn main() {
