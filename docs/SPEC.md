@@ -33,7 +33,7 @@ Exported: 2026-10-09. Αν αλλάξει το live doc, ξανακάνε export
 
 | Layer | Επιλογή | Ρόλος |
 | --- | --- | --- |
-| Shell | Tauri 2 (γραμμή 2.11.x, pinned) | Windows, macOS, Linux, Android, iOS από ένα project |
+| Shell | Tauri 2 (γραμμή 2.12.x, pinned — η 2.11 / wry 0.55 χάνει IPC replies στο Android resume) | Windows, macOS, Linux, Android, iOS από ένα project |
 | UI | React + TypeScript strict + Vite | Όλη η διεπαφή |
 | Styling | Tailwind v4 + Radix primitives (shadcn/ui pattern) + Motion | Design system, animations |
 | State | Zustand (UI state) + TanStack Query (IPC cache) | Χωρίς Redux |

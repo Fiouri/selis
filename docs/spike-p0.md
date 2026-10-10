@@ -54,9 +54,16 @@ P1 starts only after the UI mockups exist (docs/SPEC.md, "UI/UX design system �
     still pending 20+ s later. Not bisected. Likely candidates are wry 0.56.0's Android lifecycle
     changes ([wry#1720](https://github.com/tauri-apps/wry/pull/1720), `WryActivity` → tao 0.36
     `onResume`) and [wry#1715](https://github.com/tauri-apps/wry/pull/1715) (REQUEST_HANDLER
-    mutex). Moving the pinned Tauri line to 2.12 should remove the root cause. That move is its
-    own change: CLI, crates and `@tauri-apps/*` go together (CLAUDE.md). Until then, and as a
-    guard afterwards, the IPC layer below stays.
+    mutex).
+  - **Root cause fixed upstream in Tauri 2.12 (wry 0.57).** Selis moved to the 2.12 line on
+    2026-10-10 (tauri 2.12.3, wry 0.57.0; ADR 0001). Results after the move, on
+    `selis-midrange-api36`, through `run.sh` (ANR check):
+    - `import-background-resume.yaml` **20/20** and `import-scroll-back.yaml` **20/20**.
+    - **0** `take_result` recoveries (`[selis:ipc] … recovered`) and 0 ANRs over the 40 runs.
+    - One extra scroll-back failure is not counted: `ConnectException` while the adb server
+      restarted under a parallel S23 measurement. The clean rerun was 20/20.
+
+    The IPC reliability layer (ADR 0005) stays as defense in depth.
   - *Fix, first version (2026-10-10, `0500b32`)* — import-only. The picker ran from Rust with a
     one-off outcome store (`take_pick_result`). The import became an explicit state machine
     (idle → picking → importing → done | error | cancelled) where every busy state has an exit. A
@@ -95,6 +102,27 @@ P1 starts only after the UI mockups exist (docs/SPEC.md, "UI/UX design system �
   app was "not responding". `apps/app/e2e/maestro/run.sh <serial> <flow> [runs]` checks logcat
   after every run and fails it on `ANR in com.anywecon.selis` (appId from the flow). Use it for
   all Maestro runs.
+
+## Re-run after the Tauri 2.12 upgrade (2026-10-11)
+
+Same spike, same devices, debug builds. On the S23, `main` on Tauri 2.11 (`cc96a3f`) was
+measured again on the same day as an A/B baseline.
+
+| | S23 2.12 | S23 2.11 (same day) | S23 in the table below | AVD 3 GB API 36, 2.12 | AVD in the table below |
+| --- | --- | --- | --- | --- | --- |
+| First page, cold open from the library | **324–342 ms** (10 runs, median 333) | 343–379 ms (median 348) | 339–344 ms | **404–1182 ms** (13 runs, median ~800) | 771–959 ms |
+| First page right after import | 131–135 ms (3) | 94–136 ms (3) | 95–125 ms | 333–1221 ms (3) | 395–530 ms |
+| Peak during scroll, app + renderer | **527–532 MB** | 513–532 MB | 493–503 MB | **328–345 MB** | 343–355 MB |
+| After closing the document | 369–373 MB | 369–370 MB | 343–344 MB | 261–309 MB | 270–281 MB |
+| Scroll 1000 pages / external requests | no crash, last page drawn / 0 | same | same | same | same |
+
+**No regression from 2.12.**
+- Against the original table, the S23 is +5–6 % on peak memory and up to +21 % on the post-import
+  first page (≈ +20 ms). The 2.11 build measured the same day shows the same numbers, so the
+  drift comes from the device state, not from Tauri. Cold open is ~4 % *faster* on 2.12.
+- The AVD medians are within the earlier ranges. Its outliers (1.2 s, 2 of 16 first-page samples)
+  come from the emulator; the gate stays on the physical devices.
+- Peak memory still leaves ≥ 68 MB below the 600 MB gate.
 
 ## Result: PASS on every target that can run the app — real mid-range device still open
 

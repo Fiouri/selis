@@ -10,9 +10,10 @@ compile in CI but get no UI polish until P6.
 
 ## Stack (pinned — see lockfiles)
 
-- Tauri **2.11.x** (crate `tauri` 2.11.6; `tauri-runtime*`, `tauri-macros`, `tauri-codegen`,
-  `tauri-utils`, `tauri-plugin` are locked to their 2.11-era versions in `Cargo.lock` — do not
-  `cargo update` them into 2.12 without moving the whole line, CLI and `@tauri-apps/*` together).
+- Tauri **2.12.x** (crate `tauri` 2.12.3, wry 0.57, CLI 2.12.2, `@tauri-apps/api` 2.12.3,
+  plugin-dialog 2.8.2, plugin-fs 2.7.0). The line moves as one change: crates, CLI and
+  `@tauri-apps/*` together (ADR 0001); never `cargo update` single Tauri crates across a minor.
+  `jni` stays equal to wry's (0.21.1).
 - React 19 + TypeScript 6 (strict) + Vite 8, Tailwind v4, Zustand, TanStack Query, i18next + ICU.
 - PDF engine: EmbedPDF **v2** (PDFium WASM) inside `packages/engine` only, in a Web Worker.
 - Rust core: `crates/selis-core` (rusqlite bundled, BLAKE3, atomic writes). IPC types via

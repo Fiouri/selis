@@ -77,6 +77,9 @@ ordinary long-running command on this layer.
 
 ## When it can be removed
 
+**Upstream fixed in Tauri 2.12; kept because recovery is cheap and covers future regressions.**
+(Selis moved to 2.12 on 2026-10-10. The conditions below are what removing it would take.)
+
 When Tauri's Android IPC delivers every reply after a resume, the layer can go. That means a
 Tauri/wry upgrade that passes all of these:
 
