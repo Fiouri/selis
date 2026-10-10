@@ -1,14 +1,14 @@
 version: 2
+# jni stays pinned to wry's version (Tauri hands us wry's JNIEnv); Android/Gradle majors follow the
+# Tauri CLI templates, so they are upgraded with Tauri, not by Dependabot.
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
     groups:
-      tauri:
-        patterns: ["@tauri-apps/*"]
-      embedpdf:
-        patterns: ["@embedpdf/*"]
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
     ignore:
       # typescript-eslint supports TypeScript < 6.1; Node is pinned to 22 (.nvmrc).
       - dependency-name: "typescript"
@@ -25,9 +25,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      cargo-minor-patch:
+        update-types: ["minor", "patch"]
     ignore:
       - dependency-name: "tauri*"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "jni"
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -36,3 +40,9 @@ updates:
     directory: /apps/app/src-tauri/gen/android
     schedule:
       interval: monthly
+    groups:
+      gradle:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
