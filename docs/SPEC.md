@@ -356,6 +356,7 @@ Public repo = δωρεάν GitHub Actions minutes, μαζί με macOS runners. 
 | Ρίσκο | Επίπτωση | Αντιμετώπιση |
 | --- | --- | --- |
 | Tauri mobile ωριμότητα, WebView σε low-end Android | Αργό UI ή crashes | Spike στο P0 με gate. Fallback: native PDFium μέσω Rust (pdfium-render) για rendering σε bitmap στο mobile, ίδιο UI |
+| Χαμένα IPC replies στο Android resume (Tauri 2.11 / wry 0.55) | UI κολλάει σε import/save | Λύθηκε: Tauri 2.12 (0/20 σε repro) + reliability layer με request id και take_result (ADR 0005) |
 | iOS WKWebView όριο μνήμης για WASM | Crash σε τεράστια PDF | Render ανά σελίδα με tiling, όριο cache, ίδιο fallback |
 | EmbedPDF v3 ακόμη μη production | Breaking changes | Pin σε v2, όλη η επαφή μέσα στο packages/engine |
 | F-Droid και prebuilt WASM | Απόρριψη από F-Droid | Build του PDFium WASM από source στο CI, reproducible |
