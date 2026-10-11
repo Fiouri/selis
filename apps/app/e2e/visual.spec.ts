@@ -203,6 +203,8 @@ for (const theme of THEMES) {
       await page.getByTestId("page-thumb-2").click();
       await page.getByTestId("page-thumb-3").click();
       await settle(page);
+      // The Greek title fits next to undo / redo / "Επιλογή όλων" (no ellipsis).
+      expect(await page.getByTestId("pages-selected").evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
       await expect(page).toHaveScreenshot(`pages-grid-${theme}.png`);
 
       await page.getByTestId("pages-extract").click();

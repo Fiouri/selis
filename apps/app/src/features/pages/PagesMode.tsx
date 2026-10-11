@@ -192,9 +192,10 @@ export function PagesMode({ doc, session, sessionState, structure, title, onClos
         style={{ paddingTop: "var(--safe-top)", paddingLeft: "var(--safe-left)", paddingRight: "var(--safe-right)" }}
         data-testid="pages-bar"
       >
-        <div className="flex h-13 items-center gap-1 pr-3 pl-1">
+        {/* Tight: "{n} επιλεγμένες" and "Επιλογή όλων" must both fit at 360 px. */}
+        <div className="flex h-13 items-center pr-1 pl-1">
           <IconButton label={t("pages.close")} icon={<X size={22} strokeWidth={1.75} />} onClick={onClose} data-testid="pages-close" />
-          <h1 className="min-w-0 flex-1 truncate text-md leading-tight font-semibold text-neutral-12" aria-live="polite" data-testid="pages-selected">
+          <h1 className="min-w-0 flex-1 truncate pl-1 text-md leading-tight font-semibold text-neutral-12" aria-live="polite" data-testid="pages-selected">
             {t("pages.selected", { count: selected.size })}
           </h1>
           <IconButton
@@ -216,7 +217,7 @@ export function PagesMode({ doc, session, sessionState, structure, title, onClos
           <button
             type="button"
             onClick={() => setSelected(allSelected ? new Set() : new Set(all))}
-            className="selis-focus h-11 shrink-0 rounded-full px-2 text-sm font-semibold text-accent-selected active:bg-neutral-3"
+            className="selis-focus h-11 shrink-0 rounded-full px-1.5 text-sm font-semibold text-accent-selected active:bg-neutral-3"
             data-testid="pages-select-all"
           >
             {allSelected ? t("pages.selectNone") : t("pages.selectAll")}
