@@ -30,6 +30,7 @@ tauri-specta.workspace = true
 tokio = { version = "1.53.2", default-features = false, features = ["sync", "time"] }
 
 [dev-dependencies]
+tempfile.workspace = true
 tokio = { version = "1.53.2", default-features = false, features = ["macros", "rt", "sync", "time"] }
 
 [target.'cfg(target_os = "android")'.dependencies]

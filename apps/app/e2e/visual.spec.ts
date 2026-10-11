@@ -75,6 +75,22 @@ for (const theme of THEMES) {
       await expect(page).toHaveScreenshot(`viewer-search-${theme}.png`);
     });
 
+    test(`settings and transfer (${theme})`, async ({ page }) => {
+      await page.goto("/");
+      await page.getByRole("navigation").getByRole("button", { name: "Ρυθμίσεις" }).click();
+      await expect(page.getByTestId("settings-screen")).toBeVisible();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`settings-${theme}.png`, { fullPage: true });
+      await page.getByTestId("setting-language").click();
+      await expect(page.getByTestId("language-sheet")).toBeVisible();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`settings-language-${theme}.png`);
+      await page.keyboard.press("Escape");
+      await page.getByRole("navigation").getByRole("button", { name: "Μεταφορά" }).click();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`transfer-${theme}.png`);
+    });
+
     test(`recent (${theme})`, async ({ page }) => {
       await page.goto("/");
       await stockLibrary(page);

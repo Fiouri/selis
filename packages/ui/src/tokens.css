@@ -107,6 +107,17 @@
   --safe-left: max(env(safe-area-inset-left, 0px), var(--native-inset-left, 0px));
 
   --tabbar-height: 56px;
+
+  /*
+   * Theme preview swatches (Settings): each theme's paper and accent, the same in
+   * every theme so the tiles always show what they would switch to.
+   */
+  --swatch-light: #fdfcfa;
+  --swatch-light-accent: #24438f;
+  --swatch-dark: #131210;
+  --swatch-dark-accent: #4a6fd0;
+  --swatch-sepia: #f5eddc;
+  --swatch-sepia-accent: #26407e;
   --topbar-height: 52px;
 }
 

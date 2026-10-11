@@ -46,6 +46,9 @@ for i in $(seq 1 "$runs"); do
   if [ "$result" = pass ] && [ -n "${POST_RUN:-}" ] && ! $POST_RUN "$serial" > "$out/post-$i.log" 2>&1; then
     result="FAIL (POST_RUN: $(tail -1 "$out/post-$i.log" | tr -d '\r'))"
   fi
+  # Maestro copies an APK (~0.8 GB) into TMP on every run and never deletes it:
+  # left alone, a few hundred runs fill the drive.
+  find "$tmp" -maxdepth 1 -name 'tmp*.apk' -type f -delete 2>/dev/null
   adb -s "$serial" logcat -d -v time > "$out/logcat-$i.txt"
   if grep -q "ANR in $app_id" "$out/logcat-$i.txt"; then
     result="FAIL (ANR: $(grep -m1 "ANR in $app_id" "$out/logcat-$i.txt" | tr -d '\r'))"

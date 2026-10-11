@@ -1,6 +1,9 @@
 import { type DocHandle, EngineError, type TextRun } from "@selis/engine";
 import { memo, useEffect, useState } from "react";
 
+/** A page must stay on screen this long before its text layer is built. */
+const SETTLE_MS = 600;
+
 let measureContext: CanvasRenderingContext2D | null = null;
 
 /** Width of `text` in a generic sans font at `fontSize` px (to stretch spans onto the glyphs). */
@@ -21,16 +24,21 @@ export const TextLayer = memo(function TextLayer({ doc, index, scale }: { doc: D
 
   useEffect(() => {
     const life = { alive: true };
-    void (async () => {
-      try {
-        const result = await doc.textRuns(index);
-        if (life.alive) setRuns(result);
-      } catch (err) {
-        if (!(err instanceof EngineError && err.code === "closed")) console.warn(`selis: no text layer for page ${index + 1}`, err);
-      }
-    })();
+    // Only for pages the reader stops on: extracting text for every page that flies
+    // by during a fast scroll loads PDFium text pages and grows the worker heap for good.
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await doc.textRuns(index);
+          if (life.alive) setRuns(result);
+        } catch (err) {
+          if (!(err instanceof EngineError && err.code === "closed")) console.warn(`selis: no text layer for page ${index + 1}`, err);
+        }
+      })();
+    }, SETTLE_MS);
     return () => {
       life.alive = false;
+      window.clearTimeout(timer);
     };
   }, [doc, index]);
 

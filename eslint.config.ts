@@ -10,6 +10,7 @@ export default defineConfig(
     ignores: [
       "**/node_modules/**",
       "**/dist/**",
+      "**/dist-mock/**",
       "**/target/**",
       "**/gen/**",
       "**/coverage/**",
