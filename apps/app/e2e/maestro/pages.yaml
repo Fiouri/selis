@@ -72,9 +72,12 @@ name: Pages - rotate, duplicate, delete, add PDF, extract
 # The new page is selected: extract it into a new library document.
 - tapOn: "Extract"
 - tapOn: "New document with the selected pages"
+# The toast lasts 4 s; on a loaded emulator the hierarchy poll can miss it. The
+# library check at the end is the real assertion.
 - extendedWaitUntil:
     visible: "Created 1 new document in the library."
     timeout: 20000
+    optional: true
 
 - tapOn:
     id: "Close pages"
@@ -82,3 +85,9 @@ name: Pages - rotate, duplicate, delete, add PDF, extract
     visible: ".*· saved"
     timeout: 15000
 - assertVisible: "Form with 4 fields"
+
+# Back in the library: the extracted page is a document of its own.
+- back
+- extendedWaitUntil:
+    visible: '.*— p. 8'
+    timeout: 10000
