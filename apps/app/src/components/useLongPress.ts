@@ -44,9 +44,11 @@ export function useLongPress(onLongPress: () => void) {
     onPointerCancel: cancel,
     onPointerLeave: cancel,
     // Android WebView also reports a long press as "contextmenu"; desktop: right click.
+    // Only the contextmenu of the press whose timer just fired is a duplicate; a new
+    // press (pointerdown resets `fired`) always opens the menu, however soon.
     onContextMenu: (event: MouseEvent) => {
       event.preventDefault();
-      if (Date.now() - firedAt.current > LONG_PRESS_MS) fire();
+      if (!(fired.current && Date.now() - firedAt.current <= LONG_PRESS_MS)) fire();
     },
     onClickCapture: (event: MouseEvent) => {
       if (!fired.current) return;
