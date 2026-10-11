@@ -16,21 +16,23 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::fsutil::rename_durable;
+use crate::fsutil::{HashedTempFile, rename_durable};
 use crate::hash::Blake3Hash;
-use crate::library::{Document, FILES_DIR, Library, looks_like_pdf, now_ms};
+use crate::library::{Document, FILES_DIR, ImportOutcome, Library, looks_like_pdf, now_ms};
 use crate::retention::RetentionPolicy;
 
 /// Working copies and uploads in progress (relative to the library root).
 pub(crate) const WORK_DIR: &str = "work";
 const UPLOADS_DIR: &str = "work/uploads";
+/// PDFs picked to be inserted into a document (read by the WebView, never indexed).
+pub(crate) const STAGE_DIR: &str = "work/stage";
 /// Largest chunk accepted by `write_upload_chunk`.
 pub const MAX_CHUNK_BYTES: usize = 8 * 1024 * 1024;
 /// Largest document accepted for saving (offsets travel over IPC as `u32`).
@@ -85,12 +87,57 @@ pub struct SavedVersion {
 
 impl Library {
     pub(crate) fn prepare_work_dir(&self) -> Result<()> {
-        let uploads = self.root.join(UPLOADS_DIR);
-        // Uploads never survive a restart: the WebView that sent them is gone.
-        if uploads.exists() {
-            std::fs::remove_dir_all(&uploads).map_err(|e| Error::io(&uploads, e))?;
+        // Uploads and staged files never survive a restart: the WebView that used them is gone.
+        for dir in [UPLOADS_DIR, STAGE_DIR] {
+            let path = self.root.join(dir);
+            if path.exists() {
+                std::fs::remove_dir_all(&path).map_err(|e| Error::io(&path, e))?;
+            }
+            std::fs::create_dir_all(&path).map_err(|e| Error::io(&path, e))?;
         }
-        std::fs::create_dir_all(&uploads).map_err(|e| Error::io(&uploads, e))
+        Ok(())
+    }
+
+    /// Imports a finished upload (e.g. pages extracted in the UI) as a new
+    /// library document, then drops the upload.
+    pub fn import_upload(&self, upload_id: &str, title: &str) -> Result<ImportOutcome> {
+        let path = self.upload_path(upload_id)?;
+        let file = File::open(&path).map_err(|e| Error::io(&path, e))?;
+        let outcome = self.import_reader(file, title);
+        let _ = std::fs::remove_file(&path);
+        outcome
+    }
+
+    /// Copies a picked PDF into the stage (to be inserted into a document) and
+    /// returns its absolute path (served to the WebView by the asset protocol).
+    pub fn stage_reader(&self, reader: impl Read) -> Result<PathBuf> {
+        let dir = self.root.join(STAGE_DIR);
+        let tmp = HashedTempFile::from_reader(&dir, reader)?;
+        if tmp.size_bytes == 0 {
+            return Err(Error::EmptyFile);
+        }
+        if !looks_like_pdf(&tmp.head) {
+            return Err(Error::NotPdf);
+        }
+        let dest = dir.join(format!("{}.pdf", Uuid::now_v7()));
+        tmp.persist(&dest)?;
+        Ok(dest)
+    }
+
+    /// Removes a staged file once it has been read. Only files in the stage go. Idempotent.
+    pub fn unstage(&self, path: &str) -> Result<()> {
+        let path = Path::new(path);
+        let dir = self.root.join(STAGE_DIR);
+        let inside =
+            path.parent().is_some_and(|p| p == dir) && path.extension().is_some_and(|e| e == "pdf");
+        if !inside {
+            return Err(Error::InvalidArgument("not a staged file"));
+        }
+        match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(Error::io(path, e)),
+        }
     }
 
     fn upload_path(&self, upload_id: &str) -> Result<PathBuf> {
@@ -580,6 +627,48 @@ mod tests {
             .filter(|e| e.path().extension().is_some_and(|x| x == "pdf"))
             .count();
         assert_eq!(files, 3);
+        Ok(())
+    }
+
+    #[test]
+    fn an_upload_becomes_a_new_document() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let bytes = pdf("extracted pages");
+        lib.write_upload_chunk("extract-1", 0, &bytes)?;
+        let outcome = lib.import_upload("extract-1", "Report (pages 2-3)")?;
+        assert_eq!(outcome.document.title, "Report (pages 2-3)");
+        let path = lib.document_file(&outcome.document.id)?.path;
+        assert_eq!(
+            std::fs::read(&path).map_err(|e| Error::io(&path, e))?,
+            bytes
+        );
+        assert!(!lib.root.join(UPLOADS_DIR).join("extract-1.part").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn staged_pdfs_are_readable_then_removed_and_cleared_on_restart() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let staged = {
+            let lib = Library::open(dir.path())?;
+            let a = lib.stage_reader(pdf("to insert").as_slice())?;
+            let b = lib.stage_reader(pdf("left behind").as_slice())?;
+            assert!(matches!(
+                lib.stage_reader(&b"<html>"[..]),
+                Err(Error::NotPdf)
+            ));
+            lib.unstage(&a.to_string_lossy())?;
+            lib.unstage(&a.to_string_lossy())?;
+            assert!(!a.exists());
+            assert!(matches!(
+                lib.unstage(&lib.files_dir().join("x.pdf").to_string_lossy()),
+                Err(Error::InvalidArgument(_))
+            ));
+            b
+        };
+        assert!(staged.exists());
+        let _lib = Library::open(dir.path())?;
+        assert!(!staged.exists());
         Ok(())
     }
 

@@ -11,6 +11,8 @@ import type { EditSession, SaveStatus, SessionState } from "../features/annotate
 import { FormBanner, FormSheet } from "../features/forms/FormChrome";
 import { FormLayer } from "../features/forms/FormLayer";
 import { flattenCommand, useFormState } from "../features/forms/formState";
+import { useDocStructure } from "../features/pages/pageCommands";
+import { PagesMode } from "../features/pages/PagesMode";
 import { SignatureLayer, useSignState } from "../features/sign/SignatureLayer";
 import { SignSheet } from "../features/sign/SignSheet";
 import { PdfViewer, type PdfViewerHandle, type ScrollInfo } from "../features/viewer/PdfViewer";
@@ -58,9 +60,9 @@ function ViewerSkeleton({ insetTop }: { insetTop: number }) {
 
 type Variant = "phone" | "tablet";
 type ViewerSheet = "more" | "outline" | "thumbnails" | null;
-type Mode = "view" | "annotate" | "sign" | "form";
+type Mode = "view" | "annotate" | "sign" | "form" | "pages";
 
-const MODE_TITLES: Record<Exclude<Mode, "view">, { title: string; close: string }> = {
+const MODE_TITLES: Record<Exclude<Mode, "view" | "pages">, { title: string; close: string }> = {
   annotate: { title: "annotate.title", close: "annotate.close" },
   sign: { title: "sign.title", close: "sign.close" },
   form: { title: "forms.title", close: "forms.close" },
@@ -113,9 +115,21 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   const doc = state.status === "ready" ? state.doc : null;
   const session = state.status === "ready" ? state.session : null;
   const sessionState = useSessionState(session);
-  // Any editing mode (annotate, sign, form): its own top bar, docked sheet and page layer.
+  // Any editing mode (annotate, sign, form, pages): its own top bar and bottom sheet / bar.
   const editing = mode !== "view" && doc !== null && session !== null;
-  const annotating = editing;
+  const annotating = editing && mode !== "pages";
+  const pagesMode = editing && mode === "pages";
+  // Page operations (and their undo) replace the list of pages: the viewer is
+  // rebuilt for it and resumes at the same page number (or the last one).
+  const structure = useDocStructure(doc);
+  const [seenStructure, setSeenStructure] = useState(structure);
+  const [resumePage, setResumePage] = useState<number | null>(null);
+  if (structure !== seenStructure && doc) {
+    setSeenStructure(structure);
+    const clamped = Math.min(page, doc.pageCount - 1);
+    setResumePage(clamped);
+    setPage(clamped);
+  }
   const search = useDocumentSearch(searching ? doc : null, query);
 
   const closeSearch = useCallback(() => {
@@ -132,7 +146,8 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     const observer = new ResizeObserver(measure);
     observer.observe(bar);
     return () => observer.disconnect();
-  }, [searching, annotating]);
+    // Each of these swaps the top bar for another element: measure the new one.
+  }, [searching, annotating, pagesMode]);
 
   // The tool sheet covers the bottom of the pages: reserve its height.
   useLayoutEffect(() => {
@@ -180,7 +195,13 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
       request.live = false;
       setFormFields(null);
     };
-  }, [doc, setFormFields]);
+  }, [doc, structure, setFormFields]);
+
+  // The library shows the page count: keep it right after page operations.
+  useEffect(() => {
+    if (!doc || structure === 0) return;
+    void api.recordDocumentInfo(docId, doc.pageCount, null).catch(() => undefined);
+  }, [doc, docId, structure]);
 
   /** Leaves the editing mode; the session's edits become a version. */
   const finishAnnotating = useCallback(() => {
@@ -196,6 +217,8 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   useOverlay(annotating, finishAnnotating);
 
   const startEditing = (next: Exclude<Mode, "view">) => {
+    // Back from the pages grid, the viewer opens at the page it was on.
+    if (next === "pages") setResumePage(page);
     // Editing works on the unrotated page with the chrome shown.
     setRotation(0);
     setSearching(false);
@@ -296,6 +319,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   const subtitle = doc ? t("viewer.pageIndicator", { page: page + 1, total }) : "";
   const saveStatus = doc ? t(STATUS_KEYS[sessionState.status]) : "";
   const showChrome = chrome || state.status !== "ready" || searching || annotating;
+  const initialPage = Math.min(total - 1, Math.max(0, resumePage ?? (state.status === "ready" ? (state.meta.lastPage ?? 0) : 0)));
   const searchStatus =
     query.trim() === ""
       ? ""
@@ -323,9 +347,21 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
         />
       </div>
     );
+  } else if (mode === "pages" && session) {
+    body = (
+      <PagesMode
+        doc={state.doc}
+        session={session}
+        sessionState={sessionState}
+        structure={structure}
+        title={title}
+        onClose={finishAnnotating}
+      />
+    );
   } else {
     const main = (
       <PdfViewer
+        key={structure}
         ref={mainRef}
         doc={state.doc}
         insetTop={barHeight}
@@ -337,7 +373,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
         night={night && !annotating}
         textLayer={!annotating}
         highlights={searching ? search.highlights : undefined}
-        initialPage={state.meta.lastPage ?? 0}
+        initialPage={initialPage}
         onPageChange={onPageChange}
         onTap={annotating ? undefined : toggleChrome}
         onScroll={onScroll}
@@ -351,6 +387,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
         <div className="flex h-full">
           <aside className="h-full w-44 shrink-0 border-r border-neutral-5" aria-label={t("viewer.thumbnails")}>
             <PdfViewer
+              key={structure}
               doc={state.doc}
               insetTop={barHeight}
               gutter={20}
@@ -375,7 +412,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   return (
     <div className="relative h-full w-full overflow-hidden bg-page-canvas" data-testid="viewer-screen">
       {body}
-      {annotating ? (
+      {pagesMode ? null : annotating ? (
         <AnnotateBar
           ref={barRef}
           title={t(MODE_TITLES[mode].title)}
@@ -411,7 +448,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           hidden={!showChrome}
         />
       )}
-      {doc ? (
+      {doc && !pagesMode ? (
         <>
           <PageChip page={page + 1} total={total} top={barHeight} visible={(scrolling || dragging) && total > 1} />
           {total > 1 && !annotating ? (
@@ -440,6 +477,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
               onShare={() => void share()}
               onAnnotate={() => startEditing("annotate")}
               onSign={() => startEditing("sign")}
+              onPages={() => startEditing("pages")}
             />
           )}
           {annotating ? null : <FormBanner top={barHeight} hidden={!showChrome} onFill={() => startEditing("form")} />}

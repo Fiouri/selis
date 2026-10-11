@@ -191,6 +191,32 @@ for (const theme of THEMES) {
       await expect(page).toHaveScreenshot(`form-flatten-${theme}.png`);
     });
 
+    test(`pages: grid with selection, extract sheet, delete dialog (${theme})`, async ({ page }) => {
+      await page.goto("/");
+      await importFixture(page, "mixed-sizes.pdf", "Συμβόλαιο ενοικίασης 2026.pdf");
+      await firstPageRendered(page);
+      await page.getByTestId("dock-pages").click();
+      const grid = page.getByTestId("pages-grid");
+      await expect
+        .poll(() => grid.locator("img").evaluateAll((imgs: HTMLImageElement[]) => imgs.filter((i) => i.complete && i.naturalWidth > 0).length))
+        .toBe(7);
+      await page.getByTestId("page-thumb-2").click();
+      await page.getByTestId("page-thumb-3").click();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`pages-grid-${theme}.png`);
+
+      await page.getByTestId("pages-extract").click();
+      await expect(page.getByTestId("pages-extract-sheet")).toBeVisible();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`pages-extract-${theme}.png`);
+      await page.keyboard.press("Escape");
+
+      await page.getByTestId("pages-delete").click();
+      await expect(page.getByTestId("pages-delete-dialog")).toBeVisible();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`pages-delete-${theme}.png`);
+    });
+
     test(`settings and transfer (${theme})`, async ({ page }) => {
       await page.goto("/");
       await page.getByRole("navigation").getByRole("button", { name: "Ρυθμίσεις" }).click();

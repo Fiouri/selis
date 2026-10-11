@@ -241,19 +241,21 @@ export function ViewerDock({
   onShare,
   onAnnotate,
   onSign,
+  onPages,
 }: {
   hidden: boolean;
   onSoon: () => void;
   onShare: () => void;
   onAnnotate: () => void;
   onSign: () => void;
+  onPages: () => void;
 }) {
   const { t } = useTranslation();
   const icon = (Icon: typeof PenLine) => <Icon size={22} strokeWidth={1.75} aria-hidden="true" />;
   const items: DockItem[] = [
     { key: "annotate", label: t("viewer.dockAnnotate"), icon: icon(PenLine), soon: false, onClick: onAnnotate },
     { key: "sign", label: t("viewer.dockSign"), icon: icon(Signature), soon: false, onClick: onSign },
-    { key: "pages", label: t("viewer.dockPages"), icon: icon(Files), soon: true, onClick: onSoon },
+    { key: "pages", label: t("viewer.dockPages"), icon: icon(Files), soon: false, onClick: onPages },
     { key: "send", label: t("viewer.dockSend"), icon: icon(Send), soon: true, onClick: onSoon },
     { key: "share", label: t("viewer.dockShare"), icon: icon(Share2), soon: false, onClick: onShare },
   ];

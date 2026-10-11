@@ -79,6 +79,19 @@ export const commands = {
 	 *  `request_id` (see `take_result`).
 	 */
 	saveVersion: (requestId: string, documentId: string, label: VersionLabel) => typedError<SavedVersion, CommandError>(__TAURI_INVOKE("save_version", { requestId, documentId, label })),
+	/**
+	 *  Imports a finished upload (pages extracted or split off in the UI) as a new
+	 *  library document. Runs once per `request_id`.
+	 */
+	importUpload: (requestId: string, uploadId: string, title: string) => typedError<ImportOutcome, CommandError>(__TAURI_INVOKE("import_upload", { requestId, uploadId, title })),
+	/**
+	 *  Copies a picked PDF (a path, or a content:// URI on Android) into the stage
+	 *  and returns its path for the asset protocol: the UI reads it and inserts its
+	 *  pages. The source is opened read-only. Runs once per `request_id`.
+	 */
+	stagePdf: (requestId: string, source: string) => typedError<string, CommandError>(__TAURI_INVOKE("stage_pdf", { requestId, source })),
+	/**  Removes a staged PDF once its pages are in. Idempotent. */
+	unstage: (path: string) => typedError<null, CommandError>(__TAURI_INVOKE("unstage", { path })),
 	/**  Newest first. */
 	listSignatures: () => typedError<Signature[], CommandError>(__TAURI_INVOKE("list_signatures")),
 	/**  Stores a transparent PNG (base64) under the UI-chosen `id`. Safe to repeat. */

@@ -92,7 +92,10 @@ Tier 2 — end of every feature:
   `annotate.yaml` with `POST_RUN="…/annotate.sh check"` (original + 2 versions, annotations in the
   newest, crash-recovered working copy promoted, original untouched). And `sign-forms.yaml` with
   `POST_RUN="…/sign-forms.sh check"` (form filled and signed: original + 2 versions, AcroForm kept,
-  one saved signature, original untouched). run.sh fails a run on
+  one saved signature, original untouched). And `pages.yaml` with `POST_RUN="…/pages.sh check"`
+  (original + version + extracted page, both carrying the inserted form, stage empty, originals
+  untouched), then `pages.sh drag <serial>` with the grid open (long-press reorder by adb
+  `draganddrop`; inspect `.tmp/p2c/drag-*.png`). run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM).
 - Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC) + 390×844 visual snapshots in

@@ -28,6 +28,7 @@ import wasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 import fontUrl from "../assets/SelisSans-LatinGreek.ttf?url";
 import { EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX, toPdfAnnotation, toSignatureStamp } from "./annotations";
 import { documentFields, flattenAll, pageWidgets, setField, toFormField } from "./forms";
+import { applyPageOp, extractPages } from "./pages";
 import { applyNightMode, type PageRect, rotateRect } from "./geometry";
 import { documentPointer, imageRectsOnPage } from "./pdfium-objects";
 import { clampScale, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
@@ -500,21 +501,53 @@ async function handleFlatten(req: Extract<WorkerRequest, { type: "flatten" }>): 
   }
 }
 
+/** Swaps the open document for `bytes` (same document id for the client). */
+async function replaceDocument(docId: string, current: PdfDocumentObject, bytes: ArrayBuffer): Promise<PdfDocumentObject> {
+  const engine = await native();
+  const fresh = await engine.openDocumentBuffer({ id: `${docId}-r${nextDocId++}`, content: bytes }).toPromise();
+  textStamps?.forget(current.id);
+  for (const key of imageRectCache.keys()) if (key.startsWith(`${current.id}:`)) imageRectCache.delete(key);
+  await engine.closeDocument(current).toPromise();
+  docs.set(docId, fresh);
+  return fresh;
+}
+
+const pageSizes = (doc: PdfDocumentObject) => doc.pages.map((p) => ({ width: p.size.width, height: p.size.height }));
+
 async function handleReload(req: Extract<WorkerRequest, { type: "reload" }>): Promise<void> {
   const t = target(req);
   if (!t) return;
   try {
+    const fresh = await replaceDocument(req.docId, t.doc, req.bytes);
+    post({ type: "reloaded", reqId: req.reqId, pages: pageSizes(fresh) });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleEditPages(req: Extract<WorkerRequest, { type: "editPages" }>): Promise<void> {
+  const t = target(req);
+  if (!t) return;
+  try {
     const engine = await native();
-    const fresh = await engine.openDocumentBuffer({ id: `${req.docId}-r${nextDocId++}`, content: req.bytes }).toPromise();
-    if (fresh.pageCount !== t.doc.pageCount) {
-      await engine.closeDocument(fresh).toPromise();
-      throw new Error("reloaded document has a different page count");
-    }
-    textStamps?.forget(t.doc.id);
-    await engine.closeDocument(t.doc).toPromise();
-    docs.set(req.docId, fresh);
-    for (const key of imageRectCache.keys()) if (key.startsWith(`${req.docId}:`)) imageRectCache.delete(key);
-    post({ type: "reloaded", reqId: req.reqId });
+    if (!wasmModule) throw new Error("engine not ready");
+    const before = (await engine.saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
+    const after = await applyPageOp(engine, wasmModule, before, req.op);
+    const fresh = await replaceDocument(req.docId, t.doc, after);
+    post({ type: "pagesEdited", reqId: req.reqId, pages: pageSizes(fresh), before }, [before]);
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleExtract(req: Extract<WorkerRequest, { type: "extract" }>): Promise<void> {
+  const t = target(req);
+  if (!t) return;
+  try {
+    const engine = await native();
+    const current = (await engine.saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
+    const bytes = await extractPages(engine, current, req.indices);
+    post({ type: "extracted", reqId: req.reqId, bytes }, [bytes]);
   } catch (err) {
     post({ type: "error", reqId: req.reqId, ...toError(err) });
   }
@@ -627,6 +660,12 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "reload":
       void handleReload(req);
+      break;
+    case "editPages":
+      void handleEditPages(req);
+      break;
+    case "extract":
+      void handleExtract(req);
       break;
     case "appearance":
       void handleAppearance(req);

@@ -206,7 +206,7 @@ pub async fn record_document_info(
     Ok(library.record_document_info(&id, page_count, pdf_title.as_deref())?)
 }
 
-fn parse_source(source: &str) -> CommandResult<FilePath> {
+pub(crate) fn parse_source(source: &str) -> CommandResult<FilePath> {
     if source.contains("://") {
         source
             .parse::<FilePath>()

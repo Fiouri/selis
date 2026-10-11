@@ -1,4 +1,5 @@
 import type { QuarterTurns } from "./geometry";
+import type { PageOp } from "./pages";
 import type { Annotation, EngineErrorCode, FieldChange, FormField, Glyph, OutlineItem, PageSize, SearchHit, StampImage, TextRun } from "./types";
 
 /** Max pixels per rendered bitmap (≈ 4096²): bounds WebView memory on mobile. */
@@ -31,6 +32,8 @@ export type WorkerRequest =
   | { type: "setFormField"; reqId: number; docId: string; index: number; id: string; change: FieldChange }
   | { type: "flatten"; reqId: number; docId: string }
   | { type: "reload"; reqId: number; docId: string; bytes: ArrayBuffer }
+  | { type: "editPages"; reqId: number; docId: string; op: PageOp }
+  | { type: "extract"; reqId: number; docId: string; indices: number[] }
   | { type: "appearance"; reqId: number; docId: string; index: number; id: string }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
@@ -52,7 +55,10 @@ export type WorkerResponse =
   | { type: "saved"; reqId: number; bytes: ArrayBuffer }
   | { type: "formFields"; reqId: number; fields: FormField[] }
   | { type: "flattened"; reqId: number; pages: number }
-  | { type: "reloaded"; reqId: number }
+  | { type: "reloaded"; reqId: number; pages: PageSize[] }
+  /** The document after a page operation, and its bytes before (the undo snapshot). */
+  | { type: "pagesEdited"; reqId: number; pages: PageSize[]; before: ArrayBuffer }
+  | { type: "extracted"; reqId: number; bytes: ArrayBuffer }
   | { type: "appearance"; reqId: number; image: StampImage }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };
