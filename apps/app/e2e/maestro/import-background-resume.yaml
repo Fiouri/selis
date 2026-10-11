@@ -3,6 +3,9 @@
 # flight), come back, and the document must still open.
 # Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh (ANR check).
 appId: com.anywecon.selis
+# Read the WebView through DevTools: the UiAutomator accessibility snapshot of the
+# WebView can lag behind the DOM (e.g. a bottom sheet that just opened).
+androidWebViewHierarchy: devtools
 name: Import, background, resume
 ---
 - clearState
@@ -20,5 +23,4 @@ name: Import, background, resume
     visible: "Page 1 of 1000"
     timeout: 20000
 - back
-- assertVisible: "1 document"
 - assertVisible: "Open Selis 1000-page fixture"

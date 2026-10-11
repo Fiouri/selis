@@ -9,6 +9,11 @@
  *
  * Overlays (bottom sheets, search) are history entries too (`useOverlay`), so
  * back closes them before it navigates.
+ *
+ * Android asks `window.__selisBack()` first (MainActivity.kt): it goes back in
+ * the app and returns true, or returns false at the root so the system leaves the
+ * app. (Relying on WebView history alone fails: Chromium skips entries pushed
+ * without a user gesture, e.g. a viewer opened by "Open with".)
  */
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
@@ -139,8 +144,17 @@ export function useOverlay(open: boolean, onClose: () => void): void {
   }, [open]);
 }
 
+/** System back inside the app; false at the root (nothing to go back to). */
+export function handleSystemBack(): boolean {
+  const { route, depth } = useNavigation.getState();
+  if (depth === 0 && route.docId === null) return false;
+  useNavigation.getState().back();
+  return true;
+}
+
 /** Seeds the root history entry and follows popstate. Call once at startup. */
 export function installHistorySync(): () => void {
+  (window as unknown as { __selisBack?: () => boolean }).__selisBack = handleSystemBack;
   const { route, depth } = useNavigation.getState();
   if (isEntry(history.state) && history.state.overlay === undefined) {
     useNavigation.setState({ route: history.state.route, depth: history.state.depth });

@@ -52,8 +52,11 @@ command):
   `resultLost`/`failed` error with "Try again" (`features/library/importMachine.ts`).
 
 **Short commands** keep a plain 10 s timeout (`IpcTimeoutError`). Read-only ones (`list_documents`,
-`read_document`, `get_settings`, `device_memory`) get a single retry. Short writes
-(`update_settings`, `record_document_info`) are never repeated automatically.
+`read_document`, `get_settings`, `device_memory`, `list_tags`, `document_file`, `pending_opens`) get
+a single retry, and so do writes that are idempotent by construction (they set a value, never
+toggle or append: `set_favorite`, `set_document_tags`, `create_tag`, `delete_tag`, `save_thumbnail`,
+`dismiss_open`). Other short writes (`update_settings`, `record_document_info`, `rename_tag`) are
+never repeated automatically.
 
 The Tauri `RunEvent::Resumed` event is not used as a trigger. It reaches JS through the same
 evaluate-JavaScript path that loses replies, and it would need extra event capabilities.

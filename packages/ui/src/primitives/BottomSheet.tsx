@@ -50,7 +50,9 @@ export function BottomSheet({ open, onClose, title, hideTitle = false, children,
       <div
         ref={panelRef}
         role="dialog"
-        aria-modal="true"
+        // No aria-modal: Android WebView then hides the whole accessibility tree,
+        // dialog included (TalkBack and UI tests see nothing). `inert` on #root
+        // already keeps assistive tech inside the sheet.
         aria-labelledby={titleId}
         tabIndex={-1}
         data-testid={testId}

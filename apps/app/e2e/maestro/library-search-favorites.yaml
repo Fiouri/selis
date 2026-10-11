@@ -1,0 +1,58 @@
+# Library on Android: title search (case/accent-insensitive), favorites from the
+# long-press menu, and both still there after the app restarts.
+# Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh (ANR check).
+appId: com.anywecon.selis
+# Read the WebView through DevTools: the UiAutomator accessibility snapshot of the
+# WebView can lag behind the DOM (e.g. a bottom sheet that just opened).
+androidWebViewHierarchy: devtools
+name: Library search and favorites
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "greek.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+- back
+- tapOn: "Import PDF"
+- tapOn: "mixed-sizes.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 7"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "Open Mixed page sizes fixture"
+    timeout: 10000
+
+# Search: lower case, no accents, finds "Ελληνικό δοκιμαστικό".
+- tapOn: "Search"
+- inputText: "ελληνικο"
+- extendedWaitUntil:
+    visible: "Open Ελληνικό δοκιμαστικό"
+    timeout: 5000
+- assertNotVisible: "Open Mixed page sizes fixture"
+# Back closes the search first (the first back only hides the keyboard).
+- hideKeyboard
+- back
+- assertVisible: "Open Mixed page sizes fixture"
+
+# Favorite from the long-press menu, then the Favorites filter.
+- longPressOn: "Open Ελληνικό δοκιμαστικό"
+- tapOn: "Add to favorites"
+- tapOn: "Favorites"
+- assertVisible: "Open Ελληνικό δοκιμαστικό"
+- assertNotVisible: "Open Mixed page sizes fixture"
+
+# Restart: the favorite is stored in SQLite.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Open Ελληνικό δοκιμαστικό"
+    timeout: 20000
+- tapOn: "Favorites"
+- assertVisible: "Open Ελληνικό δοκιμαστικό"
+- assertNotVisible: "Open Mixed page sizes fixture"

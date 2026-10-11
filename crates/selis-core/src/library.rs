@@ -132,15 +132,19 @@ pub enum LibrarySort {
 }
 
 impl LibrarySort {
+    /// Ties (same millisecond) fall back to the id: UUID v7 is time-ordered, so DESC
+    /// keeps "newest first".
     fn order_by(self) -> &'static str {
         match self {
             Self::Recent => {
-                "MAX(COALESCE(d.last_opened_at, 0), d.created_at) DESC, d.created_at DESC, d.id"
+                "MAX(COALESCE(d.last_opened_at, 0), d.created_at) DESC, d.created_at DESC, d.id DESC"
             }
-            Self::Name => "d.title = '' , selis_fold(d.title), d.title, d.created_at DESC, d.id",
-            Self::Size => "d.size_bytes DESC, d.created_at DESC, d.id",
+            Self::Name => {
+                "d.title = '' , selis_fold(d.title), d.title, d.created_at DESC, d.id DESC"
+            }
+            Self::Size => "d.size_bytes DESC, d.created_at DESC, d.id DESC",
             Self::LastOpened => {
-                "d.last_opened_at IS NULL, d.last_opened_at DESC, d.created_at DESC, d.id"
+                "d.last_opened_at IS NULL, d.last_opened_at DESC, d.created_at DESC, d.id DESC"
             }
         }
     }
@@ -675,6 +679,8 @@ mod tests {
             .collect();
         assert_eq!(order, [b.id.clone(), a.id.clone()]);
 
+        // "Opened" must be later than b's import, not in the same millisecond.
+        std::thread::sleep(std::time::Duration::from_millis(2));
         let file = lib.read_document(&a.id)?;
         assert!(Path::new(&file.path).is_file());
         assert!(file.document.last_opened_at.is_some());

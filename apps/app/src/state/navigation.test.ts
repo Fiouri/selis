@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { installHistorySync, useNavigation, useOverlay } from "./navigation";
+import { handleSystemBack, installHistorySync, useNavigation, useOverlay } from "./navigation";
 
 /** jsdom's history.back() is async (fires popstate later). */
 function popped(): Promise<void> {
@@ -103,5 +103,17 @@ describe("overlays (sheets, search)", () => {
     expect(useNavigation.getState()).toMatchObject({ route: { docId: null }, depth: 1 });
     await act(systemBack);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Android system back (window.__selisBack)", () => {
+  it("goes back inside the app, and hands over at the root", async () => {
+    expect(handleSystemBack()).toBe(false);
+    useNavigation.getState().openDocument("doc-7");
+    const p = popped();
+    expect(handleSystemBack()).toBe(true);
+    await p;
+    expect(useNavigation.getState()).toMatchObject({ route: { docId: null }, depth: 0 });
+    expect(handleSystemBack()).toBe(false);
   });
 });
