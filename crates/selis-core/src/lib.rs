@@ -12,6 +12,7 @@ pub mod fsutil;
 pub mod hash;
 pub mod library;
 pub mod retention;
+pub mod save;
 pub mod tags;
 pub mod thumbs;
 
@@ -25,4 +26,5 @@ pub use library::{
     LibrarySort, title_from_file_name,
 };
 pub use retention::{RetentionPolicy, RetentionReport};
+pub use save::{SavedVersion, VersionLabel, WorkingCopy};
 pub use tags::Tag;

@@ -22,6 +22,8 @@ import { useTranslation } from "react-i18next";
 type TopBarProps = {
   title: string;
   subtitle: string;
+  /** Save state after the page ("· saved"), when the document is editable. */
+  status?: string;
   onBack: () => void;
   onSearch: () => void;
   onMore: () => void;
@@ -30,7 +32,7 @@ type TopBarProps = {
 
 /** safe-top + 52 px, surface-app, 1 px bottom border. */
 export const ViewerTopBar = forwardRef<HTMLElement, TopBarProps>(function ViewerTopBar(
-  { title, subtitle, onBack, onSearch, onMore, hidden },
+  { title, subtitle, status, onBack, onSearch, onMore, hidden },
   ref,
 ) {
   const { t } = useTranslation();
@@ -49,9 +51,7 @@ export const ViewerTopBar = forwardRef<HTMLElement, TopBarProps>(function Viewer
         <IconButton label={t("viewer.back")} icon={<ArrowLeft size={22} strokeWidth={1.75} />} onClick={onBack} />
         <div className="flex min-w-0 flex-1 flex-col">
           <h1 className="truncate text-md leading-tight font-semibold text-neutral-12">{title}</h1>
-          <p className="truncate text-xs text-neutral-11 tabular-nums" data-testid="page-indicator">
-            {subtitle}
-          </p>
+          <PageStatus page={subtitle} status={status} />
         </div>
         <IconButton label={t("viewer.search")} icon={<Search size={22} strokeWidth={1.75} />} onClick={onSearch} />
         <IconButton
@@ -64,6 +64,21 @@ export const ViewerTopBar = forwardRef<HTMLElement, TopBarProps>(function Viewer
     </header>
   );
 });
+
+/** "Σελίδα 3 από 12 · αποθηκεύτηκε": page and save state, separately testable. */
+export function PageStatus({ page, status }: { page: string; status?: string | undefined }) {
+  return (
+    <p className="truncate text-xs text-neutral-11 tabular-nums">
+      <span data-testid="page-indicator">{page}</span>
+      {status ? (
+        <span data-testid="save-status" aria-live="polite">
+          {" · "}
+          {status}
+        </span>
+      ) : null}
+    </p>
+  );
+}
 
 type SearchBarProps = {
   query: string;
@@ -220,11 +235,21 @@ export function Scrubber({ fraction, top, bottom, visible, label, onSeek, onDrag
 type DockItem = { key: string; label: string; icon: ReactNode; soon: boolean; onClick: () => void };
 
 /** Floating dock: 64 high, radius 20, 5 equal items (P2/P3 ones disabled, "Σύντομα"). */
-export function ViewerDock({ hidden, onSoon, onShare }: { hidden: boolean; onSoon: () => void; onShare: () => void }) {
+export function ViewerDock({
+  hidden,
+  onSoon,
+  onShare,
+  onAnnotate,
+}: {
+  hidden: boolean;
+  onSoon: () => void;
+  onShare: () => void;
+  onAnnotate: () => void;
+}) {
   const { t } = useTranslation();
   const icon = (Icon: typeof PenLine) => <Icon size={22} strokeWidth={1.75} aria-hidden="true" />;
   const items: DockItem[] = [
-    { key: "annotate", label: t("viewer.dockAnnotate"), icon: icon(PenLine), soon: true, onClick: onSoon },
+    { key: "annotate", label: t("viewer.dockAnnotate"), icon: icon(PenLine), soon: false, onClick: onAnnotate },
     { key: "sign", label: t("viewer.dockSign"), icon: icon(Signature), soon: true, onClick: onSoon },
     { key: "pages", label: t("viewer.dockPages"), icon: icon(Files), soon: true, onClick: onSoon },
     { key: "send", label: t("viewer.dockSend"), icon: icon(Send), soon: true, onClick: onSoon },
@@ -246,6 +271,7 @@ export function ViewerDock({ hidden, onSoon, onShare }: { hidden: boolean; onSoo
         <button
           key={item.key}
           type="button"
+          data-testid={`dock-${item.key}`}
           onClick={(e) => {
             e.stopPropagation();
             item.onClick();

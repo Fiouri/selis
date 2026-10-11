@@ -18,14 +18,14 @@ async function more(page: Page, item: string, role: "button" | "switch" = "butto
 /** The mock backend titles a picked file by its name. */
 const LARGE = /^Open (Selis 1000-page fixture|large-1000)$/;
 
-test("top bar, dock with coming-soon tools, page chip while scrolling", async ({ page }, info) => {
+test("top bar, dock (annotate + coming-soon tools), page chip while scrolling", async ({ page }, info) => {
   await openFixture(page, "large-1000.pdf");
   await expect(page.getByRole("heading", { name: "large-1000" })).toBeVisible();
   await expect(indicator(page)).toHaveText("Page 1 of 1000");
   const dock = page.getByTestId("viewer-dock");
   for (const name of ["Annotate", "Sign", "Pages", "Send", "Share"]) await expect(dock.getByRole("button", { name })).toBeVisible();
   // aria-disabled (not available yet), but a tap still explains why.
-  await dock.getByRole("button", { name: "Annotate" }).click({ force: true });
+  await dock.getByRole("button", { name: "Sign" }).click({ force: true });
   await expect(page.getByTestId("toast")).toContainText("Coming soon");
   await dock.getByRole("button", { name: "Share" }).click();
   await expect(page.getByTestId("toast")).toContainText("Sharing is not available here.");

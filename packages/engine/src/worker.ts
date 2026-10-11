@@ -13,8 +13,10 @@
  */
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import {
+  type PdfAnnotationObject,
   type PdfBookmarkObject,
   type PdfDocumentObject,
+  type PdfPageObject,
   PdfErrorCode,
   type PdfErrorReason,
   type PdfLinkTarget,
@@ -23,10 +25,12 @@ import {
 } from "@embedpdf/models";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 import wasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
+import fontUrl from "../assets/SelisSans-LatinGreek.ttf?url";
+import { fromPdfAnnotation, TEXT_STAMP_PREFIX, TextStamps, toPdfAnnotation } from "./annotations";
 import { applyNightMode, type PageRect, rotateRect } from "./geometry";
 import { documentPointer, imageRectsOnPage } from "./pdfium-objects";
 import { clampScale, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
-import type { EngineErrorCode, OutlineItem, SearchHit, TextRun } from "./types";
+import type { Annotation, EngineErrorCode, Glyph, OutlineItem, SearchHit, TextRun } from "./types";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -43,6 +47,8 @@ const SEARCH_BATCH = 8;
 
 let nativePromise: Promise<PdfiumNative> | null = null;
 let wasmModule: WrappedPdfiumModule | null = null;
+let textStamps: TextStamps | null = null;
+let fontPromise: Promise<Uint8Array> | null = null;
 /** Image rects per page (page points, top-left), for night mode. */
 const imageRectCache = new Map<string, PageRect[]>();
 /** Searches cancelled by the client (checked between pages). */
@@ -58,9 +64,21 @@ function native(): Promise<PdfiumNative> {
     // WebAssembly.instantiateStreaming: compilation overlaps the read.
     const module = await init({ locateFile: () => wasmUrl });
     wasmModule = module;
-    return new PdfiumNative(module, { fontFallback: null });
+    const engine = new PdfiumNative(module, { fontFallback: null });
+    textStamps = new TextStamps(engine, module, embeddedFont);
+    return engine;
   })();
   return nativePromise;
+}
+
+/** The typed-text font, fetched from the app bundle on first use. */
+function embeddedFont(): Promise<Uint8Array> {
+  fontPromise ??= (async () => {
+    const response = await fetch(fontUrl);
+    if (!response.ok) throw new Error(`font: HTTP ${response.status}`);
+    return new Uint8Array(await response.arrayBuffer());
+  })();
+  return fontPromise;
 }
 
 function post(message: WorkerResponse, transfer: Transferable[] = []): void {
@@ -328,6 +346,105 @@ async function handleText(req: Extract<WorkerRequest, { type: "text" }>): Promis
   }
 }
 
+type DocRequest = Extract<WorkerRequest, { docId: string }>;
+
+/** The open document (and page) a request names; posts a "closed" error if gone. */
+function target(req: DocRequest, index?: number): { doc: PdfDocumentObject; page: PdfPageObject | undefined } | null {
+  const doc = docs.get(req.docId);
+  const page = index === undefined ? undefined : doc?.pages[index];
+  if (!doc || (index !== undefined && !page)) {
+    post({ type: "error", reqId: req.reqId, code: "closed", message: "document or page not available" });
+    return null;
+  }
+  return { doc, page };
+}
+
+async function handleGlyphs(req: Extract<WorkerRequest, { type: "glyphs" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    const geometry = await (await native()).getPageGeometry(t.doc, t.page).toPromise();
+    const glyphs: Glyph[] = [];
+    geometry.runs.forEach((run, r) => {
+      for (const g of run.glyphs) {
+        // flags: 1 = space, 2 = empty (no box).
+        const empty = g.flags === 2;
+        glyphs.push({ x: g.x, y: g.y, width: empty ? 0 : g.width, height: empty ? 0 : g.height, run: r, space: g.flags === 1 });
+      }
+    });
+    post({ type: "glyphs", reqId: req.reqId, glyphs });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function pageAnnotations(engine: PdfiumNative, doc: PdfDocumentObject, page: PdfPageObject): Promise<Annotation[]> {
+  const raw = (await engine.getPageAnnotations(doc, page).toPromise()) as PdfAnnotationObject[];
+  const ours = raw.filter((a) => a.id.startsWith(TEXT_STAMP_PREFIX)).map((a) => a.id);
+  const styles = textStamps?.styles(doc, page, ours);
+  return raw.map((a) => fromPdfAnnotation(a, styles?.get(a.id) ?? null));
+}
+
+async function handleAnnotations(req: Extract<WorkerRequest, { type: "annotations" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    post({ type: "annotations", reqId: req.reqId, items: await pageAnnotations(await native(), t.doc, t.page) });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function removeById(engine: PdfiumNative, doc: PdfDocumentObject, page: PdfPageObject, id: string): Promise<boolean> {
+  const raw = (await engine.getPageAnnotations(doc, page).toPromise()) as PdfAnnotationObject[];
+  const found = raw.find((a) => a.id === id);
+  if (!found) return false;
+  return (await engine.removePageAnnotation(doc, page, found).toPromise()) as boolean;
+}
+
+async function handleAddAnnotation(req: Extract<WorkerRequest, { type: "addAnnotation" }>): Promise<void> {
+  const a = req.annotation;
+  const t = target(req, a.page);
+  if (!t?.page) return;
+  try {
+    const engine = await native();
+    let stored: Annotation;
+    if (a.kind === "other") throw new Error("cannot create an annotation of an unknown kind");
+    if (a.kind === "text") {
+      if (!textStamps) throw new Error("engine not ready");
+      stored = { ...a, rect: await textStamps.create(t.doc, t.page, a) };
+    } else {
+      await removeById(engine, t.doc, t.page, a.id);
+      await engine.createPageAnnotation(t.doc, t.page, toPdfAnnotation(a)).toPromise();
+      stored = a;
+    }
+    post({ type: "annotation", reqId: req.reqId, annotation: stored });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleRemoveAnnotation(req: Extract<WorkerRequest, { type: "removeAnnotation" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    post({ type: "removed", reqId: req.reqId, removed: await removeById(await native(), t.doc, t.page, req.id) });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleSave(req: Extract<WorkerRequest, { type: "save" }>): Promise<void> {
+  const t = target(req);
+  if (!t) return;
+  try {
+    const bytes = (await (await native()).saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
+    post({ type: "saved", reqId: req.reqId, bytes }, [bytes]);
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
 async function handleClose(req: Extract<WorkerRequest, { type: "close" }>): Promise<void> {
   const doc = docs.get(req.docId);
   docs.delete(req.docId);
@@ -339,6 +456,7 @@ async function handleClose(req: Extract<WorkerRequest, { type: "close" }>): Prom
       post({ type: "error", reqId: job.reqId, code: "cancelled", message: "document closed" });
     }
   }
+  textStamps?.forget(req.docId);
   if (doc) {
     try {
       await (await native()).closeDocument(doc).toPromise();
@@ -389,6 +507,21 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "text":
       void handleText(req);
+      break;
+    case "glyphs":
+      void handleGlyphs(req);
+      break;
+    case "annotations":
+      void handleAnnotations(req);
+      break;
+    case "addAnnotation":
+      void handleAddAnnotation(req);
+      break;
+    case "removeAnnotation":
+      void handleRemoveAnnotation(req);
+      break;
+    case "save":
+      void handleSave(req);
       break;
     case "close":
       void handleClose(req);

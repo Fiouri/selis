@@ -118,6 +118,17 @@
   --swatch-dark-accent: #4a6fd0;
   --swatch-sepia: #f5eddc;
   --swatch-sepia-accent: #26407e;
+
+  /*
+   * Sticky-note paper (Annotate, brief §3): part of the page, not the chrome, so
+   * the same in every theme.
+   */
+  --note-paper: #fff6d6;
+  --note-border: #ecd48a;
+  --note-ink: #211f1a;
+  --note-action: #24438f;
+  --note-danger: #a12f23;
+  --note-muted: #6b6253;
   --topbar-height: 52px;
 }
 

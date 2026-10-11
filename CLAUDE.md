@@ -41,6 +41,8 @@ compile in CI but get no UI polish until P6.
   `MainActivity.kt` shows a native "update WebView" dialog below that.
 - Render quality/memory adapt to device RAM (`packages/engine/src/limits.ts`); keep the
   1000-page spike under budget on every tier when touching the viewer or engine.
+- Saving (ADR 0007): engine bytes → `upload_chunk` (base64) → working copy (autosave, 3 s) →
+  `save_version` (a version). Never send a whole PDF in one IPC message.
 
 ## Never overwrite originals
 
@@ -86,7 +88,9 @@ Tier 2 — end of every feature:
   `viewer-search.yaml`, `settings-theme.yaml`,
   and `import-from-intent.yaml` twice: with `PRE_RUN="…/open-with.sh cold"` and `…/open-with.sh warm`,
   both with `POST_RUN="…/open-with.sh check"` (original untouched), and `delete-rename.yaml` with
-  `POST_RUN="…/delete-rename.sh check"` (deleted copy gone from app data, originals untouched). run.sh fails a run on
+  `POST_RUN="…/delete-rename.sh check"` (deleted copy gone from app data, originals untouched), and
+  `annotate.yaml` with `POST_RUN="…/annotate.sh check"` (original + 2 versions, annotations in the
+  newest, crash-recovered working copy promoted, original untouched). run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM).
 - Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC) + 390×844 visual snapshots in

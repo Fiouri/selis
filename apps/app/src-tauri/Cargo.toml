@@ -24,6 +24,7 @@ measure = ["tauri/devtools"]
 tauri-build = { version = "~2.7.2", features = [] }
 
 [dependencies]
+base64 = "0.22.1"
 selis-core = { workspace = true, features = ["specta"] }
 serde.workspace = true
 serde_json.workspace = true

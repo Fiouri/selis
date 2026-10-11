@@ -75,6 +75,38 @@ for (const theme of THEMES) {
       await expect(page).toHaveScreenshot(`viewer-search-${theme}.png`);
     });
 
+    test(`annotate: tool sheet, pen options, note (${theme})`, async ({ page }) => {
+      await page.goto("/");
+      await importFixture(page, "greek.pdf", "Ελληνικό δοκιμαστικό.pdf");
+      await firstPageRendered(page);
+      await page.getByTestId("dock-annotate").click();
+      const layer = page.getByTestId("annotation-layer-1");
+      const box = await layer.boundingBox();
+      if (!box) throw new Error("page not laid out");
+      const y = box.y + box.height * 0.152;
+      await page.mouse.move(box.x + box.width * 0.11, y);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width * 0.6, y, { steps: 8 });
+      await page.mouse.up();
+      await expect(page.getByTestId("annotate-undo")).toBeEnabled();
+      // Wait for the autosave so the status reads "saved", not "saving…".
+      await expect(page.getByTestId("save-status")).toHaveText("αποθηκεύτηκε", { timeout: 10_000 });
+      await settle(page);
+      await expect(page).toHaveScreenshot(`annotate-${theme}.png`);
+
+      await page.getByTestId("tool-pen").click();
+      await settle(page);
+      await expect(page.getByTestId("annotate-sheet")).toHaveScreenshot(`annotate-pen-sheet-${theme}.png`);
+
+      await page.getByTestId("tool-note").click();
+      await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.3);
+      await expect(page.getByTestId("note-editor")).toBeVisible();
+      await page.getByTestId("note-editor-input").fill("Να ελεγχθεί η παράγραφος");
+      await page.getByTestId("note-editor-input").blur();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`annotate-note-${theme}.png`);
+    });
+
     test(`settings and transfer (${theme})`, async ({ page }) => {
       await page.goto("/");
       await page.getByRole("navigation").getByRole("button", { name: "Ρυθμίσεις" }).click();

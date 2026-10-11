@@ -13,6 +13,7 @@ import {
   type LongCallOptions,
   reliableIpc,
   type ShortCallOptions,
+  type VersionLabel,
 } from "./ipc";
 
 export class ApiError extends Error {
@@ -39,6 +40,10 @@ const WRITE: ShortCallOptions = { timeoutMs: 10_000, retry: false };
 const IMPORT: LongCallOptions = { checkAfterMs: 5_000, pollMs: 2_000 };
 /** The picker may stay open for minutes: check only once the app is back in front. */
 const PICK: LongCallOptions = { checkAfterMs: null, pollMs: 2_000 };
+/** A chunk of a few MB: give the write time; repeating one is harmless (keyed by offset). */
+const UPLOAD: ShortCallOptions = { timeoutMs: 20_000, retry: true };
+/** Hashing a large working copy takes a moment; check for a lost reply after 5 s. */
+const SAVE: LongCallOptions = { checkAfterMs: 5_000, pollMs: 2_000 };
 
 const ipc = reliableIpc;
 
@@ -86,6 +91,24 @@ export const api = {
   updateSettings: (patch: Parameters<typeof commands.updateSettings>[0]) =>
     unwrap(ipc().short("update_settings", () => commands.updateSettings(patch), WRITE)),
   deviceMemory: () => unwrap(ipc().short("device_memory", () => commands.deviceMemory(), READ)),
+  // Writes at an offset; a chunk already there is not written again.
+  uploadChunk: (uploadId: string, offset: number, data: string) =>
+    unwrap(ipc().short("upload_chunk", () => commands.uploadChunk(uploadId, offset, data), UPLOAD)),
+  abortUpload: (uploadId: string) => unwrap(ipc().short("abort_upload", () => commands.abortUpload(uploadId), READ)),
+  // A repeat after a lost reply answers with the same working copy.
+  commitWorkingCopy: (uploadId: string, documentId: string, baseBlake3: string, sizeBytes: number) =>
+    unwrap(
+      ipc().short(
+        "commit_working_copy",
+        () => commands.commitWorkingCopy(uploadId, documentId, baseBlake3, sizeBytes),
+        READ,
+      ),
+    ),
+  workingCopy: (documentId: string) => unwrap(ipc().short("working_copy", () => commands.workingCopy(documentId), READ)),
+  discardWorkingCopy: (documentId: string) =>
+    unwrap(ipc().short("discard_working_copy", () => commands.discardWorkingCopy(documentId), READ)),
+  saveVersion: (documentId: string, label: VersionLabel) =>
+    unwrap(ipc().long("save_version", (requestId) => commands.saveVersion(requestId, documentId, label), SAVE)),
 };
 
 /** i18n key for a user-facing error message. */
@@ -126,7 +149,10 @@ export type {
   LibraryView,
   LocalePref,
   PendingOpen,
+  SavedVersion,
   Settings,
   Tag,
   ThemePref,
+  VersionLabel,
+  WorkingCopy,
 } from "./ipc";

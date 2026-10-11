@@ -298,6 +298,16 @@ the engine warmed up at startup, so they are not comparable with the P0 cold-ope
 (older build) or the P1 "first page" figures (taken right after an import). Emulator rows are not
 added to the table: the gate needs a real device.
 
+**P2 gate: 1000 pages with 50 annotations (AVD).** The fixture `large-1000-annotated.pdf`
+(highlights, ink, rectangles, typed-text stamps with the embedded font, and notes on pages 1–25
+and 976–1000) is written by the engine itself:
+`SELIS_SAMPLES=<dir> npx vitest run src/annotations.node.test.ts` in `packages/engine`. Measured
+with `scripts/measure-device.sh --serial emulator-5554 --allow-emulator --no-doc --runs 3
+--fixture <dir>/large-1000-annotated.pdf` on `selis-midrange-api36` (2026-10-11, release-like build):
+first page 356–680 ms, peak **318 MB** (app 103 + renderer 215), page 1000 drawn, **PASS** against
+600 MB. This is viewing and full scrolling with the annotations rendered by PDFium; an annotate
+session adds only the overlay of the visible pages and the glyph geometry of pages being marked up.
+
 **Release safety.** The `measure` feature must never reach a shipped build. CI (`android` job)
 builds the store-like release (release profile, no cargo features, arm64) and runs
 `scripts/check-release-apk.sh` on it, which fails if the manifest is debuggable, if a native

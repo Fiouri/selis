@@ -3,6 +3,7 @@ import { LruCache } from "./lru";
 import { clampScale, RAW_RGBA, type WorkerRequest, type WorkerResponse } from "./protocol";
 import type { QuarterTurns } from "./geometry";
 import {
+  type Annotation,
   type DocHandle,
   EngineError,
   type OpenOptions,
@@ -102,6 +103,22 @@ export class WorkerPdfEngine implements PdfEngine {
   private makeHandle(docId: string, pages: PageSize[], title: string | null): DocHandle {
     let closed = false;
     const frozenPages = Object.freeze(pages.map((p) => Object.freeze({ ...p })));
+    const revisions = new Map<number, number>();
+    const listeners = new Set<(index: number) => void>();
+    const checkIndex = (index: number) => {
+      if (!Number.isInteger(index) || index < 0 || index >= frozenPages.length) {
+        throw new RangeError(`page index ${index} out of range`);
+      }
+    };
+    const ensureOpen = () => {
+      if (closed) throw new EngineError("closed", "document is closed");
+    };
+    /** A page changed: its cached bitmaps are stale, and viewers redraw it. */
+    const changed = (index: number) => {
+      this.cache.deleteWhere((key) => key.startsWith(`${docId}:${index}:`));
+      revisions.set(index, (revisions.get(index) ?? 0) + 1);
+      for (const listener of listeners) listener(index);
+    };
     const handle: DocHandle = {
       id: docId,
       pageCount: frozenPages.length,
@@ -153,6 +170,58 @@ export class WorkerPdfEngine implements PdfEngine {
         }
         return this.thumbnail(docId, index, maxWidth, maxHeight, options.signal);
       },
+      glyphs: async (index) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "glyphs" }>>((reqId) => ({ type: "glyphs", reqId, docId, index }));
+        return msg.glyphs;
+      },
+      annotations: async (index) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "annotations" }>>((reqId) => ({
+          type: "annotations",
+          reqId,
+          docId,
+          index,
+        }));
+        return msg.items;
+      },
+      addAnnotation: async (annotation: Annotation) => {
+        ensureOpen();
+        checkIndex(annotation.page);
+        const msg = await this.request<Extract<WorkerResponse, { type: "annotation" }>>((reqId) => ({
+          type: "addAnnotation",
+          reqId,
+          docId,
+          annotation,
+        }));
+        changed(annotation.page);
+        return msg.annotation;
+      },
+      removeAnnotation: async (index, id) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "removed" }>>((reqId) => ({
+          type: "removeAnnotation",
+          reqId,
+          docId,
+          index,
+          id,
+        }));
+        if (msg.removed) changed(index);
+        return msg.removed;
+      },
+      pageRevision: (index) => revisions.get(index) ?? 0,
+      onPageChange: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      save: async () => {
+        ensureOpen();
+        const msg = await this.request<Extract<WorkerResponse, { type: "saved" }>>((reqId) => ({ type: "save", reqId, docId }));
+        return msg.bytes;
+      },
       renderPage: async (index, scale, options: RenderOptions = {}) => {
         const image = await handle.renderPageImage(index, scale, options);
         return createImageBitmap(image);
@@ -160,6 +229,7 @@ export class WorkerPdfEngine implements PdfEngine {
       close: async () => {
         if (closed) return;
         closed = true;
+        listeners.clear();
         this.cache.deleteWhere((key) => key.startsWith(`${docId}:`));
         this.textCache.deleteWhere((key) => key.startsWith(`${docId}:`));
         await this.request((reqId) => ({ type: "close", reqId, docId }));

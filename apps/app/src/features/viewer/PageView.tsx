@@ -1,6 +1,6 @@
 import { clampScale, type DocHandle, EngineError, type QuarterTurns, renderScale, rotateRect, rotateSize } from "@selis/engine";
 import { Skeleton } from "@selis/ui";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { currentRenderLimits } from "../../lib/engine";
 import { reportFirstPage } from "../../lib/perf";
 import type { PageHighlights } from "./PdfViewer";
@@ -25,6 +25,11 @@ type Props = {
   /** Off-screen buffer page: rendered after the visible ones. */
   prefetch?: boolean;
   onClick?: (index: number) => void;
+  /**
+   * Drawn over the page (annotate input layer); gets CSS px per page point. Kept
+   * on buffer pages too, so an open editor survives the page leaving the screen.
+   */
+  renderOverlay?: ((index: number, scale: number) => ReactNode) | undefined;
 };
 
 /**
@@ -49,8 +54,14 @@ export const PageView = memo(function PageView({
   active = false,
   prefetch = false,
   onClick,
+  renderOverlay,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Edits bump the page's revision: redraw it (the previous bitmap stays up meanwhile).
+  const revision = useSyncExternalStore(
+    useCallback((notify: () => void) => doc.onPageChange((page) => page === index && notify()), [doc, index]),
+    () => doc.pageRevision(index),
+  );
   // Which page (and look) the canvas currently shows; a recycled canvas shows a skeleton until redrawn.
   const [drawn, setDrawn] = useState<string | null>(null);
   const look = `${index}:${rotation}:${night ? "n" : "d"}`;
@@ -91,8 +102,9 @@ export const PageView = memo(function PageView({
 
     return () => controller.abort();
     // `prefetch` is a scheduling hint only; a change must not trigger a re-render.
+    // `revision` is not read inside, but a new one means the page changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, index, renderWidth, maxPixels, rotation, night]);
+  }, [doc, index, renderWidth, maxPixels, rotation, night, revision]);
 
   // Release the backing store as soon as the page leaves the render window.
   useEffect(() => {
@@ -134,6 +146,7 @@ export const PageView = memo(function PageView({
       {marks}
       {/* After the bitmap: text extraction must not delay the first paint. */}
       {textLayer && ready && scale > 0 ? <TextLayer doc={doc} index={index} scale={scale} /> : null}
+      {renderOverlay && scale > 0 ? renderOverlay(index, scale) : null}
     </>
   );
   const className = `absolute overflow-hidden rounded-[2px] p-0 shadow-1 ${night ? "bg-neutral-12" : "bg-white"} ${

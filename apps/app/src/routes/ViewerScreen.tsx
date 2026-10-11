@@ -1,9 +1,13 @@
 import { nextTurn, type QuarterTurns } from "@selis/engine";
 import { Button, EmptyState, Skeleton } from "@selis/ui";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DocumentGlyph } from "../components/Illustrations";
 import { useToast } from "../components/Toast";
+import { AnnotateBar, ToolSheet } from "../features/annotate/AnnotateChrome";
+import { AnnotationLayer } from "../features/annotate/AnnotationLayer";
+import type { EditSession, SaveStatus, SessionState } from "../features/annotate/session";
 import { PdfViewer, type PdfViewerHandle, type ScrollInfo } from "../features/viewer/PdfViewer";
 import { shareDocument } from "../features/viewer/share";
 import { type OpenState, useOpenDocument } from "../features/viewer/useOpenDocument";
@@ -49,6 +53,21 @@ function ViewerSkeleton({ insetTop }: { insetTop: number }) {
 
 type Variant = "phone" | "tablet";
 type ViewerSheet = "more" | "outline" | "thumbnails" | null;
+type Mode = "view" | "annotate";
+
+const NO_SESSION: SessionState = { status: "saved", canUndo: false, canRedo: false, undoTool: null };
+const noop = () => () => undefined;
+
+function useSessionState(session: EditSession | null): SessionState {
+  return useSyncExternalStore(session?.subscribe ?? noop, session?.getState ?? (() => NO_SESSION));
+}
+
+const STATUS_KEYS: Record<SaveStatus, string> = {
+  saved: "annotate.statusSaved",
+  autosaved: "annotate.statusSaved",
+  saving: "annotate.statusSaving",
+  error: "annotate.statusError",
+};
 
 /**
  * Document view (docs/design/p1-ui-brief.md §2): top bar with title and page,
@@ -73,11 +92,17 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   const [sheet, setSheet] = useState<ViewerSheet>(null);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<Mode>("view");
+  const [sheetHeight, setSheetHeight] = useState(0);
   const barRef = useRef<HTMLElement>(null);
+  const sheetRef = useRef<HTMLElement>(null);
   const mainRef = useRef<PdfViewerHandle>(null);
   const hideTimer = useRef<number | null>(null);
 
   const doc = state.status === "ready" ? state.doc : null;
+  const session = state.status === "ready" ? state.session : null;
+  const sessionState = useSessionState(session);
+  const annotating = mode === "annotate" && doc !== null && session !== null;
   const search = useDocumentSearch(searching ? doc : null, query);
 
   const closeSearch = useCallback(() => {
@@ -94,7 +119,71 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     const observer = new ResizeObserver(measure);
     observer.observe(bar);
     return () => observer.disconnect();
-  }, [searching]);
+  }, [searching, annotating]);
+
+  // The tool sheet covers the bottom of the pages: reserve its height.
+  useLayoutEffect(() => {
+    const sheetEl = sheetRef.current;
+    if (!annotating || !sheetEl) {
+      setSheetHeight(0);
+      return;
+    }
+    const measure = () => setSheetHeight(sheetEl.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(sheetEl);
+    return () => observer.disconnect();
+  }, [annotating]);
+
+  // Leaving the app (switch, lock): write the working copy now, it may be killed.
+  useEffect(() => {
+    if (!session) return;
+    const onHide = () => {
+      if (document.visibilityState === "hidden") void session.autosave().catch(() => undefined);
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [session]);
+
+  const recovered = state.status === "ready" && state.recovered;
+  useEffect(() => {
+    if (recovered) showToast(t("recovery.restored"));
+  }, [recovered, showToast, t]);
+
+  /** Leaves annotate mode; the session's edits become a version. */
+  const finishAnnotating = useCallback(() => {
+    setMode("view");
+    if (!session) return;
+    session.commit().catch((err: unknown) => {
+      console.warn("selis: saving the annotations failed", err);
+      showToast(t("annotate.saveFailed"), "error");
+    });
+  }, [session, showToast, t]);
+  useOverlay(annotating, finishAnnotating);
+
+  const startAnnotating = () => {
+    // Annotate works on the unrotated page with the chrome shown.
+    setRotation(0);
+    setSearching(false);
+    setQuery("");
+    setSheet(null);
+    setChrome(true);
+    setDockHidden(false);
+    setMode("annotate");
+  };
+
+  const undo = () => {
+    session?.undo().catch(() => showToast(t("annotate.failed"), "error"));
+  };
+  const redo = () => {
+    session?.redo().catch(() => showToast(t("annotate.failed"), "error"));
+  };
+
+  const renderOverlay = useCallback(
+    (index: number, scale: number) =>
+      doc && session ? <AnnotationLayer doc={doc} index={index} scale={scale} session={session} /> : null,
+    [doc, session],
+  );
 
   // Remember the reading position (debounced), and once more when leaving.
   const pageRef = useRef(page);
@@ -156,7 +245,8 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   const title = state.status === "ready" ? state.meta.title || state.doc.title || t("library.untitled") : "";
   const total = doc?.pageCount ?? 0;
   const subtitle = doc ? t("viewer.pageIndicator", { page: page + 1, total }) : "";
-  const showChrome = chrome || state.status !== "ready" || searching;
+  const saveStatus = doc ? t(STATUS_KEYS[sessionState.status]) : "";
+  const showChrome = chrome || state.status !== "ready" || searching || annotating;
   const searchStatus =
     query.trim() === ""
       ? ""
@@ -167,7 +257,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           : t("viewer.searching");
 
   let body;
-  if (state.status === "loading") {
+  if (state.status === "loading" || state.status === "recovery") {
     body = <ViewerSkeleton insetTop={barHeight} />;
   } else if (state.status === "error") {
     body = (
@@ -190,20 +280,21 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
         ref={mainRef}
         doc={state.doc}
         insetTop={barHeight}
-        insetBottom={DOCK_SPACE}
+        insetBottom={annotating ? sheetHeight + 16 : DOCK_SPACE}
         gutter={variant === "phone" ? 16 : 24}
         gap={12}
         maxPixels={currentRenderLimits().maxBitmapPixels}
         rotation={rotation}
-        night={night}
-        textLayer
+        night={night && !annotating}
+        textLayer={!annotating}
         highlights={searching ? search.highlights : undefined}
         initialPage={state.meta.lastPage ?? 0}
         onPageChange={onPageChange}
-        onTap={toggleChrome}
+        onTap={annotating ? undefined : toggleChrome}
         onScroll={onScroll}
         testId="pdf-viewer"
         ariaLabel={title}
+        renderOverlay={annotating ? renderOverlay : undefined}
       />
     );
     body =
@@ -235,7 +326,18 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   return (
     <div className="relative h-full w-full overflow-hidden bg-page-canvas" data-testid="viewer-screen">
       {body}
-      {searching ? (
+      {annotating ? (
+        <AnnotateBar
+          ref={barRef}
+          status={saveStatus}
+          canUndo={sessionState.canUndo}
+          canRedo={sessionState.canRedo}
+          onClose={finishAnnotating}
+          onUndo={undo}
+          onRedo={redo}
+          onDone={finishAnnotating}
+        />
+      ) : searching ? (
         <ViewerSearchBar
           ref={barRef}
           query={query}
@@ -251,6 +353,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           ref={barRef}
           title={title}
           subtitle={subtitle}
+          status={saveStatus}
           onBack={back}
           onSearch={() => setSearching(true)}
           onMore={() => setSheet("more")}
@@ -260,7 +363,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
       {doc ? (
         <>
           <PageChip page={page + 1} total={total} top={barHeight} visible={(scrolling || dragging) && total > 1} />
-          {total > 1 ? (
+          {total > 1 && !annotating ? (
             <Scrubber
               fraction={fraction}
               top={barHeight + 8}
@@ -271,11 +374,16 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
               onDragging={setDragging}
             />
           ) : null}
-          <ViewerDock
-            hidden={!showChrome || (dockHidden && !searching)}
-            onSoon={() => showToast(t("viewer.soon"))}
-            onShare={() => void share()}
-          />
+          {annotating ? (
+            <ToolSheet ref={sheetRef} />
+          ) : (
+            <ViewerDock
+              hidden={!showChrome || (dockHidden && !searching)}
+              onSoon={() => showToast(t("viewer.soon"))}
+              onShare={() => void share()}
+              onAnnotate={startAnnotating}
+            />
+          )}
           <ViewerMoreSheet
             open={sheet === "more"}
             onClose={() => setSheet(null)}
@@ -296,6 +404,18 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           />
         </>
       ) : null}
+      <ConfirmDialog
+        open={state.status === "recovery"}
+        title={t("recovery.title")}
+        message={t("recovery.body")}
+        confirmLabel={t("recovery.restore")}
+        cancelLabel={t("recovery.discard")}
+        onConfirm={() => state.status === "recovery" && state.choose("restore")}
+        onCancel={() => state.status === "recovery" && state.choose("discard")}
+        // Back / outside tap leaves the document; the edits stay for next time.
+        onDismiss={back}
+        testId="recovery-dialog"
+      />
     </div>
   );
 }

@@ -83,6 +83,23 @@ export interface DocHandle {
   search(query: string, options?: SearchOptions): Promise<number>;
   /** Text runs of one page (for selection and copy). */
   textRuns(index: number): Promise<TextRun[]>;
+  /** Every glyph of one page in reading order (text markup selection). */
+  glyphs(index: number): Promise<readonly Glyph[]>;
+  /** Annotations of one page, in drawing order. */
+  annotations(index: number): Promise<Annotation[]>;
+  /**
+   * Adds an annotation and returns it as stored. An `id` that is already on the
+   * page is replaced (redo of a removal keeps the same id).
+   */
+  addAnnotation(annotation: Annotation): Promise<Annotation>;
+  /** Removes an annotation; resolves false if it was not there. */
+  removeAnnotation(page: number, id: string): Promise<boolean>;
+  /** Monotonic counter per page, bumped by every change to the page. */
+  pageRevision(index: number): number;
+  /** Called with the page index after each change; returns an unsubscribe function. */
+  onPageChange(listener: (index: number) => void): () => void;
+  /** The document with all changes, as a new PDF file (the original bytes stay untouched). */
+  save(): Promise<ArrayBuffer>;
   close(): Promise<void>;
 }
 
@@ -97,3 +114,55 @@ export interface PdfEngine {
   /** Terminates the worker and frees all WASM memory. */
   destroy(): void;
 }
+
+export type Point = { readonly x: number; readonly y: number };
+
+/**
+ * An annotation as the editor sees it. Geometry is in page points, top-left
+ * origin, on the unrotated page (like text and search rects). Colors are
+ * `#rrggbb`.
+ */
+export type Annotation =
+  | (AnnotationBase & {
+      readonly kind: "highlight" | "underline" | "strikeout";
+      /** One rect per selected line. */
+      readonly segments: readonly PageRect[];
+    })
+  | (AnnotationBase & { readonly kind: "ink"; readonly width: number; readonly strokes: readonly (readonly Point[])[] })
+  | (AnnotationBase & {
+      readonly kind: "square" | "circle";
+      readonly width: number;
+      /** Interior color, null = transparent. */
+      readonly fill: string | null;
+    })
+  | (AnnotationBase & {
+      readonly kind: "line" | "arrow";
+      readonly width: number;
+      readonly start: Point;
+      readonly end: Point;
+    })
+  /** Typed text, drawn with the embedded Latin + Greek font (a Stamp annotation). */
+  | (AnnotationBase & { readonly kind: "text"; readonly text: string; readonly fontSize: number })
+  /** Sticky note: an icon on the page with a comment (a Text annotation). */
+  | (AnnotationBase & { readonly kind: "note"; readonly text: string })
+  /** Anything else (links, form widgets, foreign stamps…): shown, never edited. */
+  | (AnnotationBase & { readonly kind: "other" });
+
+type AnnotationBase = {
+  /** /NM of the annotation (stable across saves). */
+  readonly id: string;
+  readonly page: number;
+  /** Bounding box. */
+  readonly rect: PageRect;
+  readonly color: string;
+  readonly opacity: number;
+};
+
+export type AnnotationKind = Annotation["kind"];
+
+/** One glyph of the page text, in logical (reading) order. */
+export type Glyph = PageRect & {
+  /** Index of the text run (PDF text object) the glyph belongs to. */
+  readonly run: number;
+  readonly space: boolean;
+};

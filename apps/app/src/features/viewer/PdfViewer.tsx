@@ -10,7 +10,17 @@ import {
   rotateSize,
   visibleRange,
 } from "@selis/engine";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { PageView } from "./PageView";
 
@@ -60,6 +70,8 @@ type Props = {
   onScroll?: ((info: ScrollInfo) => void) | undefined;
   testId?: string | undefined;
   ariaLabel?: string | undefined;
+  /** Drawn over each visible page (annotate mode); must be a stable callback. */
+  renderOverlay?: ((index: number, scale: number) => ReactNode) | undefined;
 };
 
 /**
@@ -120,6 +132,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
     onScroll,
     testId,
     ariaLabel,
+    renderOverlay,
   },
   ref,
 ) {
@@ -300,8 +313,13 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       pinch = null;
       content.style.transform = "";
       content.style.willChange = "";
-      // The point that was under the fingers stays under where they ended up.
-      commitZoom(zoom * ratio, originX, originY, startMidX + dx, startMidY + dy);
+      if (Math.abs(ratio - 1) < 0.01) {
+        // Two fingers moved without pinching: a pan (one finger draws in annotate mode).
+        el.scrollBy(-dx, -dy);
+      } else {
+        // The point that was under the fingers stays under where they ended up.
+        commitZoom(zoom * ratio, originX, originY, startMidX + dx, startMidY + dy);
+      }
       window.setTimeout(() => {
         gestureActive.current = false;
       }, 50);
@@ -417,6 +435,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
           label={t("viewer.pageLabel", { page: i + 1 })}
           active={activePage === i}
           prefetch={prefetch}
+          renderOverlay={renderOverlay}
           {...(onPageClick ? { onClick: onPageClick } : {})}
         />,
       );

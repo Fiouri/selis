@@ -6,7 +6,11 @@
  * Run through scripts/measure-device.sh, which sets up the scratch directory.
  *
  *   node scripts/measure-device.ts [--serial <adb serial>] [--runs 5]
- *        [--skip-build] [--no-doc] [--allow-emulator]
+ *        [--skip-build] [--no-doc] [--allow-emulator] [--fixture <1000-page pdf>]
+ *
+ * --fixture measures another 1000-page file instead of large-1000.pdf (e.g. the
+ * P2 gate: the fixture with 50 annotations, written by the engine's sample
+ * generator; see packages/engine/src/annotations.node.test.ts).
  *
  * 1. Picks the first connected physical device that is not a Galaxy S23
  *    (already measured), unless --serial names one.
@@ -26,11 +30,11 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PKG = "com.anywecon.selis";
-const FIXTURE = "large-1000.pdf";
+const DEFAULT_FIXTURE = "large-1000.pdf";
 const GATE_FIRST_PAGE_MS = 1000;
 const GATE_PEAK_MB = 600;
 const CDP_PORT = 9341;
@@ -41,10 +45,25 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const scratch = join(root, ".tmp", "measure");
 mkdirSync(scratch, { recursive: true });
 
-type Options = { serial: string | null; runs: number; build: boolean; doc: boolean; allowEmulator: boolean };
+type Options = {
+  serial: string | null;
+  runs: number;
+  build: boolean;
+  doc: boolean;
+  allowEmulator: boolean;
+  /** Absolute path of the 1000-page file to measure. */
+  fixture: string;
+};
 
 function parseArgs(argv: readonly string[]): Options {
-  const options: Options = { serial: null, runs: 5, build: true, doc: true, allowEmulator: false };
+  const options: Options = {
+    serial: null,
+    runs: 5,
+    build: true,
+    doc: true,
+    allowEmulator: false,
+    fixture: join(root, "packages/fixtures/out", DEFAULT_FIXTURE),
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--serial") options.serial = argv[++i] ?? null;
@@ -52,6 +71,7 @@ function parseArgs(argv: readonly string[]): Options {
     else if (arg === "--skip-build") options.build = false;
     else if (arg === "--no-doc") options.doc = false;
     else if (arg === "--allow-emulator") options.allowEmulator = true;
+    else if (arg === "--fixture") options.fixture = resolve(argv[++i] ?? "");
     else throw new Error(`unknown argument ${String(arg)}`);
   }
   return options;
@@ -314,7 +334,7 @@ function launch(serial: string): void {
 const PUSH_DIR = "/sdcard/Download/selis-measure";
 
 /** The pushed fixture's MediaStore id, once the media scanner has indexed it. */
-async function mediaId(serial: string): Promise<string> {
+async function mediaId(serial: string, fixture: string): Promise<string> {
   return waitFor(
     "the media scanner",
     () => {
@@ -327,7 +347,7 @@ async function mediaId(serial: string): Promise<string> {
         "--projection",
         "_id:relative_path",
         "--where",
-        `"_display_name='${FIXTURE}'"`,
+        `"_display_name='${basename(fixture)}'"`,
       ]);
       return Promise.resolve(/_id=(\d+), relative_path=Download\/selis-measure\//.exec(out)?.[1] ?? null);
     },
@@ -340,12 +360,13 @@ async function mediaId(serial: string): Promise<string> {
  * MediaStore URI and a read grant (the app has no storage permission; files that
  * adb writes elsewhere are not readable by it). Returns the document id.
  */
-async function importFixture(serial: string): Promise<string> {
+async function importFixture(serial: string, fixture: string): Promise<string> {
+  const name = basename(fixture);
   adb(serial, ["shell", "pm", "clear", PKG]);
   adb(serial, ["shell", "mkdir", "-p", PUSH_DIR]);
-  adb(serial, ["push", join(root, "packages/fixtures/out", FIXTURE), `${PUSH_DIR}/${FIXTURE}`]);
-  adb(serial, ["shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", `file://${PUSH_DIR}/${FIXTURE}`]);
-  const uri = `content://media/external/downloads/${await mediaId(serial)}`;
+  adb(serial, ["push", fixture, `${PUSH_DIR}/${name}`]);
+  adb(serial, ["shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", `file://${PUSH_DIR}/${name}`]);
+  const uri = `content://media/external/downloads/${await mediaId(serial, fixture)}`;
   adb(serial, [
     "shell",
     "am",
@@ -512,17 +533,18 @@ async function main(): Promise<number> {
       `Android ${device.android}, WebView ${device.webview}`,
   );
 
-  if (!existsSync(join(root, "packages/fixtures/out", FIXTURE))) {
+  if (!existsSync(options.fixture) && basename(options.fixture) === DEFAULT_FIXTURE) {
     log("generating fixtures");
     execFileSync(process.execPath, [npmCli(), "run", "fixtures"], { cwd: root, stdio: "inherit" });
   }
+  if (!existsSync(options.fixture)) throw new Error(`${options.fixture} missing`);
   const apk = options.build ? buildApk(device.abi) : join(scratch, "selis-measure.apk");
   if (!existsSync(apk)) throw new Error(`${apk} missing (run without --skip-build)`);
   install(device.serial, apk);
 
   const runs: Run[] = [];
   try {
-    const docId = await importFixture(device.serial);
+    const docId = await importFixture(device.serial, options.fixture);
     for (let i = 1; i <= options.runs; i++) {
       const run = await coldRun(device.serial, docId);
       runs.push(run);
@@ -561,7 +583,8 @@ async function main(): Promise<number> {
     : "none";
   const result = pass ? "**PASS**" : `**FAIL** (${failures.join("; ")})`;
   const row =
-    `| ${date.slice(0, 10)} | ${device.manufacturer} ${device.model} | ${device.soc} | ${device.ramGb} GB | ` +
+    `| ${date.slice(0, 10)} | ${device.manufacturer} ${device.model}` +
+    `${basename(options.fixture) === DEFAULT_FIXTURE ? "" : ` (${basename(options.fixture)})`} | ${device.soc} | ${device.ramGb} GB | ` +
     `${device.android} · ${device.webview} | ${firstCell} | ${peak.total} MB (${peak.app} + ${peak.renderer}) | ${result} |`;
   console.log(row);
   if (options.doc) log(`appended to ${appendRow(row)}`);

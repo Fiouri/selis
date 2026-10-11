@@ -20,7 +20,7 @@ use crate::fold::fold;
 use crate::fsutil::HashedTempFile;
 
 const DB_FILE: &str = "selis.db";
-const FILES_DIR: &str = "library";
+pub(crate) const FILES_DIR: &str = "library";
 const PDF_MAGIC: &[u8] = b"%PDF-";
 const MAX_TITLE_CHARS: usize = 512;
 const MAX_SEARCH_CHARS: usize = 256;
@@ -179,6 +179,7 @@ impl Library {
             conn: Mutex::new(conn),
         };
         lib.prepare_thumbnail_dir()?;
+        lib.prepare_work_dir()?;
         Ok(lib)
     }
 
@@ -319,13 +320,24 @@ impl Library {
         self.document_file(id)
     }
 
-    /// Resolves a document's stored copy without touching "last opened"
-    /// (thumbnail generation, sharing).
+    /// Resolves a document's current content without touching "last opened"
+    /// (thumbnail generation, sharing). Imported documents point at their newest
+    /// version; a linked document's edits live in the library as versions while
+    /// its external original stays untouched.
     pub fn document_file(&self, id: &str) -> Result<DocumentFile> {
         let conn = self.conn();
         let (doc, location): (Document, String) = conn
             .query_row(
-                &format!("SELECT {DOC_COLUMNS}, d.location FROM documents d WHERE d.id = ?1"),
+                &format!(
+                    "SELECT {DOC_COLUMNS},
+                            CASE WHEN d.kind = 'linked' THEN COALESCE(
+                                (SELECT v.file_path FROM versions v
+                                  WHERE v.document_id = d.id AND v.file_path LIKE '{FILES_DIR}/%'
+                                  ORDER BY v.seq DESC LIMIT 1),
+                                d.location)
+                            ELSE d.location END
+                       FROM documents d WHERE d.id = ?1"
+                ),
                 [id],
                 |row| Ok((self.document_from_row(row)?, row.get(DOC_COLUMN_COUNT)?)),
             )
@@ -526,7 +538,7 @@ pub(crate) fn now_ms() -> i64 {
 }
 
 /// PDF readers accept the header anywhere in the first 1024 bytes.
-fn looks_like_pdf(head: &[u8]) -> bool {
+pub(crate) fn looks_like_pdf(head: &[u8]) -> bool {
     head.windows(PDF_MAGIC.len()).any(|w| w == PDF_MAGIC)
 }
 

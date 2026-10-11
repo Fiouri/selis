@@ -69,6 +69,19 @@ impl HashedTempFile {
     }
 }
 
+/// fsyncs `src` and renames it to `dest` (same filesystem), replacing `dest`.
+pub(crate) fn rename_durable(src: &Path, dest: &Path) -> Result<()> {
+    // Write access: Windows refuses to flush a read-only handle.
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(src)
+        .and_then(|f| f.sync_all())
+        .map_err(|e| Error::io(src, e))?;
+    std::fs::rename(src, dest).map_err(|e| Error::io(dest, e))?;
+    sync_dir(parent_dir(dest)?);
+    Ok(())
+}
+
 fn temp_in_parent(dest: &Path) -> Result<NamedTempFile> {
     let dir = parent_dir(dest)?;
     NamedTempFile::new_in(dir).map_err(|e| Error::io(dir, e))

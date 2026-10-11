@@ -1,0 +1,97 @@
+# Annotate on Android: highlight across text, pen stroke, undo/redo, typed text,
+# Done → a new version. Then crash recovery: a pen stroke is autosaved, the app
+# is killed before the version is written, and the next open offers to recover
+# it. Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh and
+#   POST_RUN="apps/app/e2e/maestro/annotate.sh check"
+# (three library files = original + two versions, the newest carries the
+# annotations, no working copy left, the original in Download/ untouched).
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Annotate, save a version, recover after a kill
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "greek.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+
+- tapOn: "Annotate"
+- extendedWaitUntil:
+    visible: "Done"
+    timeout: 5000
+- assertVisible: "Drag across the text. Use two fingers to move around the page."
+
+# Highlight (the default tool) across the first line of text.
+- swipe:
+    start: 14%, 22%
+    end: 50%, 22%
+    duration: 1200
+# Pen stroke in the empty middle of the page.
+- tapOn: "Pen"
+- swipe:
+    start: 30%, 48%
+    end: 70%, 54%
+    duration: 1200
+- tapOn: "Undo"
+- tapOn: "Redo"
+# Typed text (ASCII: adb input has no Unicode). The tool row scrolls sideways.
+- swipe:
+    from: "Shapes"
+    direction: LEFT
+- tapOn: "Text"
+- tapOn:
+    point: 25%, 40%
+- extendedWaitUntil:
+    visible: "Add"
+    timeout: 5000
+- inputText: "Checked by Selis"
+# DevTools mode maps DOM rects to the screen with the full window height, so
+# with the keyboard up (the WebView shrinks above it) taps land too low.
+- hideKeyboard
+- tapOn: "Add"
+- extendedWaitUntil:
+    notVisible: "Add"
+    timeout: 5000
+- tapOn: "Done"
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: ".*· saved"
+    timeout: 15000
+
+# Crash recovery: autosaved edits survive a kill.
+- tapOn: "Annotate"
+- tapOn: "Pen"
+- swipe:
+    start: 30%, 60%
+    end: 70%, 64%
+    duration: 1200
+# The working copy is written 3 s after the last edit.
+- extendedWaitUntil:
+    visible: "saving…"
+    timeout: 5000
+- extendedWaitUntil:
+    visible: "saved"
+    timeout: 15000
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Open Ελληνικό δοκιμαστικό"
+    timeout: 20000
+- tapOn: "Open Ελληνικό δοκιμαστικό"
+- extendedWaitUntil:
+    visible: "Unsaved changes"
+    timeout: 10000
+- tapOn: "Recover"
+- extendedWaitUntil:
+    visible: "Your changes were recovered and saved as a new version."
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 10000

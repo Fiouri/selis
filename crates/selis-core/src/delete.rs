@@ -60,10 +60,13 @@ impl Library {
             // Explicit, not only ON DELETE CASCADE: correct even without foreign keys.
             tx.execute("DELETE FROM document_tags WHERE document_id = ?1", [id])?;
             tx.execute("DELETE FROM versions WHERE document_id = ?1", [id])?;
+            tx.execute("DELETE FROM working_copies WHERE document_id = ?1", [id])?;
             tx.execute("DELETE FROM documents WHERE id = ?1", [id])?;
             tx.commit()?;
         }
 
+        // Unsaved edits go with the document (its row went with the cascade).
+        self.discard_working_copy(id)?;
         let mut report = DeleteReport::default();
         for file in &files {
             if self.remove_if_unreferenced(file)? {

@@ -110,7 +110,7 @@ const KEY_VERSIONS_PER_DOCUMENT: &str = "versionsPerDocument";
 const KEY_HISTORY_LIMIT_MB: &str = "historyLimitMb";
 const KEY_APP_LOCK: &str = "appLock";
 
-fn load(library: &Library) -> CommandResult<Settings> {
+pub(crate) fn load(library: &Library) -> CommandResult<Settings> {
     let mut settings = Settings::default();
     for (key, value) in library.settings()? {
         // Unknown or malformed values fall back to defaults instead of failing startup.

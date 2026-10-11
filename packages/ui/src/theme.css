@@ -41,6 +41,12 @@
   --color-surface-raised: var(--surface-raised);
   --color-surface-overlay: var(--surface-overlay);
   --color-page-canvas: var(--page-canvas);
+  --color-note-paper: var(--note-paper);
+  --color-note-border: var(--note-border);
+  --color-note-ink: var(--note-ink);
+  --color-note-action: var(--note-action);
+  --color-note-danger: var(--note-danger);
+  --color-note-muted: var(--note-muted);
 
   --font-sans: var(--font-sans);
 

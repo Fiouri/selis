@@ -64,6 +64,14 @@ describe("design tokens", () => {
     for (const [name, value] of PALETTES.dark) expect(media, `--${name}`).toContain(`--${name}: ${value};`);
   });
 
+  it("sticky-note paper keeps its text and actions readable (AA)", () => {
+    const light = PALETTES.light;
+    const paper = light.get("note-paper") as string;
+    for (const name of ["note-ink", "note-action", "note-danger", "note-muted"]) {
+      expect(contrast(light.get(name) as string, paper), `--${name}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("motion durations stay within 150–250 ms and honour reduced motion", () => {
     for (const m of css.matchAll(/--duration-[a-z]+:\s*(\d+)ms/g)) {
       const ms = Number(m[1]);

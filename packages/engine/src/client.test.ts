@@ -252,3 +252,52 @@ describe("thumbnailScale", () => {
     expect(thumbnailScale({ width: 0, height: 800 }, 300, 420)).toBe(0);
   });
 });
+
+describe("editing", () => {
+  const square = {
+    id: "a1",
+    page: 0,
+    kind: "square",
+    rect: { x: 1, y: 1, width: 5, height: 5 },
+    color: "#000000",
+    opacity: 1,
+    width: 1,
+    fill: null,
+  } as const;
+
+  it("an edit bumps the page revision, tells listeners and drops its cached renders", async () => {
+    const { worker, engine } = openedEngine();
+    const doc = await engine.open(new ArrayBuffer(8));
+    worker.autoReply = (req) => {
+      if (req.type === "render") return rendered(req.reqId);
+      if (req.type === "addAnnotation") return { type: "annotation", reqId: req.reqId, annotation: req.annotation };
+      if (req.type === "removeAnnotation") return { type: "removed", reqId: req.reqId, removed: false };
+      return null;
+    };
+    await doc.renderPageImage(0, 1);
+    await doc.renderPageImage(0, 1);
+    expect(worker.sent.filter((m) => m.type === "render")).toHaveLength(1);
+
+    const seen: number[] = [];
+    const stop = doc.onPageChange((page) => seen.push(page));
+    expect(doc.pageRevision(0)).toBe(0);
+    await doc.addAnnotation(square);
+    expect(doc.pageRevision(0)).toBe(1);
+    expect(seen).toEqual([0]);
+    await doc.renderPageImage(0, 1);
+    expect(worker.sent.filter((m) => m.type === "render")).toHaveLength(2);
+
+    // Nothing removed: no change, no redraw.
+    await expect(doc.removeAnnotation(0, "missing")).resolves.toBe(false);
+    expect(doc.pageRevision(0)).toBe(1);
+    stop();
+    await doc.addAnnotation(square);
+    expect(seen).toEqual([0]);
+  });
+
+  it("refuses edits on pages that do not exist", async () => {
+    const { engine } = openedEngine();
+    const doc = await engine.open(new ArrayBuffer(8));
+    await expect(doc.addAnnotation({ ...square, page: 3 })).rejects.toThrow(RangeError);
+  });
+});
