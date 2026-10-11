@@ -2,7 +2,8 @@
  * In-memory backend for the browser build (`vite --mode mock`): lets Playwright
  * and UI work run without Rust. Mirrors the command contract of the bindings,
  * including the per-request-id result store behind `take_result`, title search
- * folding (`selis_fold`), filters, sorts, tags and thumbnails.
+ * folding (`selis_fold`), filters, sorts, tags, thumbnails and saving
+ * (chunked uploads → working copy → versions).
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
 import type {
@@ -13,11 +14,14 @@ import type {
   ImportOutcome,
   LibraryQuery,
   PendingOpen,
+  SavedVersion,
   Settings,
   SettingsPatch,
   StoredResult,
   Tag,
   TakeResult,
+  VersionLabel,
+  WorkingCopy,
 } from "./ipc";
 
 const SETTINGS_KEY = "selis.mock.settings";
@@ -39,6 +43,11 @@ const docs = new Map<string, { doc: Document; url: string }>();
 const tags = new Map<string, { id: string; name: string; key: string }>();
 const pendingOpens: PendingOpen[] = [];
 let nextOpenId = 0;
+/** Uploads in progress: chunks in order. */
+const uploads = new Map<string, Uint8Array[]>();
+const workingCopies = new Map<string, { copy: WorkingCopy; bytes: Uint8Array }>();
+/** Saved versions per document (v1 = the import), labels in order. */
+const versions = new Map<string, VersionLabel[]>();
 
 /** Registers a picked browser File and returns a source token for import. */
 export function registerMockFile(file: File): string {
@@ -85,11 +94,24 @@ type MockKnobs = {
   importDelayMs?: number;
   /** Commands whose reply is dropped (the Android lost-reply bug); Rust still finishes. */
   dropReplies?: string[];
+  /** Commands that fail with an I/O error (e.g. a save interrupted by the app dying). */
+  failCommands?: string[];
 };
 
 function knobs(): MockKnobs {
   return (window as unknown as { __selisTest?: MockKnobs }).__selisTest ?? {};
 }
+
+type MockInspect = {
+  /** Ids of the documents in the library, newest first. */
+  ids: () => string[];
+  /** Number of versions of a document (1 after import). */
+  versions: (id: string) => number;
+  versionLabels: (id: string) => VersionLabel[];
+  hasWorkingCopy: (id: string) => boolean;
+  /** Current bytes of a document, as latin1 text (PDF structure checks). */
+  documentText: (id: string) => Promise<string>;
+};
 
 /**
  * Playwright stand-in for an Android "Open with" intent: the file arrives in the
@@ -97,9 +119,19 @@ function knobs(): MockKnobs {
  */
 function installTestOpenWith(): void {
   const target = window as unknown as {
-    __selisTest?: MockKnobs & { openWith?: (files: Array<{ name: string; bytes: number[] }>) => void };
+    __selisTest?: MockKnobs & { openWith?: (files: Array<{ name: string; bytes: number[] }>) => void; inspect?: MockInspect };
   };
   target.__selisTest ??= {};
+  target.__selisTest.inspect = {
+    ids: () => listDocuments({ search: "", filter: "all", tagId: null, sort: "recent" }).map((d) => d.id),
+    versions: (id) => (versions.get(id) ?? []).length + 1,
+    versionLabels: (id) => [...(versions.get(id) ?? [])],
+    hasWorkingCopy: (id) => workingCopies.has(id),
+    documentText: async (id) => {
+      const response = await fetch(entryOf(id).url);
+      return new TextDecoder("latin1").decode(await response.arrayBuffer());
+    },
+  };
   // One intent: a single "Open with", or several files from one share (SEND_MULTIPLE).
   target.__selisTest.openWith = (files) => {
     for (const { name, bytes } of files) {
@@ -252,9 +284,60 @@ function renameDocument(id: string, title: string): Document {
   return update(id, { title: clean });
 }
 
+function uploadChunk(uploadId: string, offset: number, data: string): number {
+  const chunks = uploads.get(uploadId) ?? [];
+  uploads.set(uploadId, chunks);
+  const length = chunks.reduce((n, c) => n + c.length, 0);
+  const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+  if (offset + bytes.length <= length) return length;
+  if (offset !== length) fail("conflict", "upload chunk out of order");
+  chunks.push(bytes);
+  return length + bytes.length;
+}
+
+function commitWorkingCopy(uploadId: string, documentId: string, baseBlake3: string, sizeBytes: number): WorkingCopy {
+  const doc = entryOf(documentId).doc;
+  if (doc.blake3 !== baseBlake3) fail("conflict", "document changed since the edit started");
+  const chunks = uploads.get(uploadId);
+  if (!chunks) {
+    const existing = workingCopies.get(documentId);
+    if (existing?.copy.sizeBytes === sizeBytes) return existing.copy;
+    return fail("notFound", uploadId);
+  }
+  const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.length;
+  }
+  if (bytes.length !== sizeBytes) fail("conflict", "upload is incomplete");
+  if (!new TextDecoder("latin1").decode(bytes.slice(0, 1024)).includes("%PDF-")) fail("notPdf", "not a pdf");
+  uploads.delete(uploadId);
+  const copy: WorkingCopy = { documentId, baseBlake3, sizeBytes, savedAt: Date.now() };
+  workingCopies.set(documentId, { copy, bytes });
+  return copy;
+}
+
+async function saveVersion(documentId: string, label: VersionLabel): Promise<SavedVersion> {
+  const working = workingCopies.get(documentId) ?? fail("notFound", `working copy of ${documentId}`);
+  const entry = entryOf(documentId);
+  if (entry.doc.blake3 !== working.copy.baseBlake3) fail("conflict", "document changed since the edit started");
+  workingCopies.delete(documentId);
+  const hash = await hashHex(working.bytes.slice().buffer);
+  const list = versions.get(documentId) ?? [];
+  versions.set(documentId, list);
+  if (hash === entry.doc.blake3) return { document: entry.doc, seq: list.length + 1, created: false };
+  list.push(label);
+  entry.url = URL.createObjectURL(new Blob([working.bytes.slice()], { type: "application/pdf" }));
+  const document = update(documentId, { blake3: hash, sizeBytes: working.bytes.length, modifiedAt: Date.now() });
+  return { document, seq: list.length + 1, created: true };
+}
+
 function deleteDocument(id: string): DeleteReport {
   const entry = entryOf(id);
   docs.delete(id);
+  workingCopies.delete(id);
+  versions.delete(id);
   if (entry.doc.thumbnailPath?.startsWith("blob:")) URL.revokeObjectURL(entry.doc.thumbnailPath);
   return { removedFiles: entry.doc.kind === "imported" ? 1 + (entry.doc.thumbnailPath ? 1 : 0) : 0 };
 }
@@ -331,6 +414,7 @@ export function installMockIpc(): void {
   mockIPC(async (cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     const id = String(args.id);
+    if (knobs().failCommands?.includes(cmd)) fail("io", `${cmd} failed (test knob)`);
     switch (cmd) {
       case "import_document":
         return runOnce(cmd, String(args.requestId), () =>
@@ -382,6 +466,25 @@ export function installMockIpc(): void {
         return loadSettings();
       case "update_settings":
         return updateSettings(args.patch as SettingsPatch);
+      case "upload_chunk":
+        return uploadChunk(String(args.uploadId), Number(args.offset), String(args.data));
+      case "abort_upload":
+        uploads.delete(String(args.uploadId));
+        return null;
+      case "commit_working_copy":
+        return commitWorkingCopy(
+          String(args.uploadId),
+          String(args.documentId),
+          String(args.baseBlake3),
+          Number(args.sizeBytes),
+        );
+      case "working_copy":
+        return workingCopies.get(String(args.documentId))?.copy ?? null;
+      case "discard_working_copy":
+        workingCopies.delete(String(args.documentId));
+        return null;
+      case "save_version":
+        return runOnce(cmd, String(args.requestId), () => saveVersion(String(args.documentId), args.label as VersionLabel));
       case "device_memory": {
         // navigator.deviceMemory is Chromium-only and capped at 8 (GiB).
         const gib = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;

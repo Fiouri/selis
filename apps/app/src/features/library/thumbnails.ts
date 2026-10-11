@@ -115,3 +115,14 @@ export function thumbnailFromOpenDocument(queryClient: QueryClient, meta: Docume
     }
   })();
 }
+
+/** After a save: page 1 may look different, so the card gets a fresh thumbnail. */
+export function refreshThumbnail(queryClient: QueryClient, id: string, handle: DocHandle): void {
+  void (async () => {
+    try {
+      await store(queryClient, id, await handle.renderThumbnail(0, THUMB_MAX_WIDTH, THUMB_MAX_HEIGHT));
+    } catch (err) {
+      console.warn(`selis: thumbnail for ${id} not refreshed after saving`, err);
+    }
+  })();
+}

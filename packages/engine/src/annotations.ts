@@ -75,7 +75,7 @@ export function fromPdfAnnotation(a: PdfAnnotationObject, textStyle?: TextStyle 
       return {
         ...base,
         kind,
-        color: hexColor(a.color ?? a.strokeColor, "#f4c430"),
+        color: hexColor(a.strokeColor, "#f4c430"),
         opacity: a.opacity,
         segments: (a.segmentRects.length > 0 ? a.segmentRects : [a.rect]).map(fromRect),
       };
@@ -84,7 +84,7 @@ export function fromPdfAnnotation(a: PdfAnnotationObject, textStyle?: TextStyle 
       return {
         ...base,
         kind: "ink",
-        color: hexColor(a.strokeColor ?? a.color, "#000000"),
+        color: hexColor(a.strokeColor, "#000000"),
         opacity: a.opacity,
         width: a.strokeWidth,
         strokes: a.inkList.map((s) => s.points.map((p) => ({ x: p.x, y: p.y }))),
@@ -110,7 +110,7 @@ export function fromPdfAnnotation(a: PdfAnnotationObject, textStyle?: TextStyle 
         end: { x: a.linePoints.end.x, y: a.linePoints.end.y },
       };
     case PdfAnnotationSubtype.TEXT:
-      return { ...base, kind: "note", color: hexColor(a.color ?? a.strokeColor, "#f4c430"), opacity: a.opacity ?? 1, text: a.contents ?? "" };
+      return { ...base, kind: "note", color: hexColor(a.strokeColor, "#f4c430"), opacity: a.opacity ?? 1, text: a.contents };
     case PdfAnnotationSubtype.STAMP:
       if (a.id.startsWith(TEXT_STAMP_PREFIX) && textStyle) {
         return { ...base, kind: "text", color: textStyle.color, opacity: 1, text: a.contents ?? "", fontSize: textStyle.fontSize };
@@ -136,7 +136,6 @@ export function toPdfAnnotation(a: Exclude<Annotation, { kind: "text" | "other" 
             : a.kind === "underline"
               ? PdfAnnotationSubtype.UNDERLINE
               : PdfAnnotationSubtype.STRIKEOUT,
-        color: a.color,
         strokeColor: a.color,
         opacity: a.opacity,
         segmentRects: a.segments.map(toRect),
@@ -145,7 +144,6 @@ export function toPdfAnnotation(a: Exclude<Annotation, { kind: "text" | "other" 
       return {
         ...base,
         type: PdfAnnotationSubtype.INK,
-        color: a.color,
         strokeColor: a.color,
         opacity: a.opacity,
         strokeWidth: a.width,
@@ -184,7 +182,7 @@ export function toPdfAnnotation(a: Exclude<Annotation, { kind: "text" | "other" 
         flags: ["print", "noZoom", "noRotate"],
         type: PdfAnnotationSubtype.TEXT,
         contents: a.text,
-        color: a.color,
+        strokeColor: a.color,
         opacity: a.opacity,
       };
   }

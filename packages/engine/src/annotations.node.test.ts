@@ -121,7 +121,7 @@ describe("annotations survive save + reopen", () => {
   ];
 
   for (const a of kinds) {
-    it(`${a.kind}`, async () => {
+    it(a.kind, async () => {
       const doc = await open(fixture("mixed-sizes"));
       await add(doc, a);
       const back = (await read(await saveAndReopen(doc))).find((x) => x.id === a.id);
@@ -217,6 +217,64 @@ describe("typed text (stamp with the embedded Latin + Greek font)", () => {
     const texts = (await read(doc)).filter((x) => x.kind === "text");
     expect(texts).toHaveLength(1);
     expect(texts[0]).toMatchObject({ text: "δεύτερο" });
+  });
+});
+
+/**
+ * With SELIS_SAMPLES=<dir>, writes the fixtures with every kind of annotation
+ * there, for checks in other readers (Chrome's viewer, pypdf; see the P2a PR).
+ */
+describe.runIf(Boolean(process.env.SELIS_SAMPLES))("samples for other readers", () => {
+  it("writes greek + mixed-sizes with every annotation kind", async () => {
+    const { writeFileSync } = await import("node:fs");
+    for (const name of ["greek", "mixed-sizes"] as const) {
+      const doc = await open(fixture(name));
+      const page = firstPage(doc);
+      const kinds: Annotation[] = [
+        { id: "s-hl", page: 0, kind: "highlight", rect: { x: 56, y: 120, width: 200, height: 16 }, color: "#f4c430", opacity: 0.42, segments: [{ x: 56, y: 120, width: 200, height: 16 }] },
+        { id: "s-ul", page: 0, kind: "underline", rect: { x: 56, y: 146, width: 200, height: 16 }, color: "#6ea8f0", opacity: 1, segments: [{ x: 56, y: 146, width: 200, height: 16 }] },
+        { id: "s-so", page: 0, kind: "strikeout", rect: { x: 56, y: 172, width: 200, height: 16 }, color: "#ef7fae", opacity: 1, segments: [{ x: 56, y: 172, width: 200, height: 16 }] },
+        { id: "s-ink", page: 0, kind: "ink", rect: { x: 98, y: 298, width: 204, height: 84 }, color: "#211f1a", opacity: 1, width: 3, strokes: [[{ x: 100, y: 300 }, { x: 160, y: 380 }, { x: 220, y: 320 }, { x: 300, y: 360 }]] },
+        { id: "s-sq", page: 0, kind: "square", rect: { x: 340, y: 300, width: 120, height: 70 }, color: "#5fbf7f", opacity: 1, width: 2, fill: null },
+        { id: "s-ci", page: 0, kind: "circle", rect: { x: 340, y: 400, width: 90, height: 90 }, color: "#f39a4a", opacity: 1, width: 2, fill: null },
+        { id: "s-ar", page: 0, kind: "arrow", rect: { x: 90, y: 420, width: 200, height: 70 }, color: "#211f1a", opacity: 1, width: 2, start: { x: 100, y: 480 }, end: { x: 280, y: 430 } },
+        { id: "s-note", page: 0, kind: "note", rect: { x: 500, y: 120, width: 20, height: 20 }, color: "#f4c430", opacity: 1, text: "Σημείωση: έλεγχος σε άλλον αναγνώστη" },
+        { id: `${TEXT_STAMP_PREFIX}s`, page: 0, kind: "text", rect: { x: 56, y: 520, width: 260, height: 20 }, color: "#24438f", opacity: 1, text: "Πληκτρολογημένο κείμενο — typed text", fontSize: 16 },
+      ];
+      for (const a of kinds) await add(doc, a);
+      expect(page.index).toBe(0);
+      const bytes = (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
+      writeFileSync(`${process.env.SELIS_SAMPLES}/annotated-${name}.pdf`, new Uint8Array(bytes));
+    }
+  });
+
+  it("writes large-1000 with 50 annotations (memory gate, docs/spike-p0.md)", async () => {
+    const { writeFileSync } = await import("node:fs");
+    const doc = await open(fixture("large-1000"));
+    const kinds = ["highlight", "ink", "square", "text", "note"] as const;
+    for (let i = 0; i < 50; i++) {
+      // Pages 1–25 and 976–1000: the start and the end of the full scroll.
+      const page = i < 25 ? i : 975 + (i - 25);
+      const kind = kinds[i % kinds.length] as (typeof kinds)[number];
+      const base = { id: `${kind === "text" ? TEXT_STAMP_PREFIX : "m-"}${i}`, page, color: "#24438f", opacity: 1 };
+      const rect = { x: 72, y: 200, width: 220, height: 40 };
+      const a: Annotation =
+        kind === "highlight"
+          ? { ...base, kind, rect, opacity: 0.42, color: "#f4c430", segments: [rect] }
+          : kind === "ink"
+            ? { ...base, kind, rect, width: 3, strokes: [[{ x: 72, y: 220 }, { x: 150, y: 240 }, { x: 292, y: 205 }]] }
+            : kind === "square"
+              ? { ...base, kind, rect, width: 2, fill: null }
+              : kind === "text"
+                ? { ...base, kind, rect, text: `Σημείωση ${i + 1} — annotation ${i + 1}`, fontSize: 14 }
+                : { ...base, kind, rect: { x: 500, y: 80, width: 20, height: 20 }, text: `Σχόλιο ${i + 1}` };
+      await add(doc, a);
+    }
+    const bytes = (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
+    writeFileSync(`${process.env.SELIS_SAMPLES}/large-1000-annotated.pdf`, new Uint8Array(bytes));
+    const reopened = await open(bytes);
+    expect(reopened.pageCount).toBe(1000);
+    expect(await read(reopened, 999)).toHaveLength(1);
   });
 });
 

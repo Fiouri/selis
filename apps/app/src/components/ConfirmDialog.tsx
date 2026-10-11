@@ -1,8 +1,8 @@
 import { ConfirmDialog as Dialog, type ConfirmDialogProps } from "@selis/ui";
 import { useOverlay } from "../state/navigation";
 
-/** Confirm dialog that the system back gesture cancels (one history entry while open). */
+/** Confirm dialog that the system back gesture dismisses (one history entry while open). */
 export function ConfirmDialog(props: ConfirmDialogProps) {
-  useOverlay(props.open, props.onCancel);
+  useOverlay(props.open, props.onDismiss ?? props.onCancel);
   return <Dialog {...props} />;
 }

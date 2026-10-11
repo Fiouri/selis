@@ -11,8 +11,13 @@ export type ConfirmDialogProps = {
   /** Destructive action: the confirm button uses the danger colors. */
   danger?: boolean;
   onConfirm: () => void;
-  /** Cancel button, overlay tap, Escape. (System back is wired by the app.) */
+  /** Cancel button; also overlay tap and Escape unless `onDismiss` is given. */
   onCancel: () => void;
+  /**
+   * Overlay tap, Escape (and system back, wired by the app) when that must not
+   * mean the Cancel button, e.g. when Cancel throws something away.
+   */
+  onDismiss?: () => void;
   testId?: string;
 };
 
@@ -30,6 +35,7 @@ export function ConfirmDialog({
   danger = false,
   onConfirm,
   onCancel,
+  onDismiss,
   testId,
 }: ConfirmDialogProps) {
   const titleId = useId();
@@ -37,9 +43,9 @@ export function ConfirmDialog({
   const cancelRef = useRef<HTMLButtonElement>(null);
   // Callers pass a fresh closure on every render; the open/close effect must
   // not re-run for that (it would move focus back to the panel each time).
-  const onCancelRef = useRef(onCancel);
+  const onCancelRef = useRef(onDismiss ?? onCancel);
   useEffect(() => {
-    onCancelRef.current = onCancel;
+    onCancelRef.current = onDismiss ?? onCancel;
   });
 
   useEffect(() => {
@@ -65,7 +71,7 @@ export function ConfirmDialog({
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-6" data-selis-sheet="">
-      <div className="selis-fade-in absolute inset-0 bg-surface-overlay" aria-hidden="true" onClick={onCancel} />
+      <div className="selis-fade-in absolute inset-0 bg-surface-overlay" aria-hidden="true" onClick={onDismiss ?? onCancel} />
       <div
         // No aria-modal (see BottomSheet): `inert` on #root keeps assistive tech here.
         role="alertdialog"

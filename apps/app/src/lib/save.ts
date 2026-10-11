@@ -17,7 +17,10 @@ export async function toBase64(bytes: Uint8Array): Promise<string> {
   if (typeof native === "function") return native.call(bytes);
   const url = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("base64 encoding failed"));
+    };
     reader.onerror = () => reject(reader.error ?? new Error("base64 encoding failed"));
     // A copy: the Blob must not see later changes to the caller's buffer.
     reader.readAsDataURL(new Blob([bytes.slice()]));
