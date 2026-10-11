@@ -279,14 +279,14 @@ One command, no manual steps: `scripts/measure-device.sh [--serial S] [--runs 5]
 2. Builds a **release-like** APK for the device's ABI: release profile (optimized Rust, minified
    JS, R8) with the app's `measure` cargo feature, which only turns on `tauri/devtools` so the
    WebView stays inspectable. Signed with the local Android debug key (never a release key).
-3. Installs it, clears Selis' data, copies `large-1000.pdf` into the app's own external files
-   directory (readable without permissions) and imports it with the app's `import_document`
-   command (the same copy → hash → SQLite path as the picker).
+3. Installs it, clears Selis' data, pushes `large-1000.pdf` to `/sdcard/Download/selis-measure`
+   and imports it with an "Open with" intent (MediaStore URI + read grant), the same import path
+   a user takes from a file manager.
 4. N cold runs (default 5): `am force-stop`, launch, tap the document in the library,
    `window.__selisFirstPageMs`; then the full scroll (same driver as above) with app + renderer
    `dumpsys meminfo` sampled every 1.5 s. Every run opens at page 1.
-5. Cleans up (`pm clear`: library copy and database; the pushed fixture is deleted right after
-   the import; adb port forward removed) and appends a row to the table below.
+5. Cleans up (`pm clear`: library copy and database; the pushed fixture and its MediaStore rows
+   are deleted; adb port forward removed) and appends a row to the table below.
    Exit code 0 = PASS (every first page < 1 s, peak < 600 MB, page 1000 drawn, no crash),
    1 = gate failed, 2 = error, 3 = no suitable device. Raw results: `.tmp/measure/result-<serial>.json`.
 
@@ -297,6 +297,14 @@ UiAutomator dump before the tap made no difference). These are cold opens from t
 the engine warmed up at startup, so they are not comparable with the P0 cold-open column above
 (older build) or the P1 "first page" figures (taken right after an import). Emulator rows are not
 added to the table: the gate needs a real device.
+
+**Release safety.** The `measure` feature must never reach a shipped build. CI (`android` job)
+builds the store-like release (release profile, no cargo features, arm64) and runs
+`scripts/check-release-apk.sh` on it, which fails if the manifest is debuggable, if a native
+library contains `setWebContentsDebuggingEnabled` (wry compiles that call only with
+`debug_assertions` or `tauri/devtools`) or the `SELIS_MEASURE_BUILD` marker that the `measure`
+feature compiles in. The same script run on a measure APK fails, which is how the check was
+validated.
 
 ## Disk guard for device runs
 

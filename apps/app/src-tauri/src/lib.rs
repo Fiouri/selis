@@ -10,6 +10,10 @@ use selis_core::Library;
 use tauri::Manager;
 use tauri_specta::{Builder, collect_commands};
 
+/// Kept in the binary of `--features measure` builds only (see `setup`).
+#[cfg(feature = "measure")]
+const MEASURE_BUILD_MARKER: &str = "SELIS_MEASURE_BUILD: WebView debugging enabled";
+
 /// Single source of truth for the IPC surface. `ipc.ts` is generated from it
 /// (see the `export_bindings` test).
 fn specta_builder() -> Builder<tauri::Wry> {
@@ -50,6 +54,9 @@ pub fn run() {
         .plugin(commands::share::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
+            // `scripts/check-release-apk.sh` fails a store APK that contains this marker.
+            #[cfg(feature = "measure")]
+            std::hint::black_box(MEASURE_BUILD_MARKER);
             builder.mount_events(app);
             let root = app.path().app_data_dir()?;
             let library = Library::open(root)?;

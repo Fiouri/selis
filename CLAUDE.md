@@ -97,7 +97,8 @@ Tier 2 — end of every feature:
 Performance gate (docs/spike-p0.md): 1000-page fixture — first page < 1 s, full scroll without
 crash, WebView memory < 600 MB (`adb shell dumpsys meminfo com.anywecon.selis` + renderer).
 On a real device: `scripts/measure-device.sh` (builds, installs, measures, cleans up, appends to
-docs/spike-p0.md).
+docs/spike-p0.md). Its `measure` cargo feature (WebView debugging on) is for that script only; CI fails if
+the store-like release APK is debuggable or contains it (`scripts/check-release-apk.sh`).
 
 ## Windows dev notes
 
