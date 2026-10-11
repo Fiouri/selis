@@ -28,3 +28,24 @@
     transform: none;
   }
 }
+
+/* Invisible, selectable text over rendered pages (features/viewer/TextLayer.tsx). */
+.selis-text-layer {
+  line-height: 1;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+.selis-text-layer span {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  transform-origin: 0 0;
+  font-family: sans-serif;
+  cursor: text;
+}
+
+.selis-text-layer ::selection {
+  background: color-mix(in srgb, var(--accent-9) 35%, transparent);
+}

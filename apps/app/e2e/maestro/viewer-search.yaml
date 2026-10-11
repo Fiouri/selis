@@ -1,0 +1,41 @@
+# Viewer on Android: full-text search finds Greek text (greek.pdf), steps through
+# the matches, then night mode and the contents sheet from "More".
+# Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh (ANR check).
+appId: com.anywecon.selis
+# Read the WebView through DevTools: the UiAutomator accessibility snapshot of the
+# WebView can lag behind the DOM (e.g. a bottom sheet that just opened).
+androidWebViewHierarchy: devtools
+name: Viewer search, night mode, contents
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "greek.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+
+- tapOn: "Search in document"
+- inputText: "σελίδα"
+- extendedWaitUntil:
+    visible: "1 / 2"
+    timeout: 10000
+- hideKeyboard
+- tapOn: "Next"
+- assertVisible: "2 / 2"
+- tapOn: "Close search"
+- assertVisible: "Page 2 of 2"
+
+- tapOn: "More"
+# Pixels are checked by Playwright (viewer.spec.ts); here: the switch works on Android.
+- tapOn: "Night mode"
+- back
+- tapOn: "More"
+- tapOn: "Contents"
+- assertVisible: "This document has no table of contents."
+- back
+- back
+- assertVisible: "Open Ελληνικό δοκιμαστικό"

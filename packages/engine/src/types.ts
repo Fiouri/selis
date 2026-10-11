@@ -1,4 +1,5 @@
 /** Page size in PDF points (1/72 in), after the page's own /Rotate is applied. */
+import type { PageRect, QuarterTurns } from "./geometry";
 import type { RenderLimits } from "./limits";
 
 export type PageSize = { readonly width: number; readonly height: number };
@@ -19,11 +20,30 @@ export type OpenOptions = {
   password?: string;
 };
 
+/** One outline (bookmarks) entry; `page` is null when it points nowhere in this file. */
+export type OutlineItem = { readonly title: string; readonly page: number | null; readonly children: readonly OutlineItem[] };
+
+/** One search match: its highlight rects in page points (top-left origin, unrotated). */
+export type SearchHit = { readonly rects: readonly PageRect[] };
+
+/** A run of text on the page, for the selectable text layer (page points, unrotated). */
+export type TextRun = PageRect & { readonly text: string; readonly fontSize: number };
+
+export type SearchOptions = {
+  signal?: AbortSignal;
+  /** Called per page with matches, in page order, while the search runs. */
+  onHits?: (page: number, hits: readonly SearchHit[]) => void;
+};
+
 export type RenderOptions = {
   /** Aborting drops a queued render; the promise rejects with code "cancelled". */
   signal?: AbortSignal;
   /** Prefetch renders (off-screen buffer pages) yield to visible ones. */
   prefetch?: boolean;
+  /** View rotation, clockwise quarter turns (not saved into the document). */
+  rotation?: QuarterTurns;
+  /** Night mode: lightness inverted, hues and images kept. */
+  night?: boolean;
 };
 
 /** An encoded page preview, ready to store. */
@@ -57,6 +77,12 @@ export interface DocHandle {
    * JPEG where the WebView cannot encode WebP). Queued behind visible pages.
    */
   renderThumbnail(index: number, maxWidth: number, maxHeight: number, options?: RenderOptions): Promise<Thumbnail>;
+  /** The document outline (bookmarks), empty when there is none. */
+  outline(): Promise<OutlineItem[]>;
+  /** Case-insensitive full-text search over all pages; resolves to the number of matches. */
+  search(query: string, options?: SearchOptions): Promise<number>;
+  /** Text runs of one page (for selection and copy). */
+  textRuns(index: number): Promise<TextRun[]>;
   close(): Promise<void>;
 }
 

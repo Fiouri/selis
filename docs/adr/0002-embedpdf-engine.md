@@ -49,3 +49,9 @@ shared-memory/GPU resources in the Android WebView until GC (see docs/spike-p0.m
 
 - Engine swaps (v3, native PDFium on mobile) touch only `packages/engine`.
 - F-Droid will require building the PDFium WASM from source reproducibly (open risk, P5).
+- P1 viewer features run in the same worker: thumbnails (encoded there), outline, streaming
+  full-text search, text runs for the selection layer, view rotation and night mode.
+- Night mode keeps images as they are. EmbedPDF does not expose page objects, so
+  `pdfium-objects.ts` reads the PDFium document pointer from EmbedPDF's internal cache and
+  queries image bounds directly. This is tied to the pinned EmbedPDF version and covered by
+  `pdfium.node.test.ts`; if the internals change, night mode degrades to inverting images too.

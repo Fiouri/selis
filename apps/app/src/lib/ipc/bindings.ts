@@ -32,6 +32,8 @@ export const commands = {
 	recordDocumentInfo: (id: string, pageCount: number, pdfTitle: string | null) => typedError<Document, CommandError>(__TAURI_INVOKE("record_document_info", { id, pageCount, pdfTitle })),
 	/**  Idempotent: sets the flag, does not toggle it. */
 	setFavorite: (id: string, favorite: boolean) => typedError<Document, CommandError>(__TAURI_INVOKE("set_favorite", { id, favorite })),
+	/**  The reader's position (zero-based page); restored when the document opens again. */
+	setLastPage: (id: string, page: number) => typedError<Document, CommandError>(__TAURI_INVOKE("set_last_page", { id, page })),
 	/**
 	 *  Resolves the stored copy without marking the document as opened
 	 *  (used to render its thumbnail in the background).
@@ -53,6 +55,11 @@ export const commands = {
 	pendingOpens: () => typedError<PendingOpen[], CommandError>(__TAURI_INVOKE("pending_opens")),
 	/**  Called once a pending document has been imported (or failed for good). */
 	dismissOpen: (id: string) => typedError<null, CommandError>(__TAURI_INVOKE("dismiss_open", { id })),
+	/**
+	 *  Opens the share sheet for the document's library copy. The path is resolved
+	 *  here, never taken from the UI.
+	 */
+	shareDocument: (id: string) => typedError<null, CommandError>(__TAURI_INVOKE("share_document", { id })),
 	getSettings: () => typedError<Settings, CommandError>(__TAURI_INVOKE("get_settings")),
 	updateSettings: (patch: SettingsPatch) => typedError<Settings, CommandError>(__TAURI_INVOKE("update_settings", { patch })),
 	/**  Total device RAM, used by the UI to pick render limits (resolution, cache size). */
@@ -119,6 +126,8 @@ export type DocumentKind = "imported" | "linked";
 export type ErrorCode = "notPdf" | "emptyFile" | "notFound" | "io" | "invalidArgument" | 
 /**  The name (e.g. of a tag) is already taken. */
 "conflict" | 
+/**  Not available on this platform (e.g. the native share sheet). */
+"unsupported" | 
 /**  The operation did not finish in time (nothing was written). */
 "timeout" | "internal";
 
@@ -179,6 +188,8 @@ export type Settings = {
 	theme: ThemePref,
 	librarySort: LibrarySort,
 	libraryView: LibraryView,
+	/**  Reader night mode for pages (lightness inverted, images kept). */
+	nightMode: boolean,
 };
 
 /**  Partial update; `None` fields are left unchanged. */
@@ -187,6 +198,7 @@ export type SettingsPatch = {
 	theme: ThemePref | null,
 	librarySort: LibrarySort | null,
 	libraryView: LibraryView | null,
+	nightMode: boolean | null,
 };
 
 /**

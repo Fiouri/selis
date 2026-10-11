@@ -10,10 +10,13 @@ import { type PdfDocumentObject, PdfErrorCode } from "@embedpdf/models";
 import { init } from "@embedpdf/pdfium";
 import { ENCRYPTED_PASSWORD, FIXTURES, type FixtureName } from "@selis/fixtures";
 import { beforeAll, describe, expect, it } from "vitest";
+import { applyNightMode } from "./geometry";
+import { documentPointer, imageRectsOnPage } from "./pdfium-objects";
 import { clampScale } from "./protocol";
 
 const require = createRequire(import.meta.url);
 let engine: PdfiumNative;
+let pdfium: Awaited<ReturnType<typeof init>>;
 const built = new Map<FixtureName, Uint8Array>();
 
 function bytes(name: FixtureName): ArrayBuffer {
@@ -45,6 +48,7 @@ function inkRatio(data: Uint8ClampedArray): number {
 beforeAll(async () => {
   const wasmBinary = readFileSync(require.resolve("@embedpdf/pdfium/pdfium.wasm"));
   const module = await init({ wasmBinary: wasmBinary.buffer.slice(wasmBinary.byteOffset, wasmBinary.byteOffset + wasmBinary.byteLength) });
+  pdfium = module;
   engine = new PdfiumNative(module, { fontFallback: null });
 }, 60_000);
 
@@ -111,5 +115,52 @@ describe("PDFium WASM against the fixture corpus", () => {
     const a4 = { width: 595, height: 842 };
     const scale = clampScale(a4, 20);
     expect(a4.width * scale * a4.height * scale).toBeLessThanOrEqual(16_777_216 + 1);
+  });
+
+  it("greek: full-text search finds Greek words, case-insensitively", async () => {
+    const doc = await open("greek");
+    const page2 = doc.pages[1];
+    if (!page2) throw new Error("no page 2");
+    const hits = await engine.searchInPage(doc, page2, "ΣΕΛΊΔΑ", 0).toPromise();
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits[0]?.rects[0]?.size.width).toBeGreaterThan(10);
+    await engine.closeDocument(doc).toPromise();
+  });
+
+  it("large-1000: exposes a two-level outline with page targets", async () => {
+    const doc = await open("large-1000");
+    const { bookmarks } = (await engine.getBookmarks(doc).toPromise()) as {
+      bookmarks: Array<{ title: string; target?: { type: string; destination?: { pageIndex: number } }; children?: unknown[] }>;
+    };
+    expect(bookmarks).toHaveLength(10);
+    expect(bookmarks[0]?.title).toBe("Part 1: pages 1-100");
+    expect(bookmarks[3]?.target?.destination?.pageIndex).toBe(300);
+    expect(bookmarks[0]?.children).toHaveLength(2);
+    await engine.closeDocument(doc).toPromise();
+  });
+
+  it("greek page 2: finds the image bounds, and night mode leaves the image untouched", async () => {
+    const doc = await open("greek");
+    const ptr = documentPointer(engine, doc.id);
+    expect(ptr).not.toBeNull();
+    const page = doc.pages[1];
+    if (!page || ptr === null) throw new Error("no page or pointer");
+    const rects = imageRectsOnPage(pdfium, ptr, 1, page.size);
+    expect(rects).toHaveLength(1);
+    expect(rects[0]?.x).toBeCloseTo(56, 0);
+    expect(rects[0]?.width).toBeCloseTo(240, 0);
+    expect(rects[0]?.height).toBeCloseTo(150, 0);
+
+    const scale = 0.5;
+    const raw = await engine.renderPageRaw(doc, page, { scaleFactor: scale, dpr: 1 }).toPromise();
+    const before = new Uint8ClampedArray(raw.data);
+    const keep = rects.map((r) => ({ x: r.x * scale, y: r.y * scale, width: r.width * scale, height: r.height * scale }));
+    applyNightMode(raw.data, raw.width, raw.height, keep);
+    const at = (x: number, y: number) => (Math.round(y) * raw.width + Math.round(x)) * 4;
+    const inside = at((56 + 120) * scale, (170 + 75) * scale);
+    expect([...raw.data.slice(inside, inside + 3)]).toEqual([...before.slice(inside, inside + 3)]);
+    const paper = at(10, 10);
+    expect(raw.data[paper] as number).toBeLessThan(60); // white paper became dark
+    await engine.closeDocument(doc).toPromise();
   });
 });

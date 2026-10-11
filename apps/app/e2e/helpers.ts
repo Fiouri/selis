@@ -47,9 +47,12 @@ export async function openWith(page: Page, files: ReadonlyArray<{ file: string; 
 }
 
 /** Theme + language before the first frame (boot settings and the mock database). */
-export async function presetSettings(page: Page, settings: { theme?: string; locale?: string }): Promise<void> {
+export async function presetSettings(
+  page: Page,
+  settings: { theme?: string; locale?: string; nightMode?: boolean },
+): Promise<void> {
   await page.addInitScript((s) => {
-    const merged = { locale: "system", theme: "system", librarySort: "recent", libraryView: "grid", ...s };
+    const merged = { locale: "system", theme: "system", librarySort: "recent", libraryView: "grid", nightMode: false, ...s };
     localStorage.setItem("selis.mock.settings", JSON.stringify(merged));
     localStorage.setItem("selis.boot-settings", JSON.stringify(merged));
   }, settings);

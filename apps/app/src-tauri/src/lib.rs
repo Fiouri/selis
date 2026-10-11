@@ -19,6 +19,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::library::read_document,
         commands::library::record_document_info,
         commands::library::set_favorite,
+        commands::library::set_last_page,
         commands::library::document_file,
         commands::library::save_thumbnail,
         commands::tags::list_tags,
@@ -28,6 +29,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::tags::set_document_tags,
         commands::open_with::pending_opens::<tauri::Wry>,
         commands::open_with::dismiss_open,
+        commands::share::share_document::<tauri::Wry>,
         commands::settings::get_settings,
         commands::settings::update_settings,
         commands::device::device_memory::<tauri::Wry>,
@@ -43,6 +45,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(commands::open_with::init())
+        .plugin(commands::share::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);

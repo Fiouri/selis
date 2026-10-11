@@ -41,6 +41,8 @@ pub struct Settings {
     pub theme: ThemePref,
     pub library_sort: LibrarySort,
     pub library_view: LibraryView,
+    /// Reader night mode for pages (lightness inverted, images kept).
+    pub night_mode: bool,
 }
 
 /// Partial update; `None` fields are left unchanged.
@@ -51,12 +53,14 @@ pub struct SettingsPatch {
     pub theme: Option<ThemePref>,
     pub library_sort: Option<LibrarySort>,
     pub library_view: Option<LibraryView>,
+    pub night_mode: Option<bool>,
 }
 
 const KEY_LOCALE: &str = "locale";
 const KEY_THEME: &str = "theme";
 const KEY_LIBRARY_SORT: &str = "librarySort";
 const KEY_LIBRARY_VIEW: &str = "libraryView";
+const KEY_NIGHT_MODE: &str = "nightMode";
 
 fn load(library: &Library) -> CommandResult<Settings> {
     let mut settings = Settings::default();
@@ -71,6 +75,7 @@ fn load(library: &Library) -> CommandResult<Settings> {
             KEY_LIBRARY_VIEW => {
                 settings.library_view = serde_json::from_value(value).unwrap_or_default();
             }
+            KEY_NIGHT_MODE => settings.night_mode = value.as_bool().unwrap_or_default(),
             _ => {}
         }
     }
@@ -93,6 +98,7 @@ pub async fn update_settings(
     store(&library, KEY_THEME, patch.theme)?;
     store(&library, KEY_LIBRARY_SORT, patch.library_sort)?;
     store(&library, KEY_LIBRARY_VIEW, patch.library_view)?;
+    store(&library, KEY_NIGHT_MODE, patch.night_mode)?;
     load(&library)
 }
 

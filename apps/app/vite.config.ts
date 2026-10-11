@@ -45,6 +45,9 @@ export default defineConfig(({ mode, command }) => ({
     format: "es",
   },
   build: {
+    // The mock (Playwright) build never shares an output folder with the Tauri bundle:
+    // a concurrent e2e run must not end up inside an APK.
+    outDir: mode === "mock" ? "dist-mock" : "dist",
     // Android WebView / WKWebView (iOS 15+) / WebView2 all support ES2022.
     target: platform === "windows" ? "chrome105" : ["es2022", "safari15"],
     sourcemap: mode !== "production" ? true : false,

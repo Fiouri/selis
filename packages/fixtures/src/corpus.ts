@@ -40,8 +40,8 @@ function helveticaResources(w: PdfWriter): PdfDict {
 
 type PageSpec = { size: [number, number]; content: string; rotate?: number; annots?: Ref[] };
 
-/** Builds a page tree with all pages under one /Pages node and sets the catalog. */
-function finishDocument(w: PdfWriter, pages: PageSpec[], resources: PdfDict, catalogExtra: PdfDict = {}): void {
+/** Builds a page tree with all pages under one /Pages node and sets the catalog. Returns the page refs. */
+function finishDocument(w: PdfWriter, pages: PageSpec[], resources: PdfDict, catalogExtra: PdfDict = {}): Ref[] {
   const pagesRef = w.reserve();
   const resRef = w.add(resources);
   const kids: Ref[] = pages.map((p) => {
@@ -59,6 +59,53 @@ function finishDocument(w: PdfWriter, pages: PageSpec[], resources: PdfDict, cat
   });
   w.set(pagesRef, { Type: n("Pages"), Kids: kids, Count: kids.length });
   w.setRoot(w.add({ Type: n("Catalog"), Pages: pagesRef, ...catalogExtra }));
+  return kids;
+}
+
+type OutlineSpec = { title: string; page: number; children?: OutlineSpec[] };
+
+/** Writes an outline (bookmarks) tree into a reserved /Outlines object; sub-levels start closed. */
+function writeOutline(w: PdfWriter, root: Ref, items: readonly OutlineSpec[], pages: readonly Ref[]): void {
+  const level = (parent: Ref, specs: readonly OutlineSpec[]): { first: Ref; last: Ref; count: number } => {
+    const refs = specs.map(() => w.reserve());
+    specs.forEach((spec, i) => {
+      const self = refs[i] as Ref;
+      const entry: Record<string, PdfValue> = {
+        Title: Str.ascii(spec.title),
+        Parent: parent,
+        Dest: [pages[spec.page] as Ref, n("Fit")],
+      };
+      if (i > 0) entry.Prev = refs[i - 1] as Ref;
+      if (i < refs.length - 1) entry.Next = refs[i + 1] as Ref;
+      if (spec.children?.length) {
+        const sub = level(self, spec.children);
+        entry.First = sub.first;
+        entry.Last = sub.last;
+        entry.Count = -sub.count;
+      }
+      w.set(self, entry);
+    });
+    return { first: refs[0] as Ref, last: refs[refs.length - 1] as Ref, count: refs.length };
+  };
+  const top = level(root, items);
+  w.set(root, { Type: n("Outlines"), First: top.first, Last: top.last, Count: top.count });
+}
+
+/** A deterministic RGB image XObject (smooth colour gradient). */
+function gradientImage(w: PdfWriter, width: number, height: number): Ref {
+  const data = new Uint8Array(width * height * 3);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 3;
+      data[i] = Math.round((x / (width - 1)) * 255);
+      data[i + 1] = Math.round((y / (height - 1)) * 200) + 30;
+      data[i + 2] = 180;
+    }
+  }
+  return w.addStream(
+    { Type: n("XObject"), Subtype: n("Image"), Width: width, Height: height, ColorSpace: n("DeviceRGB"), BitsPerComponent: 8 },
+    data,
+  );
 }
 
 const FILLER = [
@@ -100,7 +147,22 @@ function buildLarge(pageCount: number): Uint8Array {
   const resources = helveticaResources(w);
   const pages: PageSpec[] = [];
   for (let i = 0; i < pageCount; i++) pages.push({ size: A4, content: largePage(i, pageCount) });
-  finishDocument(w, pages, resources);
+  const outlines = w.reserve();
+  const kids = finishDocument(w, pages, resources, { Outlines: outlines });
+  // Parts of 100 pages with two sections each: a two-level outline for the viewer.
+  const parts: OutlineSpec[] = [];
+  for (let start = 0; start < pageCount; start += 100) {
+    const part = start / 100 + 1;
+    parts.push({
+      title: `Part ${part}: pages ${start + 1}-${Math.min(start + 100, pageCount)}`,
+      page: start,
+      children: [
+        { title: `Section ${part}.1`, page: start },
+        { title: `Section ${part}.2`, page: Math.min(start + 50, pageCount - 1) },
+      ],
+    });
+  }
+  writeOutline(w, outlines, parts, kids);
   w.setInfo({ Title: Str.ascii("Selis 1000-page fixture"), Producer: Str.ascii("selis fixtures generator") });
   return w.toBytes();
 }
@@ -342,11 +404,16 @@ function buildGreek(): Uint8Array {
   const page1 = [show("Ελληνικό κείμενο", 26, 56, 760), ...GREEK_TEXT.map((t, i) => show(t, 13, 56, 710 - i * 26))].join(
     "\n",
   );
-  const page2 = [show("Δεύτερη σελίδα", 22, 56, 760), show("Αναζήτηση: «σελίδα», «έγγραφο».", 13, 56, 720)].join("\n");
+  const page2 = [
+    show("Δεύτερη σελίδα", 22, 56, 760),
+    show("Αναζήτηση: «σελίδα», «έγγραφο».", 13, 56, 720),
+    // A colour image: night mode must leave it as it is.
+    "q 240 0 0 150 56 480 cm /Im1 Do Q",
+  ].join("\n");
 
   // Content is generated before the fonts are written so the used-glyph sets are complete.
   const contents = [page1, page2];
-  const resources = { Font: { G: greek.write(w), L: latin.write(w) } };
+  const resources = { Font: { G: greek.write(w), L: latin.write(w) }, XObject: { Im1: gradientImage(w, 64, 40) } };
   finishDocument(
     w,
     contents.map((content) => ({ size: A4, content })),

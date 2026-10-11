@@ -27,7 +27,13 @@ export function PhoneShell() {
       data-shell="phone"
       style={{ "--fab-bottom": "calc(var(--safe-bottom) + var(--tabbar-height) + 20px)" } as CSSProperties}
     >
-      <div className="flex min-h-0 flex-1 flex-col" inert={viewerOpen}>
+      {/* Under the viewer: kept mounted (scroll position, state) but not painted, so its
+          cards, thumbnails and floating button cost no WebView memory while reading. */}
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        inert={viewerOpen}
+        style={{ contentVisibility: viewerOpen ? "hidden" : "visible" }}
+      >
         <main
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
           style={{ paddingLeft: "var(--safe-left)", paddingRight: "var(--safe-right)" }}
