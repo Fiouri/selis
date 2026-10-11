@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use selis_core::{
-    CancelToken, CancellableReader, Document, DocumentFile, ImportOutcome, Library,
+    CancelToken, CancellableReader, Document, DocumentFile, ImportOutcome, Library, LibraryQuery,
     title_from_file_name,
 };
 use tauri::{AppHandle, Runtime, State};
@@ -19,6 +19,9 @@ pub const IMPORT_TIMEOUT: Duration = Duration::from_secs(30);
 /// `content://` URI from the Storage Access Framework on Android, a file URL on
 /// iOS) by copying it into the app library. The source is opened read-only.
 ///
+/// `name` is the sender's file name when known (Android "Open with" / share);
+/// otherwise the title is derived from the source.
+///
 /// Runs once per `request_id`: a repeated call returns the first call's result
 /// (see `take_result`).
 #[tauri::command]
@@ -29,10 +32,15 @@ pub async fn import_document<R: Runtime>(
     results: State<'_, Arc<RequestResults>>,
     request_id: String,
     source: String,
+    name: Option<String>,
 ) -> CommandResult<ImportOutcome> {
     let library = Arc::clone(&library);
     results
-        .run_once(&request_id, "import_document", import(app, library, source))
+        .run_once(
+            &request_id,
+            "import_document",
+            import(app, library, source, name),
+        )
         .await
 }
 
@@ -40,6 +48,7 @@ async fn import<R: Runtime>(
     app: AppHandle<R>,
     library: Arc<Library>,
     source: String,
+    name: Option<String>,
 ) -> CommandResult<ImportOutcome> {
     let source = source.trim().to_owned();
     if source.is_empty() {
@@ -49,7 +58,11 @@ async fn import<R: Runtime>(
         ));
     }
     let file_path = parse_source(&source)?;
-    let title = title_for_source(&source);
+    let title = name
+        .as_deref()
+        .map(title_from_file_name)
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| title_for_source(&source));
     let token = CancelToken::new();
     let worker_token = token.clone();
 
@@ -83,10 +96,52 @@ async fn import<R: Runtime>(
     }
 }
 
+/// Library listing: title search, filter (all / favorites / received / opened, tag) and sort.
 #[tauri::command]
 #[specta::specta]
-pub async fn list_documents(library: State<'_, Arc<Library>>) -> CommandResult<Vec<Document>> {
-    Ok(library.list_documents()?)
+pub async fn list_documents(
+    library: State<'_, Arc<Library>>,
+    query: LibraryQuery,
+) -> CommandResult<Vec<Document>> {
+    Ok(library.list_documents(&query)?)
+}
+
+/// Idempotent: sets the flag, does not toggle it.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_favorite(
+    library: State<'_, Arc<Library>>,
+    id: String,
+    favorite: bool,
+) -> CommandResult<Document> {
+    Ok(library.set_favorite(&id, favorite)?)
+}
+
+/// Resolves the stored copy without marking the document as opened
+/// (used to render its thumbnail in the background).
+#[tauri::command]
+#[specta::specta]
+pub async fn document_file(
+    library: State<'_, Arc<Library>>,
+    id: String,
+) -> CommandResult<DocumentFile> {
+    Ok(library.document_file(&id)?)
+}
+
+/// Stores the page-1 thumbnail (WebP, or PNG/JPEG where the WebView cannot
+/// encode WebP) rendered by the engine worker. Idempotent per document.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_thumbnail(
+    library: State<'_, Arc<Library>>,
+    id: String,
+    image: Vec<u8>,
+) -> CommandResult<Document> {
+    let library = Arc::clone(&library);
+    tauri::async_runtime::spawn_blocking(move || library.save_thumbnail(&id, &image))
+        .await
+        .map_err(|e| CommandError::new(ErrorCode::Internal, format!("thumbnail task failed: {e}")))?
+        .map_err(CommandError::from)
 }
 
 /// Resolves a library document to its stored copy for the viewer.

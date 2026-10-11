@@ -56,6 +56,7 @@ action (not in P0).
 - Capabilities are least-privilege (`capabilities/mobile.json`, `desktop.json`); every app
   command is deny-by-default (`build.rs` app manifest) and must be granted explicitly.
 - New architectural decisions get an ADR in `docs/adr/`.
+- UI follows the approved phone brief `docs/design/p1-ui-brief.md` (exact sizes, copy, states).
 
 ## Git workflow
 
@@ -81,9 +82,13 @@ Tier 2 — end of every feature:
 - `npm run tauri -- android build --debug --apk` (NDK_HOME set)
 - Maestro on the emulator: `apps/app/e2e/maestro/push-fixtures.sh <serial>` then
   `apps/app/e2e/maestro/run.sh <serial> apps/app/e2e/maestro/<flow>.yaml [runs]` for
-  `import-scroll-back.yaml` and `import-background-resume.yaml` (fails a run on
-  "ANR in com.anywecon.selis" in logcat — the emulator hides ANR dialogs)
-- Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC): `npm run e2e`
+  `import-scroll-back.yaml`, `import-background-resume.yaml`, `library-search-favorites.yaml`,
+  and `import-from-intent.yaml` twice: with `PRE_RUN="…/open-with.sh cold"` and `…/open-with.sh warm`,
+  both with `POST_RUN="…/open-with.sh check"` (original untouched). run.sh fails a run on
+  "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
+  with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM).
+- Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC) + 390×844 visual snapshots in
+  light/dark/sepia (`visual-390`; baselines per OS, see CONTRIBUTING.md): `npm run e2e`
 - Windows compile check: `npm run tauri -- build --no-bundle`
 - Visual changes: inspect screenshots (Playwright `test-results/screenshots`, device `adb exec-out screencap`).
 

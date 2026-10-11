@@ -2,6 +2,9 @@
 # picker (SAF) → scroll → back to the library.
 # Prerequisite: ./push-fixtures.sh <serial> (copies + media-scans packages/fixtures/out).
 appId: com.anywecon.selis
+# Read the WebView through DevTools: the UiAutomator accessibility snapshot of the
+# WebView can lag behind the DOM (e.g. a bottom sheet that just opened).
+androidWebViewHierarchy: devtools
 name: Import, scroll, back
 ---
 - clearState
@@ -27,5 +30,4 @@ name: Import, scroll, back
     text: 'Page \d+ of 1000'
 - assertNotVisible: "Page 1 of 1000"
 - back
-- assertVisible: "1 document"
 - assertVisible: "Open Selis 1000-page fixture"

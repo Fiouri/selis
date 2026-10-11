@@ -19,9 +19,9 @@ Order of delivery: **Android → iOS → desktop**.
   before exiting, empty states with one clear action, skeletons without layout shift.
 - `TabletShell` is basic (navigation rail; document = thumbnails + page). `DesktopShell` is a
   placeholder until P6. The shell is chosen from platform + viewport width (`lib/platform.ts`).
-- Back navigation uses the History API: Tauri/Wry's Android activity calls `WebView.goBack()`
-  while the page has history, so each in-app step is a history entry and back from the root
-  leaves the app.
+- Back navigation uses the History API: each in-app step is a history entry and back from the
+  root leaves the app. Since P1 the Android activity asks the UI first (ADR 0006), because
+  Chromium skips entries pushed without a user gesture.
 - Performance budgets are set and measured on Android (docs/spike-p0.md): first page < 1 s on a
   1000-page document, full scroll without crash, WebView memory < 600 MB.
 

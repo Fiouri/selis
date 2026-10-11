@@ -98,4 +98,24 @@ describe("import state machine", () => {
       }
     }
   });
+
+  it("external (Open with) skips the picker, keeps the name for retry, never interrupts", () => {
+    const importing = importReducer(IDLE, { type: "external", source: "content://shared", name: "Report.pdf" });
+    expect(importing).toEqual({ status: "importing", attempt: 1, source: "content://shared", name: "Report.pdf" });
+    expect(importReducer(importing, { type: "external", source: "content://other", name: null })).toBe(importing);
+    const failed = importReducer(importing, { type: "importFailed", attempt: 1, error: "io", timedOut: false });
+    expect(failed).toMatchObject({ status: "error", source: "content://shared", name: "Report.pdf" });
+    expect(importReducer(failed, { type: "retry" })).toEqual({
+      status: "importing",
+      attempt: 2,
+      source: "content://shared",
+      name: "Report.pdf",
+    });
+    // A new shared document replaces a shown error.
+    expect(importReducer(failed, { type: "external", source: "content://next", name: null })).toEqual({
+      status: "importing",
+      attempt: 2,
+      source: "content://next",
+    });
+  });
 });

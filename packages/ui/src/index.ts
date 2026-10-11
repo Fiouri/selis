@@ -7,5 +7,7 @@ export {
   type SegmentedControlProps,
   type SegmentedOption,
 } from "./primitives/SegmentedControl";
+export { BottomSheet, type BottomSheetProps } from "./primitives/BottomSheet";
+export { Chip, type ChipProps } from "./primitives/Chip";
 export { cx } from "./primitives/cx";
 export { THEMES, type ThemeName, MOTION_MS, TOUCH_TARGET_PX } from "./tokens";

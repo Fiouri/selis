@@ -3,6 +3,7 @@
  * UI can never wait forever:
  *
  *   idle ──start──▶ picking ──picked──▶ importing ──imported──▶ done
+ *   idle | error ──external──▶ importing   ("Open with" / share: no picker)
  *                     │  │                  │ └──failed/timeout──▶ error
  *                     │  └─cancelled──▶ cancelled                   │
  *                     └──failed / resultLost──▶ error ◀─────────────┘
@@ -18,7 +19,13 @@ export type ImportErrorKind = "timeout" | "resultLost" | "failed";
 export type ImportState =
   | { readonly status: "idle"; readonly attempt: number }
   | { readonly status: "picking"; readonly attempt: number }
-  | { readonly status: "importing"; readonly attempt: number; readonly source: string }
+  | {
+      readonly status: "importing";
+      readonly attempt: number;
+      readonly source: string;
+      /** Sender's file name ("Open with" / share), used as the title. */
+      readonly name?: string;
+    }
   | { readonly status: "done"; readonly attempt: number; readonly outcome: ImportOutcome }
   | {
       readonly status: "error";
@@ -27,6 +34,7 @@ export type ImportState =
       readonly error: unknown;
       /** Source to retry with; absent when the picker itself failed. */
       readonly source: string | null;
+      readonly name?: string;
     }
   | { readonly status: "cancelled"; readonly attempt: number };
 
@@ -38,6 +46,7 @@ export type ImportEvent =
   | { readonly type: "resultLost"; readonly attempt: number }
   | { readonly type: "imported"; readonly attempt: number; readonly outcome: ImportOutcome }
   | { readonly type: "importFailed"; readonly attempt: number; readonly error: unknown; readonly timedOut: boolean }
+  | { readonly type: "external"; readonly source: string; readonly name: string | null }
   | { readonly type: "retry" }
   | { readonly type: "reset" };
 
@@ -80,16 +89,26 @@ export function importReducer(state: ImportState, event: ImportEvent): ImportSta
             kind: event.timedOut ? "timeout" : "failed",
             error: event.error,
             source: state.source,
+            ...withName(state.name ?? null),
           }
         : state;
+    case "external":
+      // A document handed over by another app; never interrupts a running import.
+      return isBusy(state)
+        ? state
+        : { status: "importing", attempt: state.attempt + 1, source: event.source, ...withName(event.name) };
     case "retry":
       if (state.status !== "error") return state;
       // With a known source, retry the import itself; otherwise pick again.
       return state.source !== null
-        ? { status: "importing", attempt: state.attempt + 1, source: state.source }
+        ? { status: "importing", attempt: state.attempt + 1, source: state.source, ...withName(state.name ?? null) }
         : { status: "picking", attempt: state.attempt + 1 };
     case "reset":
       // The attempt counter is monotonic so late events from an old cycle stay ignored.
       return isBusy(state) ? state : { status: "idle", attempt: state.attempt };
   }
+}
+
+function withName(name: string | null): { name?: string } {
+  return name === null ? {} : { name };
 }

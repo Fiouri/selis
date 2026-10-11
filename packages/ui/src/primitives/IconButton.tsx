@@ -14,7 +14,7 @@ export function IconButton({ label, icon, className, type = "button", ...rest }:
       aria-label={label}
       title={label}
       className={cx(
-        "selis-focus inline-flex size-11 shrink-0 items-center justify-center rounded-control text-neutral-12",
+        "selis-focus inline-flex size-11 shrink-0 items-center justify-center rounded-full text-neutral-12",
         "transition-colors duration-150 ease-standard hover:bg-neutral-3 active:bg-neutral-4",
         "disabled:pointer-events-none disabled:opacity-50",
         className,

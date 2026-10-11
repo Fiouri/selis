@@ -4,10 +4,28 @@ import { rc4 } from "./rc4.ts";
 
 const latin1 = new TextDecoder("latin1");
 
+/** Each fixture is built once per run and shared by the tests below. */
+const built = new Map<string, Uint8Array>();
+function build(fixture: (typeof FIXTURES)[number]): Uint8Array {
+  let bytes = built.get(fixture.name);
+  if (!bytes) {
+    bytes = fixture.build();
+    built.set(fixture.name, bytes);
+  }
+  return bytes;
+}
+
+/**
+ * Building the corpus (the 1000-page file above all) is CPU-bound: ~1 s alone,
+ * but well over the 5 s default when the full parallel `vitest run` shares a
+ * loaded machine. The tests are deterministic, only slow, so they get room.
+ */
+const BUILD_TIMEOUT_MS = 60_000;
+
 describe("fixture corpus", () => {
   for (const fixture of FIXTURES) {
-    it(`${fixture.name}: has a valid header, xref and trailer`, () => {
-      const text = latin1.decode(fixture.build());
+    it(`${fixture.name}: has a valid header, xref and trailer`, { timeout: BUILD_TIMEOUT_MS }, () => {
+      const text = latin1.decode(build(fixture));
       expect(text.startsWith("%PDF-1.7\n")).toBe(true);
       expect(text.trimEnd().endsWith("%%EOF")).toBe(true);
 
@@ -25,8 +43,9 @@ describe("fixture corpus", () => {
     });
   }
 
-  it("generation is deterministic", () => {
-    for (const fixture of FIXTURES) expect(fixture.build()).toEqual(fixture.build());
+  it("generation is deterministic", { timeout: BUILD_TIMEOUT_MS }, () => {
+    // One fresh build per fixture against the cached one: half the work of building twice.
+    for (const fixture of FIXTURES) expect(fixture.build()).toEqual(build(fixture));
   });
 });
 

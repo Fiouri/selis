@@ -1,0 +1,24 @@
+# "Open with" from the Files app → Selis imports a copy and opens the viewer.
+# Files is already open in the fixtures folder (open-with.sh cold|warm, run as PRE_RUN);
+# POST_RUN "open-with.sh check" verifies that the original was not modified.
+# Run with ./run.sh (ANR check).
+appId: com.anywecon.selis
+# Read the WebView through DevTools: the UiAutomator accessibility snapshot of the
+# WebView can lag behind the DOM (e.g. a bottom sheet that just opened).
+androidWebViewHierarchy: devtools
+name: Import from an Open-with intent
+---
+- extendedWaitUntil:
+    visible: "greek.pdf"
+    timeout: 15000
+- longPressOn: "greek.pdf"
+- tapOn: "More options"
+- tapOn: "Open with"
+- tapOn: "Selis"
+# The sender's file name (OpenableColumns.DISPLAY_NAME) becomes the title.
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 25000
+- assertVisible: "greek"
+- back
+- assertVisible: "Open greek"

@@ -9,6 +9,7 @@ import {
   type CommandError,
   commands,
   type ErrorCode,
+  type LibraryQuery,
   type LongCallOptions,
   reliableIpc,
   type ShortCallOptions,
@@ -30,7 +31,7 @@ async function unwrap<T>(call: Promise<CallResult<T>>): Promise<T> {
   return result.data;
 }
 
-/** Short read-only commands: a lost reply is simply asked for again. */
+/** Short read-only (or idempotent) commands: a lost reply is simply asked for again. */
 const READ: ShortCallOptions = { timeoutMs: 10_000, retry: true };
 /** Short writes: time out, never repeat automatically. */
 const WRITE: ShortCallOptions = { timeoutMs: 10_000, retry: false };
@@ -42,10 +43,29 @@ const PICK: LongCallOptions = { checkAfterMs: null, pollMs: 2_000 };
 const ipc = reliableIpc;
 
 export const api = {
-  importDocument: (source: string) =>
-    unwrap(ipc().long("import_document", (requestId) => commands.importDocument(requestId, source), IMPORT)),
+  /** `name`: the sender's file name ("Open with" / share), used as the title. */
+  importDocument: (source: string, name: string | null = null) =>
+    unwrap(ipc().long("import_document", (requestId) => commands.importDocument(requestId, source, name), IMPORT)),
   pickPdf: () => unwrap(ipc().long("pick_pdf", (requestId) => commands.pickPdf(requestId), PICK)),
-  listDocuments: () => unwrap(ipc().short("list_documents", () => commands.listDocuments(), READ)),
+  listDocuments: (query: LibraryQuery) =>
+    unwrap(ipc().short("list_documents", () => commands.listDocuments(query), READ)),
+  // Sets (never toggles) the flag, so a retry is harmless.
+  setFavorite: (id: string, favorite: boolean) =>
+    unwrap(ipc().short("set_favorite", () => commands.setFavorite(id, favorite), READ)),
+  documentFile: (id: string) => unwrap(ipc().short("document_file", () => commands.documentFile(id), READ)),
+  // Idempotent per document (same bytes, same file).
+  saveThumbnail: (id: string, image: Uint8Array) =>
+    unwrap(ipc().short("save_thumbnail", () => commands.saveThumbnail(id, Array.from(image)), READ)),
+  listTags: () => unwrap(ipc().short("list_tags", () => commands.listTags(), READ)),
+  // Returns the existing tag for the same name: safe to repeat.
+  createTag: (name: string) => unwrap(ipc().short("create_tag", () => commands.createTag(name), READ)),
+  renameTag: (id: string, name: string) => unwrap(ipc().short("rename_tag", () => commands.renameTag(id, name), WRITE)),
+  deleteTag: (id: string) => unwrap(ipc().short("delete_tag", () => commands.deleteTag(id), READ)),
+  // Replaces the whole set: safe to repeat.
+  setDocumentTags: (documentId: string, tagIds: string[]) =>
+    unwrap(ipc().short("set_document_tags", () => commands.setDocumentTags(documentId, tagIds), READ)),
+  pendingOpens: () => unwrap(ipc().short("pending_opens", () => commands.pendingOpens(), READ)),
+  dismissOpen: (id: string) => unwrap(ipc().short("dismiss_open", () => commands.dismissOpen(id), READ)),
   // Also stamps "last opened", which is safe to repeat.
   readDocument: (id: string) => unwrap(ipc().short("read_document", () => commands.readDocument(id), READ)),
   recordDocumentInfo: (id: string, pageCount: number, pdfTitle: string | null) =>
@@ -72,6 +92,8 @@ export function errorMessageKey(err: unknown): string {
         return "errors.notFound";
       case "timeout":
         return "errors.importTimeout";
+      case "conflict":
+        return "errors.conflict";
       case "invalidArgument":
       case "internal":
         return "errors.generic";
@@ -81,4 +103,17 @@ export function errorMessageKey(err: unknown): string {
 }
 
 export { IpcTimeoutError, LostResponseError } from "./ipc";
-export type { Document, DocumentFile, ImportOutcome, LocalePref, Settings, ThemePref } from "./ipc";
+export type {
+  Document,
+  DocumentFile,
+  ImportOutcome,
+  LibraryFilter,
+  LibraryQuery,
+  LibrarySort,
+  LibraryView,
+  LocalePref,
+  PendingOpen,
+  Settings,
+  Tag,
+  ThemePref,
+} from "./ipc";

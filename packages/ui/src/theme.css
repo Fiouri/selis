@@ -27,6 +27,7 @@
   --color-accent-10: var(--accent-10);
   --color-accent-11: var(--accent-11);
   --color-accent-contrast: var(--accent-contrast);
+  --color-accent-selected: var(--accent-selected);
   --color-success-3: var(--success-3);
   --color-success-9: var(--success-9);
   --color-success-11: var(--success-11);

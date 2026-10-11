@@ -3,9 +3,11 @@
 
 pub mod device;
 pub mod library;
+pub mod open_with;
 pub mod picker;
 pub mod requests;
 pub mod settings;
+pub mod tags;
 
 use serde::Serialize;
 use specta::Type;
@@ -19,6 +21,8 @@ pub enum ErrorCode {
     NotFound,
     Io,
     InvalidArgument,
+    /// The name (e.g. of a tag) is already taken.
+    Conflict,
     /// The operation did not finish in time (nothing was written).
     Timeout,
     Internal,
@@ -50,6 +54,7 @@ impl From<selis_core::Error> for CommandError {
             E::NotFound(_) => ErrorCode::NotFound,
             E::Io { .. } => ErrorCode::Io,
             E::InvalidArgument(_) => ErrorCode::InvalidArgument,
+            E::Conflict(_) => ErrorCode::Conflict,
             E::Db(_) | E::Json(_) | E::SchemaTooNew { .. } => ErrorCode::Internal,
         };
         Self::new(code, err.to_string())

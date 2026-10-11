@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { installHistorySync, useNavigation } from "./navigation";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { handleSystemBack, installHistorySync, useNavigation, useOverlay } from "./navigation";
 
 /** jsdom's history.back() is async (fires popstate later). */
 function popped(): Promise<void> {
@@ -64,5 +65,55 @@ describe("navigation + back", () => {
     const before = history.length;
     useNavigation.getState().selectTab("library");
     expect(history.length).toBe(before);
+  });
+});
+
+describe("overlays (sheets, search)", () => {
+  it("system back closes an open overlay before navigating", async () => {
+    const onClose = vi.fn();
+    const { rerender } = renderHook(({ open }) => useOverlay(open, onClose), { initialProps: { open: false } });
+    rerender({ open: true });
+    const entry = history.state as { depth: number; overlay?: string };
+    expect(entry.depth).toBe(1);
+    expect(typeof entry.overlay).toBe("string");
+    expect(useNavigation.getState().depth).toBe(1);
+    await act(systemBack);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(useNavigation.getState()).toMatchObject({ route: { tab: "library", docId: null }, depth: 0 });
+  });
+
+  it("closing from the UI drops the overlay entry again", async () => {
+    const onClose = vi.fn();
+    const { rerender } = renderHook(({ open }) => useOverlay(open, onClose), { initialProps: { open: true } });
+    expect(useNavigation.getState().depth).toBe(1);
+    const p = popped();
+    rerender({ open: false });
+    await act(() => p);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(useNavigation.getState().depth).toBe(0);
+  });
+
+  it("a document opened over an overlay comes back to it", async () => {
+    const onClose = vi.fn();
+    renderHook(() => useOverlay(true, onClose));
+    useNavigation.getState().openDocument("doc-9");
+    expect(useNavigation.getState()).toMatchObject({ route: { docId: "doc-9" }, depth: 2 });
+    await act(systemBack);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(useNavigation.getState()).toMatchObject({ route: { docId: null }, depth: 1 });
+    await act(systemBack);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Android system back (window.__selisBack)", () => {
+  it("goes back inside the app, and hands over at the root", async () => {
+    expect(handleSystemBack()).toBe(false);
+    useNavigation.getState().openDocument("doc-7");
+    const p = popped();
+    expect(handleSystemBack()).toBe(true);
+    await p;
+    expect(useNavigation.getState()).toMatchObject({ route: { docId: null }, depth: 0 });
+    expect(handleSystemBack()).toBe(false);
   });
 });

@@ -23,6 +23,7 @@ specta = { workspace = true, optional = true }
 specta-typescript = { workspace = true, optional = true }
 tempfile.workspace = true
 thiserror.workspace = true
+unicode-normalization = "0.1.25"
 uuid.workspace = true
 
 [dev-dependencies]

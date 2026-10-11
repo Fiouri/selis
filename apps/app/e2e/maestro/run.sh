@@ -8,6 +8,9 @@
 # checked for "ANR in <appId>" (appId from the flow) and the run fails if found.
 # Logs per run (Maestro output + logcat) go to .tmp/maestro-runs/<flow>/<timestamp>/.
 # Prerequisite: ./push-fixtures.sh <serial>, and the app installed.
+#
+# Optional hooks (e.g. open-with.sh): $PRE_RUN and $POST_RUN are run as
+# "$PRE_RUN <serial>" before / after every run; a failing hook fails the run.
 set -u
 
 serial="${1:?usage: run.sh <serial> <flow.yaml> [runs]}"
@@ -33,10 +36,15 @@ pass=0
 fail=0
 for i in $(seq 1 "$runs"); do
   adb -s "$serial" logcat -c
-  if "$maestro" --device "$serial" test --debug-output "$tmp/maestro" "$flow" > "$out/run-$i.log" 2>&1; then
+  if [ -n "${PRE_RUN:-}" ] && ! $PRE_RUN "$serial" > "$out/pre-$i.log" 2>&1; then
+    result="FAIL (PRE_RUN: $(tail -1 "$out/pre-$i.log" | tr -d '\r'))"
+  elif "$maestro" --device "$serial" test --debug-output "$tmp/maestro" "$flow" > "$out/run-$i.log" 2>&1; then
     result=pass
   else
     result="FAIL ($(grep -o 'Assert that "[^"]*"[^.]*... FAILED\|Tap on "[^"]*"... FAILED\|[A-Za-z ]*"[^"]*" is visible... FAILED' "$out/run-$i.log" | head -1))"
+  fi
+  if [ "$result" = pass ] && [ -n "${POST_RUN:-}" ] && ! $POST_RUN "$serial" > "$out/post-$i.log" 2>&1; then
+    result="FAIL (POST_RUN: $(tail -1 "$out/post-$i.log" | tr -d '\r'))"
   fi
   adb -s "$serial" logcat -d -v time > "$out/logcat-$i.txt"
   if grep -q "ANR in $app_id" "$out/logcat-$i.txt"; then

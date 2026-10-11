@@ -29,8 +29,17 @@ the same terms.
 npm ci
 npm run fixtures
 npm run verify:tier1        # tsc, eslint, vitest, rustfmt, clippy, cargo test, cargo deny
-npm run e2e                 # Playwright mobile smoke (mock backend)
+npm run e2e                 # Playwright mobile smoke + 390×844 visual snapshots (mock backend)
 ```
+
+### Visual snapshots
+
+`apps/app/e2e/visual.spec.ts` compares every screen at the reference phone size (390×844) in
+light, dark and sepia with the approved design (`docs/design/p1-ui-brief.md`). Baselines are per
+OS (`e2e/visual.spec.ts-snapshots/*-win32.png`, `*-linux.png`, …) and a missing one is written on
+the first run. CI uploads its snapshot folder in the `playwright-report` artifact: after a UI change,
+download the new `*-linux.png` files from there, inspect them, and commit them. Update intended
+changes locally with `npx playwright test --project=visual-390 --update-snapshots`.
 
 Android: `npm run tauri -- android dev`. See the README for prerequisites.
 

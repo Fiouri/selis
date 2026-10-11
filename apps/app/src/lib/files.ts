@@ -44,10 +44,14 @@ function pickWithInput(): Promise<File | null> {
   });
 }
 
+/** URL for a library file (document copy, thumbnail): the scoped asset protocol in Tauri. */
+export function assetUrl(path: string): string {
+  return isTauri() ? convertFileSrc(path) : path;
+}
+
 /** Reads a library file. Tauri serves it through the scoped asset protocol. */
 export async function readDocumentBytes(path: string): Promise<ArrayBuffer> {
-  const url = isTauri() ? convertFileSrc(path) : path;
-  const response = await fetch(url);
+  const response = await fetch(assetUrl(path));
   if (!response.ok) throw new Error(`failed to read document (${response.status})`);
   return response.arrayBuffer();
 }

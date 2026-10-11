@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import { I18nextProvider } from "react-i18next";
+import { OpenWithBridge } from "./features/library/OpenWithBridge";
 import { i18n } from "./i18n";
 import { DesktopShell } from "./layouts/DesktopShell";
 import { PhoneShell } from "./layouts/PhoneShell";
@@ -29,6 +30,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
+        <OpenWithBridge />
         {shell === "phone" ? <PhoneShell /> : shell === "tablet" ? <TabletShell /> : <DesktopShell />}
       </I18nextProvider>
     </QueryClientProvider>

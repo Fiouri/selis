@@ -11,11 +11,15 @@ export const commands = {
 	 *  `content://` URI from the Storage Access Framework on Android, a file URL on
 	 *  iOS) by copying it into the app library. The source is opened read-only.
 	 * 
+	 *  `name` is the sender's file name when known (Android "Open with" / share);
+	 *  otherwise the title is derived from the source.
+	 * 
 	 *  Runs once per `request_id`: a repeated call returns the first call's result
 	 *  (see `take_result`).
 	 */
-	importDocument: (requestId: string, source: string) => typedError<ImportOutcome, CommandError>(__TAURI_INVOKE("import_document", { requestId, source })),
-	listDocuments: () => typedError<Document[], CommandError>(__TAURI_INVOKE("list_documents")),
+	importDocument: (requestId: string, source: string, name: string | null) => typedError<ImportOutcome, CommandError>(__TAURI_INVOKE("import_document", { requestId, source, name })),
+	/**  Library listing: title search, filter (all / favorites / received / opened, tag) and sort. */
+	listDocuments: (query: LibraryQuery) => typedError<Document[], CommandError>(__TAURI_INVOKE("list_documents", { query })),
 	/**
 	 *  Resolves a library document to its stored copy for the viewer.
 	 *  The returned path is readable through the asset protocol (library dir only).
@@ -26,6 +30,29 @@ export const commands = {
 	 *  once the engine has opened the document.
 	 */
 	recordDocumentInfo: (id: string, pageCount: number, pdfTitle: string | null) => typedError<Document, CommandError>(__TAURI_INVOKE("record_document_info", { id, pageCount, pdfTitle })),
+	/**  Idempotent: sets the flag, does not toggle it. */
+	setFavorite: (id: string, favorite: boolean) => typedError<Document, CommandError>(__TAURI_INVOKE("set_favorite", { id, favorite })),
+	/**
+	 *  Resolves the stored copy without marking the document as opened
+	 *  (used to render its thumbnail in the background).
+	 */
+	documentFile: (id: string) => typedError<DocumentFile, CommandError>(__TAURI_INVOKE("document_file", { id })),
+	/**
+	 *  Stores the page-1 thumbnail (WebP, or PNG/JPEG where the WebView cannot
+	 *  encode WebP) rendered by the engine worker. Idempotent per document.
+	 */
+	saveThumbnail: (id: string, image: number[]) => typedError<Document, CommandError>(__TAURI_INVOKE("save_thumbnail", { id, image })),
+	listTags: () => typedError<Tag[], CommandError>(__TAURI_INVOKE("list_tags")),
+	/**  Returns the existing tag when one with the same (folded) name exists. */
+	createTag: (name: string) => typedError<Tag, CommandError>(__TAURI_INVOKE("create_tag", { name })),
+	renameTag: (id: string, name: string) => typedError<Tag, CommandError>(__TAURI_INVOKE("rename_tag", { id, name })),
+	deleteTag: (id: string) => typedError<null, CommandError>(__TAURI_INVOKE("delete_tag", { id })),
+	/**  Replaces the document's tag set (idempotent). */
+	setDocumentTags: (documentId: string, tagIds: string[]) => typedError<Document, CommandError>(__TAURI_INVOKE("set_document_tags", { documentId, tagIds })),
+	/**  Documents waiting to be imported, oldest first. */
+	pendingOpens: () => typedError<PendingOpen[], CommandError>(__TAURI_INVOKE("pending_opens")),
+	/**  Called once a pending document has been imported (or failed for good). */
+	dismissOpen: (id: string) => typedError<null, CommandError>(__TAURI_INVOKE("dismiss_open", { id })),
 	getSettings: () => typedError<Settings, CommandError>(__TAURI_INVOKE("get_settings")),
 	updateSettings: (patch: SettingsPatch) => typedError<Settings, CommandError>(__TAURI_INVOKE("update_settings", { patch })),
 	/**  Total device RAM, used by the UI to pick render limits (resolution, cache size). */
@@ -70,6 +97,14 @@ export type Document = {
 	modifiedAt: number,
 	lastOpenedAt: number | null,
 	favorite: boolean,
+	/**  Arrived from another device (P3 transfer), as opposed to a local import. */
+	received: boolean,
+	/**  Sorted tag ids. */
+	tagIds: string[],
+	/**  Absolute path of the cached page-1 thumbnail (asset protocol), if any. */
+	thumbnailPath: string | null,
+	/**  Zero-based page the reader was on when the document was last closed. */
+	lastPage: number | null,
 };
 
 /**  Resolved file for viewing. `path` is absolute and inside the library directory. */
@@ -82,6 +117,8 @@ export type DocumentKind = "imported" | "linked";
 
 /**  Machine-readable error category; the UI maps it to a localized message. */
 export type ErrorCode = "notPdf" | "emptyFile" | "notFound" | "io" | "invalidArgument" | 
+/**  The name (e.g. of a tag) is already taken. */
+"conflict" | 
 /**  The operation did not finish in time (nothing was written). */
 "timeout" | "internal";
 
@@ -90,6 +127,32 @@ export type ImportOutcome = {
 	/**  True when an identical file (same BLAKE3) was already in the library. */
 	duplicate: boolean,
 };
+
+/**  Which documents a library listing contains. */
+export type LibraryFilter = "all" | "favorites" | "received" | 
+/**  Opened at least once (the Recent tab). */
+"opened";
+
+export type LibraryQuery = {
+	/**  Title search: case-, accent- and final-sigma-insensitive substring. Empty = all. */
+	search?: string,
+	filter?: LibraryFilter,
+	/**  Only documents carrying this tag. */
+	tagId?: string | null,
+	sort?: LibrarySort,
+};
+
+export type LibrarySort = 
+/**  Latest activity first: opened or imported, whichever is newer. */
+"recent" | 
+/**  Title A→Z (folded); untitled documents last. */
+"name" | 
+/**  Largest first. */
+"size" | 
+/**  Most recently opened first (the Recent tab). */
+"lastOpened";
+
+export type LibraryView = "grid" | "list";
 
 export type LocalePref = "system" | "el" | "en";
 
@@ -101,17 +164,29 @@ export type MemorySource =
 /**  iOS `NSProcessInfo.physicalMemory`. */
 "processInfo";
 
+export type PendingOpen = {
+	id: string,
+	/**  `content://` URI (Android) or `file://` URL (iOS), passed to `import_document`. */
+	source: string,
+	/**  The sender's file name, when it told us. */
+	name: string | null,
+};
+
 export type PickOutcome = { status: "picked"; source: string } | { status: "cancelled" };
 
 export type Settings = {
 	locale: LocalePref,
 	theme: ThemePref,
+	librarySort: LibrarySort,
+	libraryView: LibraryView,
 };
 
 /**  Partial update; `None` fields are left unchanged. */
 export type SettingsPatch = {
 	locale: LocalePref | null,
 	theme: ThemePref | null,
+	librarySort: LibrarySort | null,
+	libraryView: LibraryView | null,
 };
 
 /**
@@ -121,6 +196,12 @@ export type SettingsPatch = {
 export type StoredResult = { status: "ok"; 
 /**  The command's own result type; the UI knows which command it called. */
 data: unknown } | { status: "error"; error: CommandError };
+
+export type Tag = {
+	id: string,
+	name: string,
+	documentCount: number,
+};
 
 /**  Answer of `take_result`. */
 export type TakeResult = 

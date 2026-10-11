@@ -57,7 +57,7 @@ describe("ImportController", () => {
     t.pick().resolve("content://doc");
     await flush();
     expect(t.controller.getState().status).toBe("importing");
-    expect(t.deps.importDocument).toHaveBeenCalledWith("content://doc");
+    expect(t.deps.importDocument).toHaveBeenCalledWith("content://doc", null);
     t.imp().resolve(outcome);
     await flush();
     expect(t.handlers.onDone).toHaveBeenCalledWith(outcome);
@@ -87,7 +87,7 @@ describe("ImportController", () => {
     t.newImport();
     t.controller.retry();
     expect(t.controller.getState()).toMatchObject({ status: "importing", attempt: 2 });
-    expect(t.deps.importDocument).toHaveBeenLastCalledWith("s");
+    expect(t.deps.importDocument).toHaveBeenLastCalledWith("s", null);
     t.imp().resolve(outcome);
     await flush();
     expect(t.handlers.onDone).toHaveBeenCalled();
@@ -166,5 +166,18 @@ describe("ImportController", () => {
     t.pick().resolve(null);
     await flush();
     expect(seen).toEqual(["picking", "cancelled", "idle"]);
+  });
+
+  it("imports a shared document without the picker, and refuses while busy", async () => {
+    const t = setup();
+    expect(t.controller.importSource("content://shared", "Shared.pdf", t.handlers)).toBe(true);
+    expect(t.deps.pick).not.toHaveBeenCalled();
+    expect(t.deps.importDocument).toHaveBeenCalledWith("content://shared", "Shared.pdf");
+    expect(t.controller.importSource("content://other", null, t.handlers)).toBe(false);
+    t.imp().resolve(outcome);
+    await flush();
+    expect(t.handlers.onDone).toHaveBeenCalledWith(outcome);
+    expect(t.controller.getState().status).toBe("idle");
+    expect(t.controller.importSource("content://other", null, t.handlers)).toBe(true);
   });
 });

@@ -11,7 +11,10 @@ const ICONS: Record<Tab, LucideIcon> = {
 
 type Props = { orientation: "horizontal" | "vertical" };
 
-/** Bottom tab bar (phone) or navigation rail (tablet). */
+/**
+ * Bottom tab bar (phone; docs/design/p1-ui-brief.md: 4 columns, padding 6 8
+ * + bottom inset, 56×30 pill + 12 px label) or navigation rail (tablet).
+ */
 export function TabNavigation({ orientation }: Props) {
   const { t } = useTranslation();
   const current = useNavigation((s) => s.route.tab);
@@ -24,15 +27,20 @@ export function TabNavigation({ orientation }: Props) {
       className={
         vertical
           ? "flex h-full w-20 shrink-0 flex-col items-center gap-2 border-r border-neutral-5 bg-neutral-2"
-          : "shrink-0 border-t border-neutral-5 bg-neutral-2"
+          : "shrink-0 border-t border-neutral-5 bg-surface-app"
       }
       style={
         vertical
           ? { paddingTop: "calc(var(--safe-top) + 16px)", paddingLeft: "var(--safe-left)" }
-          : { paddingBottom: "var(--safe-bottom)", paddingLeft: "var(--safe-left)", paddingRight: "var(--safe-right)" }
+          : {
+              paddingTop: 6,
+              paddingBottom: "var(--safe-bottom)",
+              paddingLeft: "calc(var(--safe-left) + 8px)",
+              paddingRight: "calc(var(--safe-right) + 8px)",
+            }
       }
     >
-      <ul className={vertical ? "flex flex-col gap-2" : "grid h-(--tabbar-height) grid-cols-4"}>
+      <ul className={vertical ? "flex flex-col gap-2" : "grid h-[calc(var(--tabbar-height)-6px)] grid-cols-4"}>
         {TABS.map((tab) => {
           const Icon = ICONS[tab];
           const active = tab === current;
@@ -44,10 +52,10 @@ export function TabNavigation({ orientation }: Props) {
                 onClick={() => selectTab(tab)}
                 className={`selis-focus group flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 ${
                   vertical ? "w-20 py-1" : ""
-                } ${active ? "text-accent-11" : "text-neutral-11"}`}
+                } ${active ? "text-accent-selected" : "text-neutral-11"}`}
               >
                 <span
-                  className={`flex h-8 w-14 items-center justify-center rounded-full transition-colors duration-150 ease-standard ${
+                  className={`flex h-[30px] w-14 items-center justify-center rounded-[15px] transition-colors duration-150 ease-standard ${
                     active ? "bg-accent-3" : "group-hover:bg-neutral-3"
                   }`}
                 >

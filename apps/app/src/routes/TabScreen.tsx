@@ -4,12 +4,12 @@ import { RecentScreen } from "./RecentScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { TransferScreen } from "./TransferScreen";
 
-export function TabScreen({ tab, activeId = null }: { tab: Tab; activeId?: string | null }) {
+export function TabScreen({ tab }: { tab: Tab }) {
   switch (tab) {
     case "library":
-      return <LibraryScreen activeId={activeId} />;
+      return <LibraryScreen />;
     case "recent":
-      return <RecentScreen activeId={activeId} />;
+      return <RecentScreen />;
     case "transfer":
       return <TransferScreen />;
     case "settings":

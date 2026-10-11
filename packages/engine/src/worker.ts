@@ -3,24 +3,33 @@
  * PDF engine worker: EmbedPDF's PDFium build (WASM) runs here, off the UI thread.
  * - WASM is loaded from the app bundle (never a CDN).
  * - Font fallback is disabled: no network requests, ever.
- * - Renders are queued: visible pages before prefetch pages, in request order.
- *   Pages that scroll away cancel their queued renders, so the queue only holds
- *   what is (about to be) on screen.
+ * - Renders are queued: visible pages before prefetch pages and thumbnails, in
+ *   request order. Pages that scroll away cancel their queued renders, so the
+ *   queue only holds what is (about to be) on screen.
+ * - Thumbnails are encoded here (OffscreenCanvas → WebP, JPEG where the WebView
+ *   cannot encode WebP), so the UI thread only receives a small file. WebKits
+ *   without OffscreenCanvas in workers (iOS < 16.4) get raw pixels instead and
+ *   the client encodes the small image.
  */
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import { type PdfDocumentObject, PdfErrorCode, type PdfErrorReason } from "@embedpdf/models";
 import { init } from "@embedpdf/pdfium";
 import wasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
-import { clampScale, type WorkerRequest, type WorkerResponse } from "./protocol";
+import { clampScale, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
 import type { EngineErrorCode } from "./types";
 
 declare const self: DedicatedWorkerGlobalScope;
 
 type RenderJob = Extract<WorkerRequest, { type: "render" }>;
+type ThumbnailJob = Extract<WorkerRequest, { type: "thumbnail" }>;
+type Job = RenderJob | ThumbnailJob;
+
+const WEBP_QUALITY = 0.8;
+const JPEG_QUALITY = 0.85;
 
 let nativePromise: Promise<PdfiumNative> | null = null;
 const docs = new Map<string, PdfDocumentObject>();
-const queue: RenderJob[] = [];
+const queue: Job[] = [];
 let draining = false;
 let nextDocId = 1;
 
@@ -121,9 +130,45 @@ async function runRender(job: RenderJob): Promise<void> {
   }
 }
 
-/** Oldest visible-page job, else oldest prefetch job. */
-function takeNext(): RenderJob | undefined {
-  const visible = queue.findIndex((job) => !job.prefetch);
+async function encodeImage(width: number, height: number, data: Uint8ClampedArray): Promise<{ mime: string; bytes: ArrayBuffer }> {
+  if (typeof OffscreenCanvas === "undefined") return { mime: RAW_RGBA, bytes: data.slice().buffer };
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("no 2d context for thumbnail encoding");
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(data), width, height), 0, 0);
+  let blob = await canvas.convertToBlob({ type: "image/webp", quality: WEBP_QUALITY });
+  // Unsupported types silently fall back to PNG (e.g. WKWebView); JPEG is far smaller.
+  if (blob.type !== "image/webp") blob = await canvas.convertToBlob({ type: "image/jpeg", quality: JPEG_QUALITY });
+  return { mime: blob.type, bytes: await blob.arrayBuffer() };
+}
+
+async function runThumbnail(job: ThumbnailJob): Promise<void> {
+  const doc = docs.get(job.docId);
+  const page = doc?.pages[job.index];
+  if (!doc || !page) {
+    post({ type: "error", reqId: job.reqId, code: "closed", message: "document or page not available" });
+    return;
+  }
+  const scale = thumbnailScale(page.size, job.maxWidth, job.maxHeight);
+  if (scale <= 0) {
+    post({ type: "error", reqId: job.reqId, code: "unknown", message: "invalid thumbnail size" });
+    return;
+  }
+  try {
+    const engine = await native();
+    const raw = await engine
+      .renderPageRaw(doc, page, { scaleFactor: scale, dpr: 1, withAnnotations: true, withForms: true })
+      .toPromise();
+    const { mime, bytes } = await encodeImage(raw.width, raw.height, raw.data);
+    post({ type: "thumbnail", reqId: job.reqId, width: raw.width, height: raw.height, mime, bytes }, [bytes]);
+  } catch (err) {
+    post({ type: "error", reqId: job.reqId, ...toError(err) });
+  }
+}
+
+/** Oldest visible-page job, else the oldest prefetch or thumbnail job. */
+function takeNext(): Job | undefined {
+  const visible = queue.findIndex((job) => job.type === "render" && !job.prefetch);
   return queue.splice(visible >= 0 ? visible : 0, 1)[0];
 }
 
@@ -133,7 +178,8 @@ function drain(): void {
   draining = true;
   setTimeout(async () => {
     const job = takeNext();
-    if (job) await runRender(job);
+    if (job?.type === "render") await runRender(job);
+    else if (job) await runThumbnail(job);
     draining = false;
     if (queue.length > 0) drain();
   }, 0);
@@ -176,6 +222,7 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       void handleOpen(req);
       break;
     case "render":
+    case "thumbnail":
       queue.push(req);
       drain();
       break;

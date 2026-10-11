@@ -6,7 +6,16 @@
  * undo is a history entry:
  *   Library (root, depth 0) → other tab (depth 1) → viewer (depth +1).
  * Back from the root lets Android finish the activity.
+ *
+ * Overlays (bottom sheets, search) are history entries too (`useOverlay`), so
+ * back closes them before it navigates.
+ *
+ * Android asks `window.__selisBack()` first (MainActivity.kt): it goes back in
+ * the app and returns true, or returns false at the root so the system leaves the
+ * app. (Relying on WebView history alone fails: Chromium skips entries pushed
+ * without a user gesture, e.g. a viewer opened by "Open with".)
  */
+import { useEffect, useRef } from "react";
 import { create } from "zustand";
 
 export const TABS = ["library", "recent", "transfer", "settings"] as const;
@@ -14,7 +23,7 @@ export type Tab = (typeof TABS)[number];
 
 export type Route = { readonly tab: Tab; readonly docId: string | null };
 
-type HistoryEntry = { selis: 1; route: Route; depth: number };
+type HistoryEntry = { selis: 1; route: Route; depth: number; overlay?: string };
 
 type NavigationState = {
   route: Route;
@@ -80,17 +89,103 @@ export const useNavigation = create<NavigationState>()((set, get) => {
   };
 });
 
+type Overlay = { token: string; depth: number; onPopped: () => void };
+
+/** Open overlays, innermost last. */
+const overlays: Overlay[] = [];
+/** A just-released overlay entry, reused if another overlay opens right away (React StrictMode). */
+let releasing: { token: string; timer: number } | null = null;
+let overlaySeq = 0;
+
+function pushOverlay(onPopped: () => void): string {
+  const { route, depth } = useNavigation.getState();
+  overlaySeq += 1;
+  const token = `overlay-${overlaySeq}`;
+  const reuse = releasing !== null && isEntry(history.state) && history.state.overlay === releasing.token;
+  if (releasing) window.clearTimeout(releasing.timer);
+  releasing = null;
+  const entry: HistoryEntry = { selis: 1, route, depth: reuse ? depth : depth + 1, overlay: token };
+  if (reuse) history.replaceState(entry, "");
+  else history.pushState(entry, "");
+  overlays.push({ token, depth: entry.depth, onPopped });
+  useNavigation.setState({ depth: entry.depth });
+  return token;
+}
+
+function releaseOverlay(token: string): void {
+  const index = overlays.findIndex((o) => o.token === token);
+  if (index < 0) return; // already closed by back
+  overlays.splice(index, 1);
+  if (!isEntry(history.state) || history.state.overlay !== token) return; // something was pushed on top
+  // Drop our entry, unless another overlay opens in the same tick and takes it over.
+  if (releasing) window.clearTimeout(releasing.timer);
+  releasing = {
+    token,
+    timer: window.setTimeout(() => {
+      releasing = null;
+      history.back();
+    }, 0),
+  };
+}
+
+/**
+ * While `open`, the overlay owns a history entry: system back calls `onClose`.
+ * Closing it from the UI (or unmounting) removes the entry again.
+ */
+export function useOverlay(open: boolean, onClose: () => void): void {
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+  useEffect(() => {
+    if (!open) return;
+    const token = pushOverlay(() => onCloseRef.current());
+    return () => releaseOverlay(token);
+  }, [open]);
+}
+
+/** System back inside the app; false at the root (nothing to go back to). */
+export function handleSystemBack(): boolean {
+  const { route, depth } = useNavigation.getState();
+  if (depth === 0 && route.docId === null) return false;
+  useNavigation.getState().back();
+  return true;
+}
+
 /** Seeds the root history entry and follows popstate. Call once at startup. */
 export function installHistorySync(): () => void {
+  (window as unknown as { __selisBack?: () => boolean }).__selisBack = handleSystemBack;
   const { route, depth } = useNavigation.getState();
-  if (isEntry(history.state)) {
+  if (isEntry(history.state) && history.state.overlay === undefined) {
     useNavigation.setState({ route: history.state.route, depth: history.state.depth });
+  } else if (isEntry(history.state)) {
+    // Reloaded on an overlay entry: its owner is gone.
+    useNavigation.setState({ route: history.state.route, depth: history.state.depth });
+    history.back();
   } else {
     history.replaceState({ selis: 1, route, depth } satisfies HistoryEntry, "");
   }
   const onPop = (event: PopStateEvent) => {
-    if (isEntry(event.state)) useNavigation.setState({ route: event.state.route, depth: event.state.depth });
-    else useNavigation.setState({ route: ROOT, depth: 0 });
+    const state: unknown = event.state;
+    const nextDepth = isEntry(state) ? state.depth : 0;
+    // Overlays above the entry we landed on were closed by back.
+    for (let i = overlays.length - 1; i >= 0; i--) {
+      const overlay = overlays[i];
+      if (overlay && overlay.depth > nextDepth) {
+        overlays.splice(i, 1);
+        overlay.onPopped();
+      }
+    }
+    if (isEntry(state)) {
+      useNavigation.setState({ route: state.route, depth: state.depth });
+      // An overlay entry whose owner already closed (e.g. its screen unmounted): skip it.
+      const owner = state.overlay;
+      if (owner !== undefined && releasing?.token !== owner && !overlays.some((o) => o.token === owner)) {
+        history.back();
+      }
+    } else {
+      useNavigation.setState({ route: ROOT, depth: 0 });
+    }
   };
   window.addEventListener("popstate", onPop);
   return () => window.removeEventListener("popstate", onPop);
