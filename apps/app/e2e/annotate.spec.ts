@@ -12,13 +12,17 @@ type TestWindow = { __selisTest: { inspect: Inspect; failCommands?: string[] } }
 type Query = Exclude<keyof Inspect, "ids">;
 
 /** Asks the mock backend about the newest document. */
-async function inspect<K extends Query>(page: Page, query: K): Promise<Awaited<ReturnType<Inspect[K]>>> {
+async function ask(page: Page, query: Query): Promise<unknown> {
   return page.evaluate(async (name) => {
     const api = (window as unknown as TestWindow).__selisTest.inspect;
     const id = api.ids()[0] as string;
-    return (await api[name](id)) as Awaited<ReturnType<Inspect[K]>>;
+    return await (api[name] as (id: string) => unknown)(id);
   }, query);
 }
+const versions = async (page: Page) => Number(await ask(page, "versions"));
+const versionLabels = async (page: Page) => (await ask(page, "versionLabels")) as string[];
+const hasWorkingCopy = async (page: Page) => (await ask(page, "hasWorkingCopy")) === true;
+const documentText = async (page: Page) => String(await ask(page, "documentText"));
 
 async function setFailing(page: Page, commands: string[]): Promise<void> {
   await page.evaluate((list) => {
@@ -107,14 +111,14 @@ test("annotate: markup, pen, shapes, text, note, eraser with undo/redo; Done mak
   await page.screenshot({ path: `${SCREENSHOTS}/${info.project.name}-annotate-edited.png` });
 
   // Autosave writes the working copy once the edits pause (3 s), not a version.
-  await expect.poll(() => inspect(page, "hasWorkingCopy"), { timeout: 10_000 }).toBe(true);
-  expect(await inspect(page, "versions")).toBe(1);
+  await expect.poll(() => hasWorkingCopy(page), { timeout: 10_000 }).toBe(true);
+  expect(await versions(page)).toBe(1);
 
   await page.getByTestId("annotate-done").click();
   await expect(page.getByTestId("annotate-bar")).toHaveCount(0);
   await expect(page.getByTestId("save-status")).toHaveText(" · saved");
-  await expect.poll(() => inspect(page, "versions")).toBe(2);
-  const pdf = await inspect(page, "documentText");
+  await expect.poll(() => versions(page)).toBe(2);
+  const pdf = await documentText(page);
   for (const subtype of ["/Highlight", "/Underline", "/StrikeOut", "/Circle", "/Stamp", "/Text"]) expect(pdf).toContain(subtype);
   // The pen stroke was erased.
   expect(pdf).not.toContain("/Ink");
@@ -129,7 +133,7 @@ test("annotate: system back leaves annotate mode and saves", async ({ page }) =>
   await page.goBack();
   await expect(page.getByTestId("annotate-bar")).toHaveCount(0);
   await expect(page.getByTestId("viewer-screen")).toBeVisible();
-  await expect.poll(() => inspect(page, "versions")).toBe(2);
+  await expect.poll(() => versions(page)).toBe(2);
 });
 
 test("crash recovery: unsaved edits come back as a version on the next open", async ({ page }) => {
@@ -137,13 +141,13 @@ test("crash recovery: unsaved edits come back as a version on the next open", as
   await page.getByTestId("dock-annotate").click();
   await page.getByTestId("tool-pen").click();
   await drag(page, page.getByTestId("annotation-layer-1"), [0.2, 0.5], [0.5, 0.55]);
-  await expect.poll(() => inspect(page, "hasWorkingCopy"), { timeout: 10_000 }).toBe(true);
+  await expect.poll(() => hasWorkingCopy(page), { timeout: 10_000 }).toBe(true);
   // The app "dies" before the version is written: saving fails, the working copy stays.
   await setFailing(page, ["save_version"]);
   await page.goBack();
   await page.goBack();
   await expect(page.getByTestId("viewer-screen")).toHaveCount(0);
-  expect(await inspect(page, "versions")).toBe(1);
+  expect(await versions(page)).toBe(1);
   await setFailing(page, []);
 
   await page.getByTestId("document-card").first().click();
@@ -151,7 +155,7 @@ test("crash recovery: unsaved edits come back as a version on the next open", as
   await page.getByTestId("recovery-dialog-confirm").click();
   await expect(page.getByTestId("toast")).toContainText("recovered");
   await firstPageRendered(page);
-  expect(await inspect(page, "versionLabels")).toEqual(["auto"]);
-  expect(await inspect(page, "hasWorkingCopy")).toBe(false);
-  expect(await inspect(page, "documentText")).toContain("/Ink");
+  expect(await versionLabels(page)).toEqual(["auto"]);
+  expect(await hasWorkingCopy(page)).toBe(false);
+  expect(await documentText(page)).toContain("/Ink");
 });
