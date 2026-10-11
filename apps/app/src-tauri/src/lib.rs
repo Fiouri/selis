@@ -20,6 +20,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::library::record_document_info,
         commands::library::set_favorite,
         commands::library::set_last_page,
+        commands::library::rename_document,
+        commands::library::delete_document,
         commands::library::document_file,
         commands::library::save_thumbnail,
         commands::tags::list_tags,

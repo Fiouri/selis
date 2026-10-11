@@ -4,9 +4,8 @@
 //! Per document, versions are pruned oldest first until both limits hold. Two
 //! versions are never removed: v1 (the imported original) and the newest one
 //! (the current content). A stored file is deleted only once no version and no
-//! document refers to it any more. Originals outside the library are never touched.
+//! document refers to it any more (see `delete.rs`). Originals outside the library are never touched.
 
-use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
@@ -99,29 +98,13 @@ impl Library {
         }
         Ok(report)
     }
-
-    /// Deletes a library file once no version and no document points at it.
-    fn remove_if_unreferenced(&self, location: &str) -> Result<()> {
-        let referenced: i64 = self.conn().query_row(
-            "SELECT (SELECT COUNT(*) FROM versions WHERE file_path = ?1)
-                  + (SELECT COUNT(*) FROM documents WHERE location = ?1)",
-            params![location],
-            |r| r.get(0),
-        )?;
-        if referenced == 0
-            && let Ok(path) = self.resolve_location(location)
-        {
-            // Already gone is fine: the row was the only thing that mattered.
-            let _ = std::fs::remove_file(path);
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::error::Error;
+    use rusqlite::params;
 
     /// A document with `count` versions (v1 = the import, then 1 KB files); the
     /// document points at the newest one, as after a save in P2.

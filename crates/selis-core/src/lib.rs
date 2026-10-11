@@ -5,6 +5,7 @@
 
 pub mod cancel;
 mod db;
+pub mod delete;
 pub mod error;
 pub mod fold;
 pub mod fsutil;
@@ -15,6 +16,7 @@ pub mod tags;
 pub mod thumbs;
 
 pub use cancel::{CancelToken, CancellableReader};
+pub use delete::DeleteReport;
 pub use error::{Error, Result};
 pub use fsutil::atomic_write;
 pub use hash::Blake3Hash;

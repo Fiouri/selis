@@ -21,6 +21,12 @@ export type BottomSheetProps = {
 export function BottomSheet({ open, onClose, title, hideTitle = false, children, testId }: BottomSheetProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  // Callers pass a fresh closure on every render; the open/close effect must
+  // not re-run for that (it would move focus back to the panel each time).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -31,7 +37,7 @@ export function BottomSheet({ open, onClose, title, hideTitle = false, children,
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
       }
     };
     document.addEventListener("keydown", onKey);
@@ -41,7 +47,7 @@ export function BottomSheet({ open, onClose, title, hideTitle = false, children,
       if (!document.querySelector("[data-selis-sheet]")) root?.removeAttribute("inert");
       previous?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return createPortal(

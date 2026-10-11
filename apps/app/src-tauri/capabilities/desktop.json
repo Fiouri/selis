@@ -21,6 +21,8 @@
     "allow-pick-pdf",
     "allow-take-result",
     "allow-set-favorite",
+    "allow-rename-document",
+    "allow-delete-document",
     "allow-document-file",
     "allow-save-thumbnail",
     "allow-list-tags",

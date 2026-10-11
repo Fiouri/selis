@@ -7,6 +7,7 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import type {
   CommandError,
+  DeleteReport,
   Document,
   DocumentFile,
   ImportOutcome,
@@ -245,6 +246,19 @@ function saveThumbnail(id: string, image: number[]): Document {
   return update(id, { thumbnailPath: URL.createObjectURL(new Blob([bytes], { type })) });
 }
 
+function renameDocument(id: string, title: string): Document {
+  // Same as Rust's `sanitize_title`: no control characters, trimmed, at most 512 chars.
+  const clean = Array.from(title.replace(/\p{Cc}/gu, "")).slice(0, 512).join("").trim();
+  return update(id, { title: clean });
+}
+
+function deleteDocument(id: string): DeleteReport {
+  const entry = entryOf(id);
+  docs.delete(id);
+  if (entry.doc.thumbnailPath?.startsWith("blob:")) URL.revokeObjectURL(entry.doc.thumbnailPath);
+  return { removedFiles: entry.doc.kind === "imported" ? 1 + (entry.doc.thumbnailPath ? 1 : 0) : 0 };
+}
+
 function listTags(): Tag[] {
   return [...tags.values()]
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
@@ -337,6 +351,10 @@ export function installMockIpc(): void {
         const page = Number(args.page);
         return update(id, { lastPage: doc.pageCount === null ? page : Math.min(page, doc.pageCount - 1) });
       }
+      case "rename_document":
+        return renameDocument(id, String(args.title));
+      case "delete_document":
+        return deleteDocument(id);
       case "set_favorite":
         return update(id, { favorite: Boolean(args.favorite) });
       case "save_thumbnail":

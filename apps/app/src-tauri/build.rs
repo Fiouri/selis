@@ -5,6 +5,8 @@ const APP_COMMANDS: &[&str] = &[
     "record_document_info",
     "set_favorite",
     "set_last_page",
+    "rename_document",
+    "delete_document",
     "document_file",
     "save_thumbnail",
     "list_tags",

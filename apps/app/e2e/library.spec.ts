@@ -152,3 +152,46 @@ test("Open with: a shared PDF is imported as a copy and opens in the viewer", as
   await expect(page.getByTestId("viewer-screen")).toHaveCount(0);
   await expect(cards(page)).toHaveCount(3);
 });
+
+test("rename from the menu (with undo) and delete after a confirm", async ({ page }) => {
+  await page.goto("/");
+  await addToLibrary(page, "greek.pdf", "Προσφορά.pdf");
+  await addToLibrary(page, "mixed-sizes.pdf", "Σημειώσεις.pdf");
+
+  await page.getByRole("button", { name: "Open Προσφορά" }).click({ button: "right" });
+  await page.getByTestId("document-menu").getByRole("button", { name: "Rename" }).click();
+  const input = page.getByLabel("New title");
+  await expect(input).toHaveValue("Προσφορά");
+  await expect(input).toBeFocused();
+  await input.fill("  ");
+  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+  await input.fill("Προσφορά 2027");
+  await input.press("Enter");
+  await expect(page.getByTestId("document-menu")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open Προσφορά 2027" })).toBeVisible();
+  const toast = page.getByTestId("toast");
+  await expect(toast).toContainText("Renamed to “Προσφορά 2027”");
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByRole("button", { name: "Open Προσφορά", exact: true })).toBeVisible();
+
+  // Cancel keeps the document.
+  await page.getByRole("button", { name: "Open Σημειώσεις" }).click({ button: "right" });
+  await page.getByTestId("document-menu").getByRole("button", { name: "Delete" }).click();
+  const dialog = page.getByTestId("delete-dialog");
+  await expect(dialog).toContainText("Delete “Σημειώσεις”?");
+  await expect(dialog).toContainText("The original file on your device stays as it is.");
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(cards(page)).toHaveCount(2);
+  // The dialog's history entry is popped asynchronously; no finger is that fast.
+  await expect.poll(() => page.evaluate(() => (history.state as { overlay?: string } | null)?.overlay)).toBeUndefined();
+
+  await page.getByRole("button", { name: "Open Σημειώσεις" }).click({ button: "right" });
+  await page.getByTestId("document-menu").getByRole("button", { name: "Delete" }).click();
+  await dialog.getByRole("button", { name: "Delete" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId("toast")).toContainText("Deleted “Σημειώσεις”");
+  await expect(cards(page)).toHaveCount(1);
+  await expect(cards(page).first()).toHaveAccessibleName("Open Προσφορά");
+});

@@ -34,6 +34,14 @@ export const commands = {
 	setFavorite: (id: string, favorite: boolean) => typedError<Document, CommandError>(__TAURI_INVOKE("set_favorite", { id, favorite })),
 	/**  The reader's position (zero-based page); restored when the document opens again. */
 	setLastPage: (id: string, page: number) => typedError<Document, CommandError>(__TAURI_INVOKE("set_last_page", { id, page })),
+	/**  Changes the library title only; the stored file keeps its name. Idempotent. */
+	renameDocument: (id: string, title: string) => typedError<Document, CommandError>(__TAURI_INVOKE("rename_document", { id, title })),
+	/**
+	 *  Removes a document from the library: rows in one transaction, then the
+	 *  library's own files (copy, versions, thumbnail). A linked document's
+	 *  external file is never touched.
+	 */
+	deleteDocument: (id: string) => typedError<DeleteReport, CommandError>(__TAURI_INVOKE("delete_document", { id })),
 	/**
 	 *  Resolves the stored copy without marking the document as opened
 	 *  (used to render its thumbnail in the background).
@@ -82,6 +90,11 @@ export type CommandError = {
 	code: ErrorCode,
 	/**  Developer-facing detail, never shown verbatim to users. */
 	message: string,
+};
+
+export type DeleteReport = {
+	/**  Library files removed from disk (stored copy, versions, thumbnail). */
+	removedFiles: number,
 };
 
 export type DeviceMemory = {

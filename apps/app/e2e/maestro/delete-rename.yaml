@@ -1,0 +1,99 @@
+# Library on Android: rename a document from the long-press menu (with undo) and
+# delete one after the confirm dialog; both are still true after a restart.
+# Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh and
+#   POST_RUN="apps/app/e2e/maestro/delete-rename.sh check"
+# (only the kept document's files are left in app data; the originals in
+# Download/ are byte-identical).
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Library rename and delete
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "greek.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+- back
+- tapOn: "Import PDF"
+- tapOn: "mixed-sizes.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 7"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "Open Mixed page sizes fixture"
+    timeout: 10000
+
+# Rename inline in the menu, then undo from the toast.
+- longPressOn: "Open Ελληνικό δοκιμαστικό"
+- tapOn: "Rename"
+# DevTools mode reports the input's DOM id (not data-testid): wait for its label.
+- extendedWaitUntil:
+    visible: "New title"
+    timeout: 5000
+- eraseText: 40
+- inputText: "Offer 2027"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Open Offer 2027"
+    timeout: 5000
+- tapOn: "Undo"
+- extendedWaitUntil:
+    visible: "Open Ελληνικό δοκιμαστικό"
+    timeout: 5000
+
+# Rename for good.
+- longPressOn: "Open Ελληνικό δοκιμαστικό"
+- tapOn: "Rename"
+- extendedWaitUntil:
+    visible: "New title"
+    timeout: 5000
+- eraseText: 40
+- inputText: "Offer 2027"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Open Offer 2027"
+    timeout: 5000
+
+# Delete: Cancel keeps the document, Delete removes it.
+- longPressOn: "Open Mixed page sizes fixture"
+- tapOn: "Delete"
+- extendedWaitUntil:
+    visible:
+      id: "delete-dialog"
+    timeout: 5000
+- assertVisible: "Delete “Mixed page sizes fixture”?"
+- tapOn:
+    id: "delete-dialog-cancel"
+- assertNotVisible:
+    id: "delete-dialog"
+- assertVisible: "Open Mixed page sizes fixture"
+- longPressOn: "Open Mixed page sizes fixture"
+- tapOn: "Delete"
+- extendedWaitUntil:
+    visible:
+      id: "delete-dialog-cancel"
+    timeout: 5000
+# Maestro's DevTools snapshot does not always carry the confirm button's test id.
+- tapOn:
+    text: "Delete"
+    rightOf:
+      id: "delete-dialog-cancel"
+- extendedWaitUntil:
+    notVisible: "Open Mixed page sizes fixture"
+    timeout: 5000
+- assertVisible: "Open Offer 2027"
+
+# Restart: both changes are in SQLite.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Open Offer 2027"
+    timeout: 20000
+- assertNotVisible: "Open Mixed page sizes fixture"
+- assertNotVisible: "Open Ελληνικό δοκιμαστικό"
