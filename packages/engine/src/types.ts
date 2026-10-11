@@ -194,6 +194,8 @@ export type FormField = {
   readonly rect: PageRect;
   /** Fully qualified field name. */
   readonly name: string;
+  /** What to call the field (its /TU tooltip, else the name). */
+  readonly label: string;
   readonly kind: FormFieldKind;
   /** Text value, or the field's current export value for buttons and choices. */
   readonly value: string;

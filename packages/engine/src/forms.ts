@@ -63,6 +63,7 @@ export function toFormField(w: PdfWidgetAnnoObject): FormField {
     page: w.pageIndex,
     rect: { x: w.rect.origin.x, y: w.rect.origin.y, width: w.rect.size.width, height: w.rect.size.height },
     name: field.name,
+    label: field.alternateName.trim() || field.name,
     kind,
     value: field.value,
     checked: kind === "checkbox" || kind === "radio" ? isOn(w) : false,

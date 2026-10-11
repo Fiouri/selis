@@ -248,3 +248,22 @@ describe("visual signatures", () => {
     expect(Math.abs((await inkIn(engine, doc, rect)) - inkBefore)).toBeLessThan(inkBefore * 0.2);
   });
 });
+
+/** With SELIS_SAMPLES=<dir>: the P2b samples for other readers (see the P2b PR). */
+describe.runIf(Boolean(process.env.SELIS_SAMPLES))("samples for other readers", () => {
+  it("writes a filled Greek form (fillable and flattened) and a signed page", async () => {
+    const { writeFileSync } = await import("node:fs");
+    const dir = process.env.SELIS_SAMPLES as string;
+    const doc = await open(fixture("acroform"));
+    const list = await fields(doc);
+    await setField(engine, text, doc, page0(doc), byName(list, "full_name").id, { kind: "text", text: "Γιάννης Παπαδόπουλος" });
+    await setField(engine, text, doc, page0(doc), byName(list, "email").id, { kind: "text", text: "giannis@example.gr" });
+    await setField(engine, text, doc, page0(doc), byName(list, "plan").id, { kind: "select", index: 2 });
+    const sig = png(240, 70, (x, y) => (Math.abs(y - 35 - 22 * Math.sin(x / 18)) < 2.5 ? [20, 30, 120, 255] : [255, 255, 255, 0]));
+    const stamp = { id: `${SIGNATURE_PREFIX}s`, page: 0, kind: "signature" as const, rect: { x: 320, y: 520, width: 180, height: 52 }, color: "#000000", opacity: 1, image: { mime: "image/png" as const, bytes: sig } };
+    await engine.createPageAnnotation(doc, page0(doc), toSignatureStamp(stamp), { data: sig }).toPromise();
+    writeFileSync(`${dir}/form-filled-signed.pdf`, new Uint8Array((await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer));
+    await flattenAll(engine, doc);
+    writeFileSync(`${dir}/form-flattened.pdf`, new Uint8Array((await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer));
+  });
+});

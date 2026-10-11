@@ -69,3 +69,25 @@ StrikeOut, Ink, Square, Circle, Line, Text) with PDFium-generated appearance str
   without changing stored documents' readability.
 - `@embedpdf/engines` internals used here (`cache.getContext`, `convertDevicePointToPagePoint`,
   `setPageAnnoRect`) are pinned by Node tests against the version in `package.json`.
+
+## Addendum (P2b): signatures and form text beyond Latin-1
+
+- **Visual signatures** are transparent PNGs (drawn, typed in one of three OFL handwriting fonts
+  with Greek: Mansalva, Mynerve, Playpen Sans; or a picture with the paper knocked out), stored
+  under `signatures/` (SQLite `signatures`). Placed as a Stamp with the PNG as its appearance,
+  `/NM` `selis-sig-…`, `/Contents` "Οπτική υπογραφή (όχι ψηφιακή) / Visual signature (not a
+  digital signature)". Never PAdES.
+- **Form fields** are filled through PDFium (`/V` is always set by it). PDFium draws text fields
+  with the DA's standard-14 font, so Greek values come out blank, and with `@embedpdf/pdfium`
+  2.15.1 `EPDFAnnot_SetAppearanceFromPage` on a *widget* loses the drawing's fonts (garbled text;
+  stamps are fine). So a value beyond Latin-1 is shown by an overlay: the widget's normal
+  appearance is emptied and a print-flagged Stamp `selis-field-<widget /NM>` exactly over it
+  draws the field's background, border and the text in the embedded font (`/Contents` = value).
+  Viewers draw form fields last, so the empty widget never hides it. A Latin value removes the
+  overlay and PDFium draws the field again. Checked: the value reads back (`/V`), the text
+  extracts after flattening, Chrome's viewer shows it with the field still fillable. Known
+  limit: a reader that later regenerates the field's appearance (e.g. after editing it there)
+  draws its own value over a stale overlay until Selis saves the field again.
+- **Flatten** uses PDFium's per-page flatten (fields and annotations become content). Undo
+  reloads the bytes saved just before (`reload`). PDFium leaves the catalog's `/AcroForm` with
+  now widget-less fields; readers show no fields.

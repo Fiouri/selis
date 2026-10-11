@@ -1,0 +1,78 @@
+# Forms and signatures on Android: fill the AcroForm fixture (text, next field,
+# checkbox), Done → a version; then draw a new visual signature, place it on the
+# page, Done → another version. Prerequisite: ./push-fixtures.sh <serial>. Run
+# with ./run.sh and
+#   POST_RUN="apps/app/e2e/maestro/sign-forms.sh check"
+# (original + 2 versions; the newest keeps the AcroForm with the typed value and
+# carries the signature stamp; one saved signature; the original untouched).
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Fill a form and sign it
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "acroform.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 1"
+    timeout: 20000
+
+# Form mode from the banner.
+- extendedWaitUntil:
+    visible: "Form with 4 fields"
+    timeout: 10000
+- tapOn: "Fill in"
+- extendedWaitUntil:
+    visible: "Tap a field to fill it in."
+    timeout: 5000
+# DevTools mode reports a control's accessible name as its id.
+- tapOn:
+    id: "Full name"
+# The field already holds "Ada Lovelace": replace it.
+- eraseText: 20
+- inputText: "Maria Papadopoulou"
+- hideKeyboard
+- tapOn: "Next field"
+- extendedWaitUntil:
+    visible: "Field 2 of 4"
+    timeout: 5000
+- hideKeyboard
+- tapOn:
+    id: "I agree"
+- tapOn: "Done"
+- extendedWaitUntil:
+    visible: ".*· saved"
+    timeout: 15000
+
+# Sign: a new drawn signature, placed on the page.
+- tapOn: "Sign"
+- extendedWaitUntil:
+    visible: "Visual signature"
+    timeout: 5000
+- tapOn: "New"
+- extendedWaitUntil:
+    visible:
+      id: "Signature drawing area"
+    timeout: 5000
+- swipe:
+    from:
+      id: "Signature drawing area"
+    direction: RIGHT
+    duration: 800
+- tapOn: "Save"
+- extendedWaitUntil:
+    visible: "Tap the page to place it. Drag to move it, drag the corner to resize."
+    timeout: 10000
+- tapOn:
+    point: 50%, 45%
+- extendedWaitUntil:
+    visible:
+      id: "Remove from the page"
+    timeout: 10000
+- tapOn: "Done"
+- extendedWaitUntil:
+    visible: ".*· saved"
+    timeout: 15000

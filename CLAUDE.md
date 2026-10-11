@@ -90,7 +90,9 @@ Tier 2 — end of every feature:
   both with `POST_RUN="…/open-with.sh check"` (original untouched), and `delete-rename.yaml` with
   `POST_RUN="…/delete-rename.sh check"` (deleted copy gone from app data, originals untouched), and
   `annotate.yaml` with `POST_RUN="…/annotate.sh check"` (original + 2 versions, annotations in the
-  newest, crash-recovered working copy promoted, original untouched). run.sh fails a run on
+  newest, crash-recovered working copy promoted, original untouched). And `sign-forms.yaml` with
+  `POST_RUN="…/sign-forms.sh check"` (form filled and signed: original + 2 versions, AcroForm kept,
+  one saved signature, original untouched). run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM).
 - Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC) + 390×844 visual snapshots in

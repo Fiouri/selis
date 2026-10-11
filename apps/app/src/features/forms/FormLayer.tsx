@@ -55,11 +55,12 @@ function TextControl({
     return (
       <button
         type="button"
-        aria-label={field.name}
+        aria-label={field.label}
         onPointerDown={(e) => e.preventDefault()}
         onClick={onOpen}
         className="selis-focus absolute rounded-[2px] border border-accent-7 bg-accent-3/35"
-        style={{ ...box, minHeight: Math.min(MIN_TARGET_PX, box.height + 16) }}
+        // The field's own box: growing it to 44 px would cover the next field (zoom in instead).
+        style={box}
         data-testid={`field-${field.name}`}
       />
     );
@@ -70,7 +71,7 @@ function TextControl({
     <textarea
       ref={textareaRef}
       value={draft}
-      aria-label={field.name}
+      aria-label={field.label}
       maxLength={field.maxLength ?? undefined}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -88,7 +89,7 @@ function TextControl({
     <input
       ref={inputRef}
       value={draft}
-      aria-label={field.name}
+      aria-label={field.label}
       maxLength={field.maxLength ?? undefined}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -157,7 +158,7 @@ export function FormLayer({ doc, index, scale, session }: { doc: DocHandle; inde
                 type="button"
                 role={field.kind === "radio" ? "radio" : "checkbox"}
                 aria-checked={field.checked}
-                aria-label={field.name}
+                aria-label={field.label}
                 onPointerDown={(e) => e.preventDefault()}
                 onClick={() => {
                   setActive(field.id);
@@ -181,13 +182,13 @@ export function FormLayer({ doc, index, scale, session }: { doc: DocHandle; inde
             return (
               <select
                 key={field.id}
-                aria-label={field.name}
+                aria-label={field.label}
                 value={selected >= 0 ? String(selected) : ""}
                 onFocus={() => setActive(field.id)}
                 onChange={(e) => change(field, { kind: "select", index: Number(e.target.value) })}
                 // Transparent: PDFium draws the value; the native picker opens on tap.
                 className="selis-focus pointer-events-auto absolute cursor-pointer appearance-none rounded-[2px] border border-accent-7 bg-accent-3/35 text-transparent"
-                style={{ ...box, minHeight: Math.min(MIN_TARGET_PX, box.height + 16) }}
+                style={box}
                 data-testid={`field-${field.name}`}
               >
                 {selected < 0 ? <option value="">{t("forms.chooseOption")}</option> : null}
