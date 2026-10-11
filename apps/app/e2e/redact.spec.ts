@@ -48,6 +48,8 @@ async function expectSearch(page: Page, query: string, expected: string | RegExp
 }
 
 test("redact: area + whiteout, erase, undo/redo, confirm, apply removes the text", async ({ page }, info) => {
+  // Long flow (import, four searches, apply twice): 60 s is tight on a loaded runner.
+  test.slow();
   await open(page);
   await expectSearch(page, "σύννεφο", "1 / 1");
 
