@@ -167,6 +167,7 @@ function hits(a: Annotation, p: Point, tolerance: number): boolean {
     }
     case "text":
     case "note":
+    case "signature":
       return distanceToRect(p, a.rect) <= tolerance;
     case "other":
       return false;

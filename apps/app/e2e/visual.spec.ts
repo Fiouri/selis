@@ -107,6 +107,90 @@ for (const theme of THEMES) {
       await expect(page).toHaveScreenshot(`annotate-note-${theme}.png`);
     });
 
+    test(`sign: sheet, new signature (draw, type), placed (${theme})`, async ({ page }) => {
+      await page.goto("/");
+      await importFixture(page, "greek.pdf", "Ελληνικό δοκιμαστικό.pdf");
+      await firstPageRendered(page);
+      await page.getByTestId("dock-sign").click();
+      await expect(page.getByTestId("sign-sheet")).toBeVisible();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`sign-empty-${theme}.png`);
+
+      await page.getByTestId("signature-new").click();
+      const pad = page.getByTestId("signature-pad");
+      await expect(pad).toBeVisible();
+      // Measure after the sheet has slid in.
+      await settle(page);
+      const box = await pad.boundingBox();
+      if (!box) throw new Error("pad not laid out");
+      const stroke = async (points: [number, number][]) => {
+        const [first, ...rest] = points;
+        if (!first) return;
+        await page.mouse.move(box.x + box.width * first[0], box.y + box.height * first[1]);
+        await page.mouse.down();
+        for (const [x, y] of rest) await page.mouse.move(box.x + box.width * x, box.y + box.height * y, { steps: 6 });
+        await page.mouse.up();
+      };
+      await stroke([
+        [0.12, 0.62],
+        [0.22, 0.3],
+        [0.3, 0.64],
+        [0.42, 0.34],
+        [0.5, 0.6],
+        [0.62, 0.42],
+        [0.85, 0.5],
+      ]);
+      await settle(page);
+      await expect(page).toHaveScreenshot(`sign-new-draw-${theme}.png`);
+
+      await page.getByTestId("signature-mode-type").click();
+      await page.getByTestId("signature-name").fill("Μαρία Παπαδοπούλου");
+      await page.getByTestId("signature-name").blur();
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(400);
+      await expect(page).toHaveScreenshot(`sign-new-type-${theme}.png`);
+
+      await page.getByTestId("signature-mode-draw").click();
+      await page.getByTestId("signature-save").click();
+      await expect(page.getByTestId("signature-card")).toHaveCount(1);
+      const layer = page.getByTestId("signature-layer-1");
+      const pageBox = await layer.boundingBox();
+      if (!pageBox) throw new Error("page not laid out");
+      await page.mouse.click(pageBox.x + pageBox.width * 0.55, pageBox.y + pageBox.height * 0.5);
+      await expect(page.getByTestId("signature-selection")).toBeVisible();
+      await expect(page.getByTestId("annotate-undo")).toBeEnabled();
+      await expect(page.getByTestId("save-status")).toHaveText("αποθηκεύτηκε", { timeout: 10_000 });
+      await settle(page);
+      await expect(page).toHaveScreenshot(`sign-placed-${theme}.png`);
+    });
+
+    test(`forms: banner and form mode (${theme})`, async ({ page }) => {
+      await page.goto("/");
+      await importFixture(page, "acroform.pdf", "Αίτηση.pdf");
+      await firstPageRendered(page);
+      await expect(page.getByTestId("form-banner")).toBeVisible();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`form-banner-${theme}.png`);
+
+      await page.getByTestId("form-fill").click();
+      await page.getByTestId("field-full_name").click();
+      await page.getByTestId("field-input-full_name").fill("Γιάννης Παπαδόπουλος");
+      await page.getByTestId("field-input-full_name").press("Enter");
+      // The change lands asynchronously: wait for it, then for its autosave.
+      await expect(page.getByTestId("annotate-undo")).toBeEnabled();
+      await expect(page.getByTestId("save-status")).toHaveText("αποθηκεύτηκε", { timeout: 10_000 });
+      await page.getByTestId("form-next").click();
+      await expect(page.getByTestId("field-input-email")).toBeFocused();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`form-mode-${theme}.png`);
+
+      await page.getByTestId("field-input-email").press("Escape");
+      await page.getByTestId("form-flatten").click();
+      await expect(page.getByTestId("flatten-dialog")).toBeVisible();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`form-flatten-${theme}.png`);
+    });
+
     test(`settings and transfer (${theme})`, async ({ page }) => {
       await page.goto("/");
       await page.getByRole("navigation").getByRole("button", { name: "Ρυθμίσεις" }).click();

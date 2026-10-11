@@ -96,11 +96,14 @@ type BarProps = {
   onUndo: () => void;
   onRedo: () => void;
   onDone: () => void;
+  /** Mode title and close label (annotate, sign, form share this bar). */
+  title?: string | undefined;
+  closeLabel?: string | undefined;
 };
 
 /** safe-top + 52 px: close · title (+ save status) · undo · redo · "Done". */
 export const AnnotateBar = forwardRef<HTMLElement, BarProps>(function AnnotateBar(
-  { status, canUndo, canRedo, onClose, onUndo, onRedo, onDone },
+  { status, canUndo, canRedo, onClose, onUndo, onRedo, onDone, title, closeLabel },
   ref,
 ) {
   const { t } = useTranslation();
@@ -112,9 +115,14 @@ export const AnnotateBar = forwardRef<HTMLElement, BarProps>(function AnnotateBa
       data-testid="annotate-bar"
     >
       <div className="flex h-13 items-center gap-1 pr-3 pl-1">
-        <IconButton label={t("annotate.close")} icon={<X size={22} strokeWidth={1.75} />} onClick={onClose} data-testid="annotate-close" />
+        <IconButton
+          label={closeLabel ?? t("annotate.close")}
+          icon={<X size={22} strokeWidth={1.75} />}
+          onClick={onClose}
+          data-testid="annotate-close"
+        />
         <div className="flex min-w-0 flex-1 flex-col">
-          <h1 className="truncate text-md leading-tight font-semibold text-neutral-12">{t("annotate.title")}</h1>
+          <h1 className="truncate text-md leading-tight font-semibold text-neutral-12">{title ?? t("annotate.title")}</h1>
           <p className="truncate text-xs text-neutral-11" data-testid="save-status" aria-live="polite">
             {status}
           </p>

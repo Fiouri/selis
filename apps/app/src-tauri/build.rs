@@ -15,6 +15,9 @@ const APP_COMMANDS: &[&str] = &[
     "working_copy",
     "discard_working_copy",
     "save_version",
+    "list_signatures",
+    "save_signature",
+    "delete_signature",
     "list_tags",
     "create_tag",
     "rename_tag",
@@ -27,6 +30,7 @@ const APP_COMMANDS: &[&str] = &[
     "update_settings",
     "device_memory",
     "pick_pdf",
+    "pick_image",
     "take_result",
 ];
 

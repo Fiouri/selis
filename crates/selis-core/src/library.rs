@@ -180,6 +180,7 @@ impl Library {
         };
         lib.prepare_thumbnail_dir()?;
         lib.prepare_work_dir()?;
+        lib.prepare_signature_dir()?;
         Ok(lib)
     }
 

@@ -13,6 +13,7 @@ pub mod hash;
 pub mod library;
 pub mod retention;
 pub mod save;
+pub mod signatures;
 pub mod tags;
 pub mod thumbs;
 
@@ -27,4 +28,5 @@ pub use library::{
 };
 pub use retention::{RetentionPolicy, RetentionReport};
 pub use save::{SavedVersion, VersionLabel, WorkingCopy};
+pub use signatures::{Signature, SignatureKind};
 pub use tags::Tag;

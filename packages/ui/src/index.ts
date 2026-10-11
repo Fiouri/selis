@@ -6,5 +6,6 @@ export { BottomSheet, type BottomSheetProps } from "./primitives/BottomSheet";
 export { ConfirmDialog, type ConfirmDialogProps } from "./primitives/Dialog";
 export { Chip, type ChipProps } from "./primitives/Chip";
 export { Switch, type SwitchProps } from "./primitives/Switch";
+export { Segmented, type SegmentedOption, type SegmentedProps } from "./primitives/Segmented";
 export { cx } from "./primitives/cx";
 export { THEMES, type ThemeName, MOTION_MS, TOUCH_TARGET_PX } from "./tokens";

@@ -70,6 +70,7 @@ describe("design tokens", () => {
     for (const name of ["note-ink", "note-action", "note-danger", "note-muted"]) {
       expect(contrast(light.get(name) as string, paper), `--${name}`).toBeGreaterThanOrEqual(4.5);
     }
+    expect(contrast(light.get("paper-hint") as string, light.get("paper") as string)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("motion durations stay within 150–250 ms and honour reduced motion", () => {

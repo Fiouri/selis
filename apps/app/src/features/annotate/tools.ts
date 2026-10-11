@@ -83,13 +83,16 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
+/** /NM for a new annotation; Selis's own stamps carry a prefix so they are recognised when read back. */
 export function newAnnotationId(kind: Annotation["kind"]): string {
   const id = crypto.randomUUID();
-  return kind === "text" ? `selis-text-${id}` : id;
+  if (kind === "text") return `selis-text-${id}`;
+  if (kind === "signature") return `selis-sig-${id}`;
+  return id;
 }
 
 /** Adds an annotation; undo removes it. */
-export function addCommand(doc: DocHandle, annotation: Annotation, tool: Tool): Command {
+export function addCommand(doc: DocHandle, annotation: Annotation, tool: string): Command {
   return {
     tool,
     apply: async () => {
@@ -102,7 +105,7 @@ export function addCommand(doc: DocHandle, annotation: Annotation, tool: Tool): 
 }
 
 /** Removes an annotation; undo puts the same one back (same id). */
-export function removeCommand(doc: DocHandle, annotation: Annotation, tool: Tool): Command {
+export function removeCommand(doc: DocHandle, annotation: Annotation, tool: string): Command {
   return {
     tool,
     apply: async () => {
@@ -115,7 +118,7 @@ export function removeCommand(doc: DocHandle, annotation: Annotation, tool: Tool
 }
 
 /** Replaces an annotation with a new version of itself (same id). */
-export function replaceCommand(doc: DocHandle, before: Annotation, after: Annotation, tool: Tool): Command {
+export function replaceCommand(doc: DocHandle, before: Annotation, after: Annotation, tool: string): Command {
   return {
     tool,
     apply: async () => {

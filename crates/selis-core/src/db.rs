@@ -14,6 +14,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_library.sql"),
     include_str!("../migrations/0003_editing.sql"),
+    include_str!("../migrations/0004_signatures.sql"),
 ];
 
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -109,6 +110,7 @@ mod tests {
                 "document_tags",
                 "documents",
                 "settings",
+                "signatures",
                 "tags",
                 "versions",
                 "working_copies"

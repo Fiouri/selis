@@ -18,6 +18,7 @@ import {
   PdfAnnotationSubtype,
   type PdfDocumentObject,
   type PdfPageObject,
+  type PdfStampAnnoObject,
   type Rect,
 } from "@embedpdf/models";
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
@@ -26,6 +27,15 @@ import type { Annotation, Point } from "./types";
 
 /** /NM prefix of typed-text stamps written by Selis. */
 export const TEXT_STAMP_PREFIX = "selis-text-";
+/** /NM prefix of the stamps that show a form field's non-Latin value (see `setFieldOverlay`). */
+export const FIELD_OVERLAY_PREFIX = "selis-field-";
+/** /NM prefix of visual-signature stamps written by Selis. */
+export const SIGNATURE_PREFIX = "selis-sig-";
+/**
+ * /Contents of a visual signature: what reviewers' comment lists show. It says
+ * plainly that this is an image of a signature, not a certificate-based one.
+ */
+export const SIGNATURE_CONTENTS = "Οπτική υπογραφή (όχι ψηφιακή) / Visual signature (not a digital signature)";
 /** Annotation dictionary key holding a typed-text stamp's style (JSON). */
 const TEXT_STYLE_KEY = "SelisText";
 /** Line height and first baseline of the embedded font, in em. */
@@ -35,6 +45,8 @@ const ASCENT_EM = 1.07;
 export const TEXT_PADDING = 2;
 
 const ANNOT_FLAG_PRINT = 4;
+/** FPDF_ANNOT_APPEARANCEMODE_NORMAL */
+const APPEARANCE_NORMAL = 0;
 const FPDF_FONT_TRUETYPE = 2;
 
 type PageCtx = { pagePtr: number; release(): void };
@@ -112,6 +124,7 @@ export function fromPdfAnnotation(a: PdfAnnotationObject, textStyle?: TextStyle 
     case PdfAnnotationSubtype.TEXT:
       return { ...base, kind: "note", color: hexColor(a.strokeColor, "#f4c430"), opacity: a.opacity ?? 1, text: a.contents };
     case PdfAnnotationSubtype.STAMP:
+      if (a.id.startsWith(SIGNATURE_PREFIX)) return { ...base, kind: "signature", color: "#000000", opacity: 1, image: null };
       if (a.id.startsWith(TEXT_STAMP_PREFIX) && textStyle) {
         return { ...base, kind: "text", color: textStyle.color, opacity: 1, text: a.contents ?? "", fontSize: textStyle.fontSize };
       }
@@ -121,8 +134,20 @@ export function fromPdfAnnotation(a: PdfAnnotationObject, textStyle?: TextStyle 
   }
 }
 
-/** Editor annotation → EmbedPDF annotation (all subtypes except typed text). */
-export function toPdfAnnotation(a: Exclude<Annotation, { kind: "text" | "other" }>): PdfAnnotationObject {
+/** A visual signature as an EmbedPDF stamp; its image goes in the create context. */
+export function toSignatureStamp(a: Extract<Annotation, { kind: "signature" }>): PdfStampAnnoObject {
+  return {
+    id: a.id,
+    pageIndex: a.page,
+    rect: toRect(a.rect),
+    flags: ["print"],
+    type: PdfAnnotationSubtype.STAMP,
+    contents: SIGNATURE_CONTENTS,
+  };
+}
+
+/** Editor annotation → EmbedPDF annotation (all subtypes except typed text and signatures). */
+export function toPdfAnnotation(a: Exclude<Annotation, { kind: "text" | "other" | "signature" }>): PdfAnnotationObject {
   const base = { id: a.id, pageIndex: a.page, rect: toRect(a.rect), flags: ["print" as const] };
   switch (a.kind) {
     case "highlight":
@@ -190,8 +215,24 @@ export function toPdfAnnotation(a: Exclude<Annotation, { kind: "text" | "other" 
 
 export type TextStyle = { readonly fontSize: number; readonly color: string };
 
-/** Raw PDFium access for typed-text stamps. */
-export class TextStamps {
+/** How a form text field draws its value (from the widget's /DA). */
+export type FieldTextStyle = {
+  /** Points; 0 = auto (fit the box), as in PDF. */
+  readonly fontSize: number;
+  readonly color: string;
+  readonly multiline: boolean;
+  /** The widget's own background and border (/MK BG, BC), redrawn by the overlay. */
+  readonly background: string | null;
+  readonly border: string | null;
+  readonly borderWidth: number;
+};
+
+/**
+ * Raw PDFium access for text drawn in the embedded Latin + Greek font: typed-text
+ * stamps, and the appearance of form text fields whose value PDFium cannot draw
+ * with the standard-14 fonts (Greek).
+ */
+export class EmbeddedText {
   /** Embedded font handle per document id (loaded on first use). */
   private readonly fonts = new Map<string, number>();
 
@@ -398,6 +439,119 @@ export class TextStamps {
       pageCtx.release();
     }
     return rect;
+  }
+
+  /**
+   * Shows a form text field's value in the embedded font (Greek and other text
+   * beyond Latin-1, which PDFium's own field appearance draws with Helvetica
+   * and so leaves blank). The value itself (/V) is set by the caller through
+   * PDFium; this draws it as a print-flagged Stamp exactly over the widget,
+   * named `selis-field-<widget id>` with the value as /Contents, and empties the
+   * widget's own appearance (viewers draw form fields last, over annotations).
+   * The stamp repeats the field's background and border. `text` null removes
+   * the overlay (the caller has just set a Latin value, which PDFium draws).
+   *
+   * Why not the widget's own appearance: with @embedpdf/pdfium 2.15.1,
+   * EPDFAnnot_SetAppearanceFromPage on a widget keeps the wrapper's resources
+   * but not the drawing's, so the font is lost and the text comes out garbled
+   * (forms.node.test.ts checks the text that a flattened page extracts).
+   */
+  async setFieldOverlay(
+    doc: PdfDocumentObject,
+    page: PdfPageObject,
+    widgetId: string,
+    rect: PageRect,
+    text: string | null,
+    style: FieldTextStyle,
+  ): Promise<void> {
+    const id = `${FIELD_OVERLAY_PREFIX}${widgetId}`;
+    const ctx = this.context(doc);
+    if (text === null || text === "") {
+      const pageCtx = ctx.acquirePage(page.index);
+      try {
+        const index = this.find(pageCtx.pagePtr, id);
+        if (index >= 0) this.pdf.FPDFPage_RemoveAnnot(pageCtx.pagePtr, index);
+      } finally {
+        pageCtx.release();
+      }
+      return;
+    }
+    const font = await this.font(doc);
+    const engine = internals(this.engine);
+    const pad = 2;
+    const size = style.fontSize > 0 ? style.fontSize : style.multiline ? 10 : Math.max(4, Math.min(12, (rect.height - 2 * pad) * 0.72));
+    const lines = style.multiline ? this.wrap(ctx.docPtr, font, size, text, rect.width - 2 * pad) : [text.replace(/\s+/g, " ")];
+    const lineHeight = size * 1.2;
+    const pageCtx = ctx.acquirePage(page.index);
+    try {
+      const existing = this.find(pageCtx.pagePtr, id);
+      if (existing >= 0) this.pdf.FPDFPage_RemoveAnnot(pageCtx.pagePtr, existing);
+      // The widget draws nothing now (an empty normal appearance); the overlay draws it all.
+      const widgetIndex = this.find(pageCtx.pagePtr, widgetId);
+      if (widgetIndex < 0) throw new Error("form field not found");
+      const widget = this.pdf.FPDFPage_GetAnnot(pageCtx.pagePtr, widgetIndex);
+      const empty = this.wideString("");
+      try {
+        if (!this.pdf.FPDFAnnot_SetAP(widget, APPEARANCE_NORMAL, empty)) throw new Error("cannot clear the field appearance");
+      } finally {
+        this.free(empty);
+        this.pdf.FPDFPage_CloseAnnot(widget);
+      }
+      const annot = this.pdf.FPDFPage_CreateAnnot(pageCtx.pagePtr, PdfAnnotationSubtype.STAMP);
+      if (!annot) throw new Error("cannot create the field overlay");
+      try {
+        if (!engine.setPageAnnoRect(doc, page, annot, toRect(rect))) throw new Error("cannot place the field overlay");
+        this.setString(annot, "NM", id);
+        this.setString(annot, "Contents", text);
+        this.pdf.FPDFAnnot_SetFlags(annot, ANNOT_FLAG_PRINT);
+        const toPage = (p: Point) => engine.convertDevicePointToPagePoint(doc, page, p);
+        if (style.background || style.border) {
+          // The field's box, in page space (any /Rotate).
+          const a = toPage({ x: rect.x, y: rect.y });
+          const c = toPage({ x: rect.x + rect.width, y: rect.y + rect.height });
+          const inset = style.border ? style.borderWidth / 2 : 0;
+          const left = Math.min(a.x, c.x) + inset;
+          const bottom = Math.min(a.y, c.y) + inset;
+          const box = this.pdf.FPDFPageObj_CreateNewRect(left, bottom, Math.abs(c.x - a.x) - 2 * inset, Math.abs(c.y - a.y) - 2 * inset);
+          if (style.background) {
+            const [br, bg, bb] = rgb(style.background);
+            this.pdf.FPDFPageObj_SetFillColor(box, br, bg, bb, 255);
+          }
+          if (style.border) {
+            const [sr, sg, sb] = rgb(style.border);
+            this.pdf.FPDFPageObj_SetStrokeColor(box, sr, sg, sb, 255);
+            this.pdf.FPDFPageObj_SetStrokeWidth(box, Math.max(0.5, style.borderWidth));
+          }
+          // Fill mode 1 = alternate (non-zero would do as well for a rectangle).
+          this.pdf.FPDFPath_SetDrawMode(box, style.background ? 1 : 0, style.border !== null);
+          if (!this.pdf.FPDFAnnot_AppendObject(annot, box)) throw new Error("cannot write the field overlay");
+        }
+        const [r, g, b] = rgb(style.color);
+        lines.forEach((line, i) => {
+          if (line === "") return;
+          const obj = this.pdf.FPDFPageObj_CreateTextObj(ctx.docPtr, font, size);
+          const wide = this.wideString(line);
+          try {
+            this.pdf.FPDFText_SetText(obj, wide);
+          } finally {
+            this.free(wide);
+          }
+          this.pdf.FPDFPageObj_SetFillColor(obj, r, g, b, 255);
+          // Baseline in view coordinates (top-left): single line centred, multiline from the top.
+          const y = style.multiline ? rect.y + pad + size * ASCENT_EM + i * lineHeight : rect.y + rect.height / 2 + size * 0.36;
+          const x = rect.x + pad;
+          const o = toPage({ x, y });
+          const ex = toPage({ x: x + 1, y });
+          const up = toPage({ x, y: y - 1 });
+          this.pdf.FPDFPageObj_Transform(obj, ex.x - o.x, ex.y - o.y, up.x - o.x, up.y - o.y, o.x, o.y);
+          if (!this.pdf.FPDFAnnot_AppendObject(annot, obj)) throw new Error("cannot write the field overlay");
+        });
+      } finally {
+        this.pdf.FPDFPage_CloseAnnot(annot);
+      }
+    } finally {
+      pageCtx.release();
+    }
   }
 
   /** Frees the font handle of a closed document. */

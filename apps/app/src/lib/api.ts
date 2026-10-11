@@ -13,6 +13,7 @@ import {
   type LongCallOptions,
   reliableIpc,
   type ShortCallOptions,
+  type SignatureKind,
   type VersionLabel,
 } from "./ipc";
 
@@ -109,6 +110,12 @@ export const api = {
     unwrap(ipc().short("discard_working_copy", () => commands.discardWorkingCopy(documentId), READ)),
   saveVersion: (documentId: string, label: VersionLabel) =>
     unwrap(ipc().long("save_version", (requestId) => commands.saveVersion(requestId, documentId, label), SAVE)),
+  listSignatures: () => unwrap(ipc().short("list_signatures", () => commands.listSignatures(), READ)),
+  // Keyed by the UI-chosen id: a repeat returns the stored signature.
+  saveSignature: (id: string, kind: SignatureKind, pngBase64: string) =>
+    unwrap(ipc().short("save_signature", () => commands.saveSignature(id, kind, pngBase64), READ)),
+  deleteSignature: (id: string) => unwrap(ipc().short("delete_signature", () => commands.deleteSignature(id), READ)),
+  pickImage: () => unwrap(ipc().long("pick_image", (requestId) => commands.pickImage(requestId), PICK)),
 };
 
 /** i18n key for a user-facing error message. */
@@ -149,8 +156,11 @@ export type {
   LibraryView,
   LocalePref,
   PendingOpen,
+  PickedImage,
   SavedVersion,
   Settings,
+  Signature,
+  SignatureKind,
   Tag,
   ThemePref,
   VersionLabel,
