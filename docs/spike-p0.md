@@ -255,9 +255,8 @@ when the WebView is older than **111** instead of a blank screen (`MainActivity.
 
 - **Real mid-range physical device** — not yet measured. The 3 GB emulator approximates the
   memory budget but not a slower CPU/GPU or thermal throttling; its cold-open first page
-  (771–959 ms) is already close to the 1 s budget. Run the Maestro flow on e.g. a Snapdragon 6/7-
-  series phone with 4–6 GB and read `[selis:perf] first-page` (logcat `Tauri/Console`) and
-  `dumpsys meminfo` for the app + renderer before closing P0.
+  (771–959 ms) is already close to the 1 s budget. Connect e.g. a Snapdragon 6/7-series phone
+  with 4–6 GB and run `scripts/measure-device.sh` (see "Measuring a device" below).
 - **iPhone simulator** measurements (the iOS simulator build passes in CI; latency/memory not
   measured).
 - Measured on **debug** builds; release (LTO, stripped `.so`) should only improve memory
@@ -270,3 +269,40 @@ docs/SPEC.md "Ρίσκα" (native PDFium via `pdfium-render` on mobile) is **not
 the contingency if the real mid-range or iOS measurements fail. Known limits: one bitmap per page
 (capped per tier → blurry beyond the cap at high zoom; tiling planned with P1), and opening is
 O(pages) for page sizes (~300 ms for 1000 pages on the S23).
+
+## Measuring a device (`scripts/measure-device.sh`)
+
+One command, no manual steps: `scripts/measure-device.sh [--serial S] [--runs 5]`.
+
+1. Picks the first connected **physical** device that is not a Galaxy S23 (S23 / S23+ / S23 Ultra
+   are skipped as already-measured flagships; emulators are skipped; `--serial` overrides).
+2. Builds a **release-like** APK for the device's ABI: release profile (optimized Rust, minified
+   JS, R8) with the app's `measure` cargo feature, which only turns on `tauri/devtools` so the
+   WebView stays inspectable. Signed with the local Android debug key (never a release key).
+3. Installs it, clears Selis' data, copies `large-1000.pdf` into the app's own external files
+   directory (readable without permissions) and imports it with the app's `import_document`
+   command (the same copy → hash → SQLite path as the picker).
+4. N cold runs (default 5): `am force-stop`, launch, tap the document in the library,
+   `window.__selisFirstPageMs`; then the full scroll (same driver as above) with app + renderer
+   `dumpsys meminfo` sampled every 1.5 s. Every run opens at page 1.
+5. Cleans up (`pm clear`: library copy and database; the pushed fixture is deleted right after
+   the import; adb port forward removed) and appends a row to the table below.
+   Exit code 0 = PASS (every first page < 1 s, peak < 600 MB, page 1000 drawn, no crash),
+   1 = gate failed, 2 = error, 3 = no suitable device. Raw results: `.tmp/measure/result-<serial>.json`.
+
+The tap is a real touch (`input tap` at the card's position read from the DOM), not a
+UiAutomator lookup. Dry run on the AVD `selis-midrange-api36` (2026-10-11, `--serial`): release-like
+79–277 ms, peak 308–323 MB; the debug APK through the same script 190–332 ms, 363–379 MB (a
+UiAutomator dump before the tap made no difference). These are cold opens from the library with
+the engine warmed up at startup, so they are not comparable with the P0 cold-open column above
+(older build) or the P1 "first page" figures (taken right after an import). Emulator rows are not
+added to the table: the gate needs a real device.
+
+## Disk guard for device runs
+
+Maestro copies the APK (~0.8 GB) into the temp directory on every run and never deletes it; on
+2026-10-11 several hundred P1 runs filled the F: drive (397 GB) and three flows failed with a
+full disk. `apps/app/e2e/maestro/run.sh` now deletes those copies after each run and, **before
+every run**, checks the free space on the drives holding `.tmp` and the AVDs
+(`$ANDROID_AVD_HOME`, default `~/.android/avd`; junctions are followed to the real drive).
+Below `MIN_FREE_GB` (default **30 GB**) it stops with exit code 3 and says which drive is short.
