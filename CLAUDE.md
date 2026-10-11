@@ -83,6 +83,7 @@ Tier 2 — end of every feature:
 - Maestro on the emulator: `apps/app/e2e/maestro/push-fixtures.sh <serial>` then
   `apps/app/e2e/maestro/run.sh <serial> apps/app/e2e/maestro/<flow>.yaml [runs]` for
   `import-scroll-back.yaml`, `import-background-resume.yaml`, `library-search-favorites.yaml`,
+  `viewer-search.yaml`,
   and `import-from-intent.yaml` twice: with `PRE_RUN="…/open-with.sh cold"` and `…/open-with.sh warm`,
   both with `POST_RUN="…/open-with.sh check"` (original untouched). run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView

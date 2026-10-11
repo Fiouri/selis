@@ -124,6 +124,30 @@ measured again on the same day as an A/B baseline.
   come from the emulator; the gate stays on the physical devices.
 - Peak memory still leaves ≥ 68 MB below the 600 MB gate.
 
+## Re-run with the P1 library and viewer (2026-10-11, AVD)
+
+AVD `selis-midrange-api36` (3 GB, low render tier), debug builds, runs interleaved with the
+pre-P1 build (`fe06e99`, CI APK) in the same emulator session, because the emulator drifts
+between boots (the same pre-P1 build peaked at 346–350 MB in one run of this session and
+369–384 MB in the interleaved runs).
+
+| | pre-P1 (`fe06e99`) | P1b viewer (this branch) |
+| --- | --- | --- |
+| First page right after import | 438–1075 ms (median ~690) | 287–946 ms (median ~770) |
+| Peak during scroll, app + renderer | 369–384 MB (8 runs, median ~380) | 395–413 MB (4 runs, median ~402) |
+| After closing the document | 304–311 MB | 334–346 MB |
+| Scroll 1000 pages / mounted pages / external requests | no crash, 5 / 0 | no crash, 5 / 0 |
+
+- **+22 MB (+6 %) peak**, within the 10 % budget and ≥ 187 MB below the 600 MB gate. The idle
+  library is unchanged (234–239 MB in both); the extra memory appears with the document open
+  (selectable text layer, larger UI bundle, page-1 thumbnail).
+- Things that were tried while bisecting and kept because they are right anyway: the library
+  under the viewer is not painted (`content-visibility: hidden`), thumbnails are encoded on a
+  software canvas and released at once, and the text layer is built only after the page bitmap
+  is drawn (it delayed the first paint by ~250 ms when it ran first).
+- First page stays below 1 s in every run; the AVD's spread is as wide as before.
+- Not re-measured on the S23 or a real mid-range phone (see "Still open").
+
 ## Result: PASS on every target that can run the app — real mid-range device still open
 
 Final build (adaptive render limits, LRU page cache, engine warm-up):

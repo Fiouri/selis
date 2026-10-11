@@ -179,12 +179,17 @@ async function runRender(job: RenderJob): Promise<void> {
 async function encodeImage(width: number, height: number, data: Uint8ClampedArray): Promise<{ mime: string; bytes: ArrayBuffer }> {
   if (typeof OffscreenCanvas === "undefined") return { mime: RAW_RGBA, bytes: data.slice().buffer };
   const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext("2d");
+  // Software canvas: a GPU-backed 2D context in a worker keeps a GPU context alive in
+  // the WebView renderer (~30 MB on Android) for one small image.
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("no 2d context for thumbnail encoding");
   ctx.putImageData(new ImageData(new Uint8ClampedArray(data), width, height), 0, 0);
   let blob = await canvas.convertToBlob({ type: "image/webp", quality: WEBP_QUALITY });
   // Unsupported types silently fall back to PNG (e.g. WKWebView); JPEG is far smaller.
   if (blob.type !== "image/webp") blob = await canvas.convertToBlob({ type: "image/jpeg", quality: JPEG_QUALITY });
+  // Release the backing store now instead of at the next GC.
+  canvas.width = 0;
+  canvas.height = 0;
   return { mime: blob.type, bytes: await blob.arrayBuffer() };
 }
 

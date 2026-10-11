@@ -132,7 +132,8 @@ export const PageView = memo(function PageView({
       {ready ? null : <Skeleton className="absolute inset-0 rounded-none" />}
       <canvas ref={canvasRef} className="block h-full w-full" aria-hidden="true" />
       {marks}
-      {textLayer && scale > 0 ? <TextLayer doc={doc} index={index} scale={scale} /> : null}
+      {/* After the bitmap: text extraction must not delay the first paint. */}
+      {textLayer && ready && scale > 0 ? <TextLayer doc={doc} index={index} scale={scale} /> : null}
     </>
   );
   const className = `absolute overflow-hidden rounded-[2px] p-0 shadow-1 ${night ? "bg-neutral-12" : "bg-white"} ${
