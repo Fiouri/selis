@@ -136,6 +136,7 @@ function hits(a: Annotation, p: Point, tolerance: number): boolean {
     case "highlight":
     case "underline":
     case "strikeout":
+    case "redact":
       return a.segments.some((r) => distanceToRect(p, r) <= tolerance);
     case "ink":
       return a.strokes.some((stroke) => {

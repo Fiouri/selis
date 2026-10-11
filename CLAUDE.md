@@ -95,7 +95,9 @@ Tier 2 — end of every feature:
   one saved signature, original untouched). And `pages.yaml` with `POST_RUN="…/pages.sh check"`
   (original + version + extracted page, both carrying the inserted form, stage empty, originals
   untouched), then `pages.sh drag <serial>` with the grid open (long-press reorder by adb
-  `draganddrop`; inspect `.tmp/p2c/drag-*.png`). run.sh fails a run on
+  `draganddrop`; inspect `.tmp/p2c/drag-*.png`). And `redact.yaml` with `POST_RUN="…/redact.sh check"`
+  (original + version, redacted lines gone from the PDFium-extracted text, no marks left, original
+  untouched). run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM).
 - Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC) + 390×844 visual snapshots in

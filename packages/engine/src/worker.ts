@@ -29,6 +29,7 @@ import fontUrl from "../assets/SelisSans-LatinGreek.ttf?url";
 import { EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX, toPdfAnnotation, toSignatureStamp } from "./annotations";
 import { documentFields, flattenAll, pageWidgets, setField, toFormField } from "./forms";
 import { applyPageOp, extractPages } from "./pages";
+import { applyRedactions } from "./redact";
 import { applyNightMode, type PageRect, rotateRect } from "./geometry";
 import { documentPointer, imageRectsOnPage } from "./pdfium-objects";
 import { clampScale, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
@@ -540,6 +541,21 @@ async function handleEditPages(req: Extract<WorkerRequest, { type: "editPages" }
   }
 }
 
+async function handleRedact(req: Extract<WorkerRequest, { type: "applyRedactions" }>): Promise<void> {
+  const t = target(req);
+  if (!t) return;
+  try {
+    const engine = await native();
+    if (!wasmModule || !textStamps) throw new Error("engine not ready");
+    const before = (await engine.saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
+    const { bytes, applied } = await applyRedactions(engine, textStamps, before);
+    const fresh = await replaceDocument(req.docId, t.doc, bytes);
+    post({ type: "redacted", reqId: req.reqId, pages: pageSizes(fresh), before, applied }, [before]);
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
 async function handleExtract(req: Extract<WorkerRequest, { type: "extract" }>): Promise<void> {
   const t = target(req);
   if (!t) return;
@@ -666,6 +682,9 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "extract":
       void handleExtract(req);
+      break;
+    case "applyRedactions":
+      void handleRedact(req);
       break;
     case "appearance":
       void handleAppearance(req);

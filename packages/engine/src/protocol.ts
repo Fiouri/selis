@@ -34,6 +34,7 @@ export type WorkerRequest =
   | { type: "reload"; reqId: number; docId: string; bytes: ArrayBuffer }
   | { type: "editPages"; reqId: number; docId: string; op: PageOp }
   | { type: "extract"; reqId: number; docId: string; indices: number[] }
+  | { type: "applyRedactions"; reqId: number; docId: string }
   | { type: "appearance"; reqId: number; docId: string; index: number; id: string }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
@@ -59,6 +60,7 @@ export type WorkerResponse =
   /** The document after a page operation, and its bytes before (the undo snapshot). */
   | { type: "pagesEdited"; reqId: number; pages: PageSize[]; before: ArrayBuffer }
   | { type: "extracted"; reqId: number; bytes: ArrayBuffer }
+  | { type: "redacted"; reqId: number; pages: PageSize[]; before: ArrayBuffer; applied: number }
   | { type: "appearance"; reqId: number; image: StampImage }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };

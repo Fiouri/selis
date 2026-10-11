@@ -123,6 +123,16 @@ export function fromPdfAnnotation(a: PdfAnnotationObject, textStyle?: TextStyle 
       };
     case PdfAnnotationSubtype.TEXT:
       return { ...base, kind: "note", color: hexColor(a.strokeColor, "#f4c430"), opacity: a.opacity ?? 1, text: a.contents };
+    case PdfAnnotationSubtype.REDACT:
+      return {
+        ...base,
+        kind: "redact",
+        color: "#000000",
+        opacity: 1,
+        segments: (a.segmentRects.length > 0 ? a.segmentRects : [a.rect]).map(fromRect),
+        fill: hexColor(a.color, "#000000").toLowerCase() === "#ffffff" ? "white" : "black",
+        text: a.contents ?? "",
+      };
     case PdfAnnotationSubtype.STAMP:
       if (a.id.startsWith(SIGNATURE_PREFIX)) return { ...base, kind: "signature", color: "#000000", opacity: 1, image: null };
       if (a.id.startsWith(TEXT_STAMP_PREFIX) && textStyle) {
@@ -200,6 +210,18 @@ export function toPdfAnnotation(a: Exclude<Annotation, { kind: "text" | "other" 
           start: PdfAnnotationLineEnding.None,
           end: a.kind === "arrow" ? PdfAnnotationLineEnding.OpenArrow : PdfAnnotationLineEnding.None,
         },
+      };
+    case "redact":
+      // The replacement text goes in /Contents, not /OverlayText: PDFium would
+      // draw that in a standard-14 font (no Greek). Selis writes it on apply.
+      return {
+        ...base,
+        type: PdfAnnotationSubtype.REDACT,
+        segmentRects: a.segments.map(toRect),
+        color: a.fill === "white" ? "#ffffff" : "#000000",
+        strokeColor: "#d13c3c",
+        opacity: 1,
+        contents: a.text,
       };
     case "note":
       return {

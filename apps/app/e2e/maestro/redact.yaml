@@ -1,0 +1,67 @@
+# Redaction on Android: text tool across one line, whiteout box with new text
+# over the next, apply after the confirm dialog, Done → a new version.
+# Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh and
+#   POST_RUN="apps/app/e2e/maestro/redact.sh check"
+# (original + 1 version; the version has no /Redact marks left and its text no
+# longer contains the two lines; the original in Download/ untouched).
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Redact - text and whiteout, apply, version
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "greek.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+- tapOn:
+    id: "More"
+- tapOn: "Redact content"
+- extendedWaitUntil:
+    visible: "Drag across the text to remove."
+    timeout: 5000
+
+# Pixel coordinates for the reference AVD (selis-midrange-api36, 1080×2340): one
+# percent of the height is about half a line of this text.
+# Text tool (default) across body line 2 ("Χωρίς λογαριασμό, χωρίς σύννεφο, …").
+- swipe:
+    start: 130, 556
+    end: 760, 556
+    duration: 1200
+- extendedWaitUntil:
+    visible: "Apply (1)"
+    timeout: 5000
+
+# Whiteout over line 3 ("Ξεσκεπάζω την ψυχοφθόρα βδελυγμία.") with new text
+# (ASCII: adb input has no Unicode).
+- tapOn: "Whiteout"
+- swipe:
+    start: 120, 583
+    end: 600, 617
+    duration: 1000
+- extendedWaitUntil:
+    visible: "Add"
+    timeout: 5000
+- inputText: "Fixed line"
+- hideKeyboard
+- tapOn: "Add"
+- extendedWaitUntil:
+    visible: "Apply (2)"
+    timeout: 5000
+
+- tapOn: "Apply (2)"
+- extendedWaitUntil:
+    visible: "Remove content under 2 marks for good?"
+    timeout: 5000
+- tapOn: "Remove"
+- extendedWaitUntil:
+    visible: "Applied 2 marks."
+    timeout: 20000
+- tapOn: "Done"
+- extendedWaitUntil:
+    visible: ".*· saved"
+    timeout: 15000
