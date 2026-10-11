@@ -1,5 +1,5 @@
 import type { QuarterTurns } from "./geometry";
-import type { EngineErrorCode, OutlineItem, PageSize, SearchHit, TextRun } from "./types";
+import type { Annotation, EngineErrorCode, Glyph, OutlineItem, PageSize, SearchHit, TextRun } from "./types";
 
 /** Max pixels per rendered bitmap (≈ 4096²): bounds WebView memory on mobile. */
 export const MAX_BITMAP_PIXELS = 16_777_216;
@@ -21,6 +21,11 @@ export type WorkerRequest =
   | { type: "search"; reqId: number; docId: string; query: string }
   | { type: "text"; reqId: number; docId: string; index: number }
   | { type: "thumbnail"; reqId: number; docId: string; index: number; maxWidth: number; maxHeight: number }
+  | { type: "glyphs"; reqId: number; docId: string; index: number }
+  | { type: "annotations"; reqId: number; docId: string; index: number }
+  | { type: "addAnnotation"; reqId: number; docId: string; annotation: Annotation }
+  | { type: "removeAnnotation"; reqId: number; docId: string; index: number; id: string }
+  | { type: "save"; reqId: number; docId: string }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
 
@@ -34,6 +39,11 @@ export type WorkerResponse =
   | { type: "searchHits"; reqId: number; page: number; hits: SearchHit[] }
   | { type: "searchDone"; reqId: number; total: number }
   | { type: "text"; reqId: number; runs: TextRun[] }
+  | { type: "glyphs"; reqId: number; glyphs: Glyph[] }
+  | { type: "annotations"; reqId: number; items: Annotation[] }
+  | { type: "annotation"; reqId: number; annotation: Annotation }
+  | { type: "removed"; reqId: number; removed: boolean }
+  | { type: "saved"; reqId: number; bytes: ArrayBuffer }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };
 

@@ -13,6 +13,7 @@ use crate::error::{Error, Result};
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_library.sql"),
+    include_str!("../migrations/0003_editing.sql"),
 ];
 
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -104,7 +105,14 @@ mod tests {
             .collect::<std::result::Result<_, _>>()?;
         assert_eq!(
             tables,
-            ["document_tags", "documents", "settings", "tags", "versions"]
+            [
+                "document_tags",
+                "documents",
+                "settings",
+                "tags",
+                "versions",
+                "working_copies"
+            ]
         );
         Ok(())
     }

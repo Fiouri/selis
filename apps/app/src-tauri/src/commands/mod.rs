@@ -6,6 +6,7 @@ pub mod library;
 pub mod open_with;
 pub mod picker;
 pub mod requests;
+pub mod save;
 pub mod settings;
 pub mod share;
 pub mod tags;

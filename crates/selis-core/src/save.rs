@@ -1,0 +1,603 @@
+//! Saving edits (docs/SPEC.md "Data model", storage rules).
+//!
+//! The PDF engine runs in the WebView, so an edited document reaches Rust as
+//! bytes, in chunks (`write_upload_chunk`) so that neither side holds a second
+//! copy of a large file in one IPC message. A finished upload becomes either:
+//!
+//! - the document's **working copy** (`commit_working_copy`): the autosave
+//!   target, written a few seconds after the last edit. It is not a version; it
+//!   exists so that edits survive a crash and can be recovered on the next open.
+//! - a **version** (`save_version`): the working copy is hashed (BLAKE3), moved
+//!   into the library under its hash and recorded as the next version. The
+//!   document then points at it, and retention prunes old versions.
+//!
+//! Every file lands with temp → fsync → rename. The original (v1, and any
+//! file outside the library) is never written to.
+
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::path::PathBuf;
+
+use rusqlite::{OptionalExtension, params};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::error::{Error, Result};
+use crate::fsutil::rename_durable;
+use crate::hash::Blake3Hash;
+use crate::library::{Document, FILES_DIR, Library, looks_like_pdf, now_ms};
+use crate::retention::RetentionPolicy;
+
+/// Working copies and uploads in progress (relative to the library root).
+pub(crate) const WORK_DIR: &str = "work";
+const UPLOADS_DIR: &str = "work/uploads";
+/// Largest chunk accepted by `write_upload_chunk`.
+pub const MAX_CHUNK_BYTES: usize = 8 * 1024 * 1024;
+/// Largest document accepted for saving (offsets travel over IPC as `u32`).
+pub const MAX_UPLOAD_BYTES: u64 = u32::MAX as u64;
+const MAX_UPLOAD_ID_LEN: usize = 64;
+
+/// How a version came to be.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub enum VersionLabel {
+    /// Saved by the user (leaving the editor, "Done").
+    Manual,
+    /// Saved without the user asking (a recovered working copy).
+    Auto,
+}
+
+impl VersionLabel {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Manual => "manual",
+            Self::Auto => "auto",
+        }
+    }
+}
+
+/// Autosaved edits that are not a version yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct WorkingCopy {
+    pub document_id: String,
+    /// BLAKE3 of the version the edits started from.
+    pub base_blake3: String,
+    #[cfg_attr(feature = "specta", specta(type = specta_typescript::Number))]
+    pub size_bytes: u64,
+    /// Unix epoch milliseconds.
+    #[cfg_attr(feature = "specta", specta(type = specta_typescript::Number))]
+    pub saved_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SavedVersion {
+    pub document: Document,
+    /// Sequence number of the document's current version.
+    pub seq: u32,
+    /// False when the content was identical to the current version (nothing new stored).
+    pub created: bool,
+}
+
+impl Library {
+    pub(crate) fn prepare_work_dir(&self) -> Result<()> {
+        let uploads = self.root.join(UPLOADS_DIR);
+        // Uploads never survive a restart: the WebView that sent them is gone.
+        if uploads.exists() {
+            std::fs::remove_dir_all(&uploads).map_err(|e| Error::io(&uploads, e))?;
+        }
+        std::fs::create_dir_all(&uploads).map_err(|e| Error::io(&uploads, e))
+    }
+
+    fn upload_path(&self, upload_id: &str) -> Result<PathBuf> {
+        let valid = !upload_id.is_empty()
+            && upload_id.len() <= MAX_UPLOAD_ID_LEN
+            && upload_id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-');
+        if !valid {
+            return Err(Error::InvalidArgument(
+                "upload id must be 1..=64 of [A-Za-z0-9-]",
+            ));
+        }
+        Ok(self
+            .root
+            .join(UPLOADS_DIR)
+            .join(format!("{upload_id}.part")))
+    }
+
+    fn working_path(&self, document_id: &str) -> PathBuf {
+        // Document ids are UUIDs generated here; `get_document` checks them first.
+        self.root.join(WORK_DIR).join(format!("{document_id}.pdf"))
+    }
+
+    /// Writes `bytes` at `offset` of an upload and returns the upload's length.
+    ///
+    /// Safe to repeat: a chunk that is already there (a retry after a lost
+    /// reply) is not written twice. Chunks must arrive in order.
+    pub fn write_upload_chunk(&self, upload_id: &str, offset: u64, bytes: &[u8]) -> Result<u64> {
+        if bytes.len() > MAX_CHUNK_BYTES {
+            return Err(Error::InvalidArgument("upload chunk too large"));
+        }
+        let end = offset
+            .checked_add(bytes.len() as u64)
+            .filter(|end| *end <= MAX_UPLOAD_BYTES)
+            .ok_or(Error::InvalidArgument("upload too large"))?;
+        let path = self.upload_path(upload_id)?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&path)
+            .map_err(|e| Error::io(&path, e))?;
+        let len = file.metadata().map_err(|e| Error::io(&path, e))?.len();
+        if end <= len {
+            return Ok(len);
+        }
+        if offset > len {
+            return Err(Error::Conflict("upload chunk out of order"));
+        }
+        // offset ≤ len < end: append, overwriting a partly written repeat.
+        file.seek(SeekFrom::Start(offset))
+            .and_then(|_| file.write_all(bytes))
+            .and_then(|_| file.set_len(end))
+            .map_err(|e| Error::io(&path, e))?;
+        Ok(end)
+    }
+
+    /// Drops an upload that will not be committed.
+    pub fn abort_upload(&self, upload_id: &str) -> Result<()> {
+        let path = self.upload_path(upload_id)?;
+        match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(Error::io(&path, e)),
+        }
+    }
+
+    /// Makes a finished upload the document's working copy (replacing the
+    /// previous one). `base_blake3` is the version the edits started from; it
+    /// must still be the document's current version.
+    pub fn commit_working_copy(
+        &self,
+        upload_id: &str,
+        document_id: &str,
+        base_blake3: &str,
+        size_bytes: u64,
+    ) -> Result<WorkingCopy> {
+        let document = self.get_document(document_id)?;
+        if document.blake3 != base_blake3 {
+            return Err(Error::Conflict("document changed since the edit started"));
+        }
+        let upload = self.upload_path(upload_id)?;
+        let Ok(meta) = std::fs::metadata(&upload) else {
+            // Already committed (a retry after a lost reply) or never uploaded.
+            return match self.working_copy(document_id)? {
+                Some(copy) if copy.size_bytes == size_bytes && copy.base_blake3 == base_blake3 => {
+                    Ok(copy)
+                }
+                _ => Err(Error::NotFound(upload_id.to_owned())),
+            };
+        };
+        if meta.len() != size_bytes {
+            return Err(Error::Conflict("upload is incomplete"));
+        }
+        if !starts_like_pdf(&upload)? {
+            return Err(Error::NotPdf);
+        }
+        let dest = self.working_path(document_id);
+        rename_durable(&upload, &dest)?;
+        let copy = WorkingCopy {
+            document_id: document_id.to_owned(),
+            base_blake3: base_blake3.to_owned(),
+            size_bytes,
+            saved_at: now_ms(),
+        };
+        let size =
+            i64::try_from(size_bytes).map_err(|_| Error::InvalidArgument("file too large"))?;
+        self.conn().execute(
+            "INSERT INTO working_copies (document_id, base_blake3, size_bytes, saved_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (document_id) DO UPDATE
+                SET base_blake3 = excluded.base_blake3,
+                    size_bytes = excluded.size_bytes,
+                    saved_at = excluded.saved_at",
+            params![copy.document_id, copy.base_blake3, size, copy.saved_at],
+        )?;
+        Ok(copy)
+    }
+
+    /// The document's unsaved working copy, if one is on disk.
+    pub fn working_copy(&self, document_id: &str) -> Result<Option<WorkingCopy>> {
+        let row = self
+            .conn()
+            .query_row(
+                "SELECT base_blake3, size_bytes, saved_at FROM working_copies WHERE document_id = ?1",
+                [document_id],
+                |r| {
+                    Ok(WorkingCopy {
+                        document_id: document_id.to_owned(),
+                        base_blake3: r.get(0)?,
+                        size_bytes: u64::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
+                        saved_at: r.get(2)?,
+                    })
+                },
+            )
+            .optional()?;
+        let Some(copy) = row else { return Ok(None) };
+        let on_disk = std::fs::metadata(self.working_path(document_id))
+            .map(|m| m.len() == copy.size_bytes)
+            .unwrap_or(false);
+        if on_disk {
+            return Ok(Some(copy));
+        }
+        // A row without its file is useless (the file is written before the row).
+        self.discard_working_copy(document_id)?;
+        Ok(None)
+    }
+
+    /// Throws away unsaved edits. Idempotent.
+    pub fn discard_working_copy(&self, document_id: &str) -> Result<()> {
+        self.conn().execute(
+            "DELETE FROM working_copies WHERE document_id = ?1",
+            [document_id],
+        )?;
+        let path = self.working_path(document_id);
+        match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(Error::io(&path, e)),
+        }
+    }
+
+    /// Turns the working copy into the document's next version, then applies
+    /// `retention`. Content identical to the current version is not stored again.
+    pub fn save_version(
+        &self,
+        document_id: &str,
+        label: VersionLabel,
+        retention: &RetentionPolicy,
+    ) -> Result<SavedVersion> {
+        let copy = self
+            .working_copy(document_id)?
+            .ok_or_else(|| Error::NotFound(format!("working copy of {document_id}")))?;
+        let working = self.working_path(document_id);
+        let file = File::open(&working).map_err(|e| Error::io(&working, e))?;
+        let hash = Blake3Hash::of_reader(file)
+            .map_err(|e| Error::io(&working, e))?
+            .to_hex();
+
+        let current = self.get_document(document_id)?;
+        if current.blake3 != copy.base_blake3 {
+            return Err(Error::Conflict("document changed since the edit started"));
+        }
+        if hash == current.blake3 {
+            self.discard_working_copy(document_id)?;
+            let seq = self.current_seq(document_id)?;
+            return Ok(SavedVersion {
+                document: current,
+                seq,
+                created: false,
+            });
+        }
+
+        let location = format!("{FILES_DIR}/{hash}.pdf");
+        let dest = self.resolve_location(&location)?;
+        if dest.is_file() {
+            // Same content already stored (e.g. back to an earlier version): reuse it.
+            std::fs::remove_file(&working).map_err(|e| Error::io(&working, e))?;
+        } else {
+            rename_durable(&working, &dest)?;
+        }
+
+        let size =
+            i64::try_from(copy.size_bytes).map_err(|_| Error::InvalidArgument("file too large"))?;
+        let now = now_ms();
+        let seq = {
+            let mut conn = self.conn();
+            let tx = conn.transaction()?;
+            let seq: u32 = tx.query_row(
+                "SELECT COALESCE(MAX(seq), 0) + 1 FROM versions WHERE document_id = ?1",
+                [document_id],
+                |r| r.get(0),
+            )?;
+            tx.execute(
+                "INSERT INTO versions (id, document_id, seq, blake3, size_bytes, created_at, label, file_path)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    Uuid::now_v7().to_string(),
+                    document_id,
+                    seq,
+                    hash,
+                    size,
+                    now,
+                    label.as_str(),
+                    location
+                ],
+            )?;
+            // A linked document keeps pointing at its external original; its
+            // current content is the newest version (see `document_file`).
+            tx.execute(
+                "UPDATE documents
+                    SET blake3 = ?2, size_bytes = ?3, modified_at = ?4,
+                        location = CASE WHEN kind = 'imported' THEN ?5 ELSE location END
+                  WHERE id = ?1",
+                params![document_id, hash, size, now, location],
+            )?;
+            tx.execute(
+                "DELETE FROM working_copies WHERE document_id = ?1",
+                [document_id],
+            )?;
+            tx.commit()?;
+            seq
+        };
+        self.apply_retention(retention)?;
+        Ok(SavedVersion {
+            document: self.get_document(document_id)?,
+            seq,
+            created: true,
+        })
+    }
+
+    fn current_seq(&self, document_id: &str) -> Result<u32> {
+        Ok(self.conn().query_row(
+            "SELECT COALESCE(MAX(seq), 1) FROM versions WHERE document_id = ?1",
+            [document_id],
+            |r| r.get(0),
+        )?)
+    }
+}
+
+fn starts_like_pdf(path: &std::path::Path) -> Result<bool> {
+    let mut head = Vec::with_capacity(1024);
+    File::open(path)
+        .and_then(|f| f.take(1024).read_to_end(&mut head))
+        .map_err(|e| Error::io(path, e))?;
+    Ok(looks_like_pdf(&head))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pdf(marker: &str) -> Vec<u8> {
+        format!("%PDF-1.7\n% {marker}\n%%EOF\n").into_bytes()
+    }
+
+    fn lib() -> Result<(tempfile::TempDir, Library)> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let lib = Library::open(dir.path())?;
+        Ok((dir, lib))
+    }
+
+    /// Uploads `bytes` in `chunk`-sized pieces and makes them the working copy.
+    fn autosave(lib: &Library, doc: &Document, bytes: &[u8], chunk: usize) -> Result<WorkingCopy> {
+        let upload = Uuid::now_v7().to_string();
+        let mut offset = 0u64;
+        for piece in bytes.chunks(chunk) {
+            offset = lib.write_upload_chunk(&upload, offset, piece)?;
+        }
+        lib.commit_working_copy(&upload, &doc.id, &doc.blake3, bytes.len() as u64)
+    }
+
+    fn versions(lib: &Library, id: &str) -> Result<Vec<(u32, String, String)>> {
+        let conn = lib.conn();
+        let mut stmt = conn.prepare(
+            "SELECT seq, label, file_path FROM versions WHERE document_id = ?1 ORDER BY seq",
+        )?;
+        let rows = stmt
+            .query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    #[test]
+    fn save_creates_the_next_version_and_keeps_the_original() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let original = pdf("original");
+        let doc = lib.import_reader(original.as_slice(), "a")?.document;
+        let v1 = lib.document_file(&doc.id)?.path;
+
+        let edited = pdf("edited with an annotation");
+        autosave(&lib, &doc, &edited, 7)?;
+        let saved = lib.save_version(&doc.id, VersionLabel::Manual, &RetentionPolicy::default())?;
+
+        assert!(saved.created);
+        assert_eq!(saved.seq, 2);
+        assert_eq!(
+            saved.document.blake3,
+            Blake3Hash::of_bytes(&edited).to_hex()
+        );
+        assert_eq!(saved.document.size_bytes, edited.len() as u64);
+        let current = lib.document_file(&doc.id)?.path;
+        assert_ne!(current, v1);
+        assert_eq!(
+            std::fs::read(&current).map_err(|e| Error::io(&current, e))?,
+            edited
+        );
+        // v1 is byte-identical to the import.
+        assert_eq!(std::fs::read(&v1).map_err(|e| Error::io(&v1, e))?, original);
+        let rows = versions(&lib, &doc.id)?;
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[1].1, "manual");
+        assert!(lib.working_copy(&doc.id)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_chunks_are_written_once() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let doc = lib.import_reader(pdf("a").as_slice(), "a")?.document;
+        let bytes = pdf("0123456789");
+        let upload = "retry-1";
+        assert_eq!(lib.write_upload_chunk(upload, 0, &bytes[..10])?, 10);
+        // Lost reply: the same chunk again.
+        assert_eq!(lib.write_upload_chunk(upload, 0, &bytes[..10])?, 10);
+        assert_eq!(
+            lib.write_upload_chunk(upload, 10, &bytes[10..])?,
+            bytes.len() as u64
+        );
+        assert!(matches!(
+            lib.write_upload_chunk(upload, bytes.len() as u64 + 5, b"x"),
+            Err(Error::Conflict(_))
+        ));
+        let copy = lib.commit_working_copy(upload, &doc.id, &doc.blake3, bytes.len() as u64)?;
+        // Committing again (lost reply) answers with the same working copy.
+        assert_eq!(
+            lib.commit_working_copy(upload, &doc.id, &doc.blake3, bytes.len() as u64)?,
+            copy
+        );
+        let path = lib.working_path(&doc.id);
+        assert_eq!(
+            std::fs::read(&path).map_err(|e| Error::io(&path, e))?,
+            bytes
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn incomplete_or_non_pdf_uploads_are_refused() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let doc = lib.import_reader(pdf("a").as_slice(), "a")?.document;
+        lib.write_upload_chunk("short", 0, b"%PDF-1.7")?;
+        assert!(matches!(
+            lib.commit_working_copy("short", &doc.id, &doc.blake3, 100),
+            Err(Error::Conflict(_))
+        ));
+        lib.write_upload_chunk("html", 0, b"<html></html>")?;
+        assert!(matches!(
+            lib.commit_working_copy("html", &doc.id, &doc.blake3, 13),
+            Err(Error::NotPdf)
+        ));
+        assert!(matches!(
+            lib.write_upload_chunk("../escape", 0, b"x"),
+            Err(Error::InvalidArgument(_))
+        ));
+        assert!(lib.working_copy(&doc.id)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn edits_on_an_outdated_version_are_refused() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let doc = lib.import_reader(pdf("a").as_slice(), "a")?.document;
+        autosave(&lib, &doc, &pdf("first edit"), 64)?;
+        lib.save_version(&doc.id, VersionLabel::Manual, &RetentionPolicy::default())?;
+        // `doc` still names v1.
+        assert!(matches!(
+            autosave(&lib, &doc, &pdf("stale"), 64),
+            Err(Error::Conflict(_))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn working_copy_survives_a_restart_and_can_be_recovered() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let edited = pdf("autosaved before the crash");
+        let id = {
+            let lib = Library::open(dir.path())?;
+            let doc = lib.import_reader(pdf("a").as_slice(), "a")?.document;
+            autosave(&lib, &doc, &edited, 5)?;
+            // An upload in flight when the app died.
+            lib.write_upload_chunk("in-flight", 0, b"%PDF-1.7 partial")?;
+            doc.id
+        };
+        let lib = Library::open(dir.path())?;
+        let copy = lib.working_copy(&id)?.ok_or(Error::NotFound(id.clone()))?;
+        assert_eq!(copy.size_bytes, edited.len() as u64);
+        assert!(!dir.path().join(UPLOADS_DIR).join("in-flight.part").exists());
+
+        let saved = lib.save_version(&id, VersionLabel::Auto, &RetentionPolicy::default())?;
+        assert_eq!(saved.seq, 2);
+        assert_eq!(versions(&lib, &id)?[1].1, "auto");
+        Ok(())
+    }
+
+    #[test]
+    fn discarding_removes_the_working_copy_only() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let original = pdf("a");
+        let doc = lib.import_reader(original.as_slice(), "a")?.document;
+        autosave(&lib, &doc, &pdf("unwanted"), 64)?;
+        lib.discard_working_copy(&doc.id)?;
+        lib.discard_working_copy(&doc.id)?;
+        assert!(lib.working_copy(&doc.id)?.is_none());
+        assert!(!lib.working_path(&doc.id).exists());
+        let path = lib.document_file(&doc.id)?.path;
+        assert_eq!(
+            std::fs::read(&path).map_err(|e| Error::io(&path, e))?,
+            original
+        );
+        assert!(matches!(
+            lib.save_version(&doc.id, VersionLabel::Manual, &RetentionPolicy::default()),
+            Err(Error::NotFound(_))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn unchanged_content_is_not_a_new_version() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let original = pdf("a");
+        let doc = lib.import_reader(original.as_slice(), "a")?.document;
+        autosave(&lib, &doc, &original, 64)?;
+        let saved = lib.save_version(&doc.id, VersionLabel::Manual, &RetentionPolicy::default())?;
+        assert!(!saved.created);
+        assert_eq!(saved.seq, 1);
+        assert_eq!(versions(&lib, &doc.id)?.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn saving_applies_retention_but_keeps_v1() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let original = pdf("a");
+        let doc = lib.import_reader(original.as_slice(), "a")?.document;
+        let policy = RetentionPolicy {
+            versions_per_document: 3,
+            history_limit_bytes: u64::MAX,
+        };
+        for i in 0..5 {
+            let current = lib.get_document(&doc.id)?;
+            autosave(&lib, &current, &pdf(&format!("edit {i}")), 64)?;
+            lib.save_version(&doc.id, VersionLabel::Manual, &policy)?;
+        }
+        let rows = versions(&lib, &doc.id)?;
+        let seqs: Vec<u32> = rows.iter().map(|r| r.0).collect();
+        assert_eq!(seqs, vec![1, 5, 6]);
+        let v1 = lib.resolve_location(&rows[0].2)?;
+        assert_eq!(std::fs::read(&v1).map_err(|e| Error::io(&v1, e))?, original);
+        // Pruned versions' files are gone from the library directory: v1 + 2 kept.
+        let files = std::fs::read_dir(lib.files_dir())
+            .map_err(|e| Error::io(lib.files_dir(), e))?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|x| x == "pdf"))
+            .count();
+        assert_eq!(files, 3);
+        Ok(())
+    }
+
+    #[test]
+    fn two_documents_may_end_with_the_same_content() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let a = lib.import_reader(pdf("a").as_slice(), "a")?.document;
+        let b = lib.import_reader(pdf("b").as_slice(), "b")?.document;
+        autosave(&lib, &a, &pdf("b"), 64)?;
+        let saved = lib.save_version(&a.id, VersionLabel::Manual, &RetentionPolicy::default())?;
+        assert_eq!(saved.document.blake3, b.blake3);
+        // Deleting one keeps the shared file for the other.
+        lib.delete_document(&a.id)?;
+        let path = lib.document_file(&b.id)?.path;
+        assert_eq!(
+            std::fs::read(&path).map_err(|e| Error::io(&path, e))?,
+            pdf("b")
+        );
+        Ok(())
+    }
+}

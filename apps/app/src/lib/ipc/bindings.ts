@@ -52,6 +52,33 @@ export const commands = {
 	 *  encode WebP) rendered by the engine worker. Idempotent per document.
 	 */
 	saveThumbnail: (id: string, image: number[]) => typedError<Document, CommandError>(__TAURI_INVOKE("save_thumbnail", { id, image })),
+	/**
+	 *  Appends one base64 chunk at `offset` and returns the upload's length.
+	 *  Base64 because the Android IPC carries JSON only (bytes would travel as a
+	 *  number array, ~4× larger). Safe to repeat.
+	 */
+	uploadChunk: (uploadId: string, offset: number, data: string) => typedError<number, CommandError>(__TAURI_INVOKE("upload_chunk", { uploadId, offset, data })),
+	/**  Drops an upload that will not be committed. Idempotent. */
+	abortUpload: (uploadId: string) => typedError<null, CommandError>(__TAURI_INVOKE("abort_upload", { uploadId })),
+	/**  Makes a finished upload the document's working copy (autosave). Safe to repeat. */
+	commitWorkingCopy: (uploadId: string, documentId: string, baseBlake3: string, sizeBytes: number) => typedError<WorkingCopy, CommandError>(__TAURI_INVOKE("commit_working_copy", { uploadId, documentId, baseBlake3, sizeBytes })),
+	/**  Unsaved edits from an earlier session (crash recovery), if any. */
+	workingCopy: (documentId: string) => typedError<{
+	documentId: string,
+	/**  BLAKE3 of the version the edits started from. */
+	baseBlake3: string,
+	sizeBytes: number,
+	/**  Unix epoch milliseconds. */
+	savedAt: number,
+} | null, CommandError>(__TAURI_INVOKE("working_copy", { documentId })),
+	/**  Throws the working copy away. Idempotent. */
+	discardWorkingCopy: (documentId: string) => typedError<null, CommandError>(__TAURI_INVOKE("discard_working_copy", { documentId })),
+	/**
+	 *  Turns the working copy into the next version (hashing can take a moment
+	 *  for large files), then applies the retention settings. Runs once per
+	 *  `request_id` (see `take_result`).
+	 */
+	saveVersion: (requestId: string, documentId: string, label: VersionLabel) => typedError<SavedVersion, CommandError>(__TAURI_INVOKE("save_version", { requestId, documentId, label })),
 	listTags: () => typedError<Tag[], CommandError>(__TAURI_INVOKE("list_tags")),
 	/**  Returns the existing tag when one with the same (folded) name exists. */
 	createTag: (name: string) => typedError<Tag, CommandError>(__TAURI_INVOKE("create_tag", { name })),
@@ -196,6 +223,14 @@ export type PendingOpen = {
 
 export type PickOutcome = { status: "picked"; source: string } | { status: "cancelled" };
 
+export type SavedVersion = {
+	document: Document,
+	/**  Sequence number of the document's current version. */
+	seq: number,
+	/**  False when the content was identical to the current version (nothing new stored). */
+	created: boolean,
+};
+
 export type Settings = {
 	locale: LocalePref,
 	theme: ThemePref,
@@ -250,6 +285,23 @@ export type TakeResult =
 { status: "unknown" };
 
 export type ThemePref = "system" | "light" | "dark" | "sepia";
+
+/**  How a version came to be. */
+export type VersionLabel = 
+/**  Saved by the user (leaving the editor, "Done"). */
+"manual" | 
+/**  Saved without the user asking (a recovered working copy). */
+"auto";
+
+/**  Autosaved edits that are not a version yet. */
+export type WorkingCopy = {
+	documentId: string,
+	/**  BLAKE3 of the version the edits started from. */
+	baseBlake3: string,
+	sizeBytes: number,
+	/**  Unix epoch milliseconds. */
+	savedAt: number,
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

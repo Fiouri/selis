@@ -20,14 +20,19 @@ export {
 } from "./geometry";
 export { DEFAULT_RENDER_LIMITS, memoryTier, type MemoryTier, renderLimitsFor, type RenderLimits } from "./limits";
 export { LruCache } from "./lru";
+export { annotationAt, glyphAt, selectionRects, simplifyStroke, strokesBounds, unionRect } from "./editing";
 export {
+  type Annotation,
+  type AnnotationKind,
   type DocHandle,
   EngineError,
   type EngineErrorCode,
+  type Glyph,
   type OpenOptions,
   type PageSize,
   type PdfEngine,
   type OutlineItem,
+  type Point,
   type RenderOptions,
   type SearchHit,
   type SearchOptions,

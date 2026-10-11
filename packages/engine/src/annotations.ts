@@ -1,0 +1,427 @@
+/**
+ * Annotations in and out of PDFium (worker side). EmbedPDF writes the standard
+ * subtypes (markup, ink, shapes, lines, notes) and generates their appearance
+ * streams, so any PDF reader shows them. Typed text is the exception: PDFium's
+ * FreeText appearance only knows the standard 14 fonts, which have no Greek, so
+ * typed text is a Stamp whose appearance holds real text objects in an embedded
+ * Latin + Greek font (Selis Sans: a Noto Sans subset, OFL). Its /Contents carries the plain
+ * text for reviewers' comment lists.
+ *
+ * Shared by the worker and the Node tests (annotations.node.test.ts), which pin
+ * the EmbedPDF internals used here to the version in package.json.
+ */
+import type { PdfiumNative } from "@embedpdf/engines/pdfium";
+import {
+  type PdfAnnotationObject,
+  PdfAnnotationBorderStyle,
+  PdfAnnotationLineEnding,
+  PdfAnnotationSubtype,
+  type PdfDocumentObject,
+  type PdfPageObject,
+  type Rect,
+} from "@embedpdf/models";
+import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
+import type { PageRect } from "./geometry";
+import type { Annotation, Point } from "./types";
+
+/** /NM prefix of typed-text stamps written by Selis. */
+export const TEXT_STAMP_PREFIX = "selis-text-";
+/** Annotation dictionary key holding a typed-text stamp's style (JSON). */
+const TEXT_STYLE_KEY = "SelisText";
+/** Line height and first baseline of the embedded font, in em. */
+const LINE_HEIGHT_EM = 1.36;
+const ASCENT_EM = 1.07;
+/** Inner padding of a typed-text box, in points. */
+export const TEXT_PADDING = 2;
+
+const ANNOT_FLAG_PRINT = 4;
+const FPDF_FONT_TRUETYPE = 2;
+
+type PageCtx = { pagePtr: number; release(): void };
+type DocCtx = { docPtr: number; acquirePage(index: number): PageCtx };
+/** EmbedPDF internals this module relies on (checked by the Node tests). */
+type EngineInternals = {
+  cache: { getContext(id: string): DocCtx | undefined };
+  convertDevicePointToPagePoint(doc: PdfDocumentObject, page: PdfPageObject, p: Point): Point;
+  setPageAnnoRect(doc: PdfDocumentObject, page: PdfPageObject, annotPtr: number, rect: Rect): boolean;
+};
+type Heap = { HEAPU8: Uint8Array; HEAPU16: Uint16Array };
+
+function internals(engine: PdfiumNative): EngineInternals {
+  return engine as unknown as EngineInternals;
+}
+
+const toRect = (r: PageRect): Rect => ({ origin: { x: r.x, y: r.y }, size: { width: r.width, height: r.height } });
+const fromRect = (r: Rect): PageRect => ({ x: r.origin.x, y: r.origin.y, width: r.size.width, height: r.size.height });
+const toPosition = (p: Point) => ({ x: p.x, y: p.y });
+
+function hexColor(value: string | undefined, fallback: string): string {
+  return value && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : fallback;
+}
+
+function isTransparent(value: string | undefined): boolean {
+  return !value || value === "transparent";
+}
+
+/** EmbedPDF annotation → editor annotation. */
+export function fromPdfAnnotation(a: PdfAnnotationObject, textStyle?: TextStyle | null): Annotation {
+  const base = { id: a.id, page: a.pageIndex, rect: fromRect(a.rect) };
+  switch (a.type) {
+    case PdfAnnotationSubtype.HIGHLIGHT:
+    case PdfAnnotationSubtype.UNDERLINE:
+    case PdfAnnotationSubtype.STRIKEOUT: {
+      const kind =
+        a.type === PdfAnnotationSubtype.HIGHLIGHT ? "highlight" : a.type === PdfAnnotationSubtype.UNDERLINE ? "underline" : "strikeout";
+      return {
+        ...base,
+        kind,
+        color: hexColor(a.color ?? a.strokeColor, "#f4c430"),
+        opacity: a.opacity,
+        segments: (a.segmentRects.length > 0 ? a.segmentRects : [a.rect]).map(fromRect),
+      };
+    }
+    case PdfAnnotationSubtype.INK:
+      return {
+        ...base,
+        kind: "ink",
+        color: hexColor(a.strokeColor ?? a.color, "#000000"),
+        opacity: a.opacity,
+        width: a.strokeWidth,
+        strokes: a.inkList.map((s) => s.points.map((p) => ({ x: p.x, y: p.y }))),
+      };
+    case PdfAnnotationSubtype.SQUARE:
+    case PdfAnnotationSubtype.CIRCLE:
+      return {
+        ...base,
+        kind: a.type === PdfAnnotationSubtype.SQUARE ? "square" : "circle",
+        color: hexColor(a.strokeColor, "#000000"),
+        opacity: a.opacity,
+        width: a.strokeWidth,
+        fill: isTransparent(a.color) ? null : hexColor(a.color, "#ffffff"),
+      };
+    case PdfAnnotationSubtype.LINE:
+      return {
+        ...base,
+        kind: a.lineEndings?.end === PdfAnnotationLineEnding.OpenArrow ? "arrow" : "line",
+        color: hexColor(a.strokeColor, "#000000"),
+        opacity: a.opacity,
+        width: a.strokeWidth,
+        start: { x: a.linePoints.start.x, y: a.linePoints.start.y },
+        end: { x: a.linePoints.end.x, y: a.linePoints.end.y },
+      };
+    case PdfAnnotationSubtype.TEXT:
+      return { ...base, kind: "note", color: hexColor(a.color ?? a.strokeColor, "#f4c430"), opacity: a.opacity ?? 1, text: a.contents ?? "" };
+    case PdfAnnotationSubtype.STAMP:
+      if (a.id.startsWith(TEXT_STAMP_PREFIX) && textStyle) {
+        return { ...base, kind: "text", color: textStyle.color, opacity: 1, text: a.contents ?? "", fontSize: textStyle.fontSize };
+      }
+      return { ...base, kind: "other", color: "#000000", opacity: 1 };
+    default:
+      return { ...base, kind: "other", color: "#000000", opacity: 1 };
+  }
+}
+
+/** Editor annotation → EmbedPDF annotation (all subtypes except typed text). */
+export function toPdfAnnotation(a: Exclude<Annotation, { kind: "text" | "other" }>): PdfAnnotationObject {
+  const base = { id: a.id, pageIndex: a.page, rect: toRect(a.rect), flags: ["print" as const] };
+  switch (a.kind) {
+    case "highlight":
+    case "underline":
+    case "strikeout":
+      return {
+        ...base,
+        type:
+          a.kind === "highlight"
+            ? PdfAnnotationSubtype.HIGHLIGHT
+            : a.kind === "underline"
+              ? PdfAnnotationSubtype.UNDERLINE
+              : PdfAnnotationSubtype.STRIKEOUT,
+        color: a.color,
+        strokeColor: a.color,
+        opacity: a.opacity,
+        segmentRects: a.segments.map(toRect),
+      };
+    case "ink":
+      return {
+        ...base,
+        type: PdfAnnotationSubtype.INK,
+        color: a.color,
+        strokeColor: a.color,
+        opacity: a.opacity,
+        strokeWidth: a.width,
+        inkList: a.strokes.map((s) => ({ points: s.map(toPosition) })),
+      };
+    case "square":
+    case "circle":
+      return {
+        ...base,
+        type: a.kind === "square" ? PdfAnnotationSubtype.SQUARE : PdfAnnotationSubtype.CIRCLE,
+        color: a.fill ?? "transparent",
+        strokeColor: a.color,
+        strokeWidth: a.width,
+        strokeStyle: PdfAnnotationBorderStyle.SOLID,
+        opacity: a.opacity,
+      };
+    case "line":
+    case "arrow":
+      return {
+        ...base,
+        type: PdfAnnotationSubtype.LINE,
+        color: "transparent",
+        strokeColor: a.color,
+        strokeWidth: a.width,
+        strokeStyle: PdfAnnotationBorderStyle.SOLID,
+        opacity: a.opacity,
+        linePoints: { start: toPosition(a.start), end: toPosition(a.end) },
+        lineEndings: {
+          start: PdfAnnotationLineEnding.None,
+          end: a.kind === "arrow" ? PdfAnnotationLineEnding.OpenArrow : PdfAnnotationLineEnding.None,
+        },
+      };
+    case "note":
+      return {
+        ...base,
+        flags: ["print", "noZoom", "noRotate"],
+        type: PdfAnnotationSubtype.TEXT,
+        contents: a.text,
+        color: a.color,
+        opacity: a.opacity,
+      };
+  }
+}
+
+export type TextStyle = { readonly fontSize: number; readonly color: string };
+
+/** Raw PDFium access for typed-text stamps. */
+export class TextStamps {
+  /** Embedded font handle per document id (loaded on first use). */
+  private readonly fonts = new Map<string, number>();
+
+  constructor(
+    private readonly engine: PdfiumNative,
+    private readonly pdf: WrappedPdfiumModule,
+    private readonly fontBytes: () => Promise<Uint8Array>,
+  ) {}
+
+  private get heap(): Heap {
+    return this.pdf.pdfium as unknown as Heap;
+  }
+
+  private malloc(size: number): number {
+    return this.pdf.pdfium.wasmExports.malloc(size);
+  }
+
+  private free(ptr: number): void {
+    this.pdf.pdfium.wasmExports.free(ptr);
+  }
+
+  /** NUL-terminated UTF-16LE (FPDF_WIDESTRING). */
+  private wideString(value: string): number {
+    const ptr = this.malloc((value.length + 1) * 2);
+    const base = ptr >> 1;
+    for (let i = 0; i < value.length; i++) this.heap.HEAPU16[base + i] = value.charCodeAt(i);
+    this.heap.HEAPU16[base + value.length] = 0;
+    return ptr;
+  }
+
+  private setString(annot: number, key: string, value: string): boolean {
+    const v = this.wideString(value);
+    try {
+      return this.pdf.FPDFAnnot_SetStringValue(annot, key, v);
+    } finally {
+      this.free(v);
+    }
+  }
+
+  private getString(annot: number, key: string): string | null {
+    const bytes = this.pdf.FPDFAnnot_GetStringValue(annot, key, 0, 0);
+    if (bytes <= 2) return null;
+    const buf = this.malloc(bytes);
+    try {
+      this.pdf.FPDFAnnot_GetStringValue(annot, key, buf, bytes);
+      const units = this.heap.HEAPU16.subarray(buf >> 1, (buf >> 1) + bytes / 2 - 1);
+      return String.fromCharCode(...units);
+    } finally {
+      this.free(buf);
+    }
+  }
+
+  private context(doc: PdfDocumentObject): DocCtx {
+    const ctx = internals(this.engine).cache.getContext(doc.id);
+    if (!ctx) throw new Error("document is not open");
+    return ctx;
+  }
+
+  private async font(doc: PdfDocumentObject): Promise<number> {
+    const cached = this.fonts.get(doc.id);
+    if (cached) return cached;
+    const bytes = await this.fontBytes();
+    const ptr = this.malloc(bytes.length);
+    try {
+      this.heap.HEAPU8.set(bytes, ptr);
+      const handle = this.pdf.FPDFText_LoadFont(this.context(doc).docPtr, ptr, bytes.length, FPDF_FONT_TRUETYPE, true);
+      if (!handle) throw new Error("embedded font failed to load");
+      this.fonts.set(doc.id, handle);
+      return handle;
+    } finally {
+      this.free(ptr);
+    }
+  }
+
+  /** Index of the annotation named `id` on an open page, or -1. */
+  private find(pagePtr: number, id: string): number {
+    const count = this.pdf.FPDFPage_GetAnnotCount(pagePtr);
+    for (let i = 0; i < count; i++) {
+      const annot = this.pdf.FPDFPage_GetAnnot(pagePtr, i);
+      if (!annot) continue;
+      const name = this.getString(annot, "NM");
+      this.pdf.FPDFPage_CloseAnnot(annot);
+      if (name === id) return i;
+    }
+    return -1;
+  }
+
+  /** Style of Selis typed-text stamps on a page, by id. */
+  styles(doc: PdfDocumentObject, page: PdfPageObject, ids: readonly string[]): Map<string, TextStyle> {
+    const out = new Map<string, TextStyle>();
+    if (ids.length === 0) return out;
+    const pageCtx = this.context(doc).acquirePage(page.index);
+    try {
+      const count = this.pdf.FPDFPage_GetAnnotCount(pageCtx.pagePtr);
+      for (let i = 0; i < count; i++) {
+        const annot = this.pdf.FPDFPage_GetAnnot(pageCtx.pagePtr, i);
+        if (!annot) continue;
+        const name = this.getString(annot, "NM");
+        if (name && ids.includes(name)) {
+          const style = parseStyle(this.getString(annot, TEXT_STYLE_KEY));
+          if (style) out.set(name, style);
+        }
+        this.pdf.FPDFPage_CloseAnnot(annot);
+      }
+    } finally {
+      pageCtx.release();
+    }
+    return out;
+  }
+
+  /** Width of `text` set in the embedded font at `fontSize`, in points. */
+  private measure(docPtr: number, font: number, fontSize: number, text: string): number {
+    if (text === "") return 0;
+    const obj = this.pdf.FPDFPageObj_CreateTextObj(docPtr, font, fontSize);
+    const wide = this.wideString(text);
+    const bounds = this.malloc(16);
+    try {
+      this.pdf.FPDFText_SetText(obj, wide);
+      if (!this.pdf.FPDFPageObj_GetBounds(obj, bounds, bounds + 4, bounds + 8, bounds + 12)) return 0;
+      const f32 = new Float32Array(this.heap.HEAPU8.buffer, bounds, 4);
+      return (f32[2] as number) - (f32[0] as number);
+    } finally {
+      this.free(wide);
+      this.free(bounds);
+      this.pdf.FPDFPageObj_Destroy(obj);
+    }
+  }
+
+  /** Breaks `text` into lines no wider than `maxWidth` (explicit newlines kept). */
+  private wrap(docPtr: number, font: number, fontSize: number, text: string, maxWidth: number): string[] {
+    const lines: string[] = [];
+    for (const paragraph of text.split(/\r?\n/)) {
+      let line = "";
+      for (const word of paragraph.split(/(\s+)/)) {
+        const candidate = line + word;
+        if (line !== "" && word.trim() !== "" && this.measure(docPtr, font, fontSize, candidate.trimEnd()) > maxWidth) {
+          lines.push(line.trimEnd());
+          line = word;
+        } else {
+          line = candidate;
+        }
+      }
+      lines.push(line.trimEnd());
+    }
+    return lines;
+  }
+
+  /**
+   * Writes a typed-text stamp. The box keeps `a.rect`'s top-left corner and
+   * width (the wrap width); its height follows the lines. Returns the stored rect.
+   */
+  async create(doc: PdfDocumentObject, page: PdfPageObject, a: Extract<Annotation, { kind: "text" }>): Promise<PageRect> {
+    const font = await this.font(doc);
+    const ctx = this.context(doc);
+    const inner = Math.max(1, a.rect.width - 2 * TEXT_PADDING);
+    const lines = this.wrap(ctx.docPtr, font, a.fontSize, a.text, inner);
+    const lineHeight = a.fontSize * LINE_HEIGHT_EM;
+    const widest = Math.max(0, ...lines.map((l) => this.measure(ctx.docPtr, font, a.fontSize, l)));
+    const rect: PageRect = {
+      x: a.rect.x,
+      y: a.rect.y,
+      width: Math.max(a.rect.width, widest + 2 * TEXT_PADDING),
+      height: lines.length * lineHeight + 2 * TEXT_PADDING,
+    };
+    const engine = internals(this.engine);
+    const pageCtx = ctx.acquirePage(page.index);
+    try {
+      const existing = this.find(pageCtx.pagePtr, a.id);
+      if (existing >= 0) this.pdf.FPDFPage_RemoveAnnot(pageCtx.pagePtr, existing);
+      const annot = this.pdf.FPDFPage_CreateAnnot(pageCtx.pagePtr, PdfAnnotationSubtype.STAMP);
+      if (!annot) throw new Error("cannot create the text stamp");
+      try {
+        if (!engine.setPageAnnoRect(doc, page, annot, toRect(rect))) throw new Error("cannot place the text stamp");
+        this.setString(annot, "NM", a.id);
+        this.setString(annot, "Contents", a.text);
+        this.setString(annot, TEXT_STYLE_KEY, JSON.stringify({ fontSize: a.fontSize, color: a.color }));
+        this.pdf.FPDFAnnot_SetFlags(annot, ANNOT_FLAG_PRINT);
+        const [r, g, b] = rgb(a.color);
+        const toPage = (p: Point) => engine.convertDevicePointToPagePoint(doc, page, p);
+        lines.forEach((line, i) => {
+          if (line === "") return;
+          const obj = this.pdf.FPDFPageObj_CreateTextObj(ctx.docPtr, font, a.fontSize);
+          const wide = this.wideString(line);
+          try {
+            this.pdf.FPDFText_SetText(obj, wide);
+          } finally {
+            this.free(wide);
+          }
+          this.pdf.FPDFPageObj_SetFillColor(obj, r, g, b, 255);
+          // Baseline in page view coordinates, turned into the page's own space so
+          // the text reads upright whatever the page's /Rotate.
+          const x = rect.x + TEXT_PADDING;
+          const y = rect.y + TEXT_PADDING + a.fontSize * ASCENT_EM + i * lineHeight;
+          const o = toPage({ x, y });
+          const ex = toPage({ x: x + 1, y });
+          const up = toPage({ x, y: y - 1 });
+          this.pdf.FPDFPageObj_Transform(obj, ex.x - o.x, ex.y - o.y, up.x - o.x, up.y - o.y, o.x, o.y);
+          if (!this.pdf.FPDFAnnot_AppendObject(annot, obj)) throw new Error("cannot write the text stamp");
+        });
+      } finally {
+        this.pdf.FPDFPage_CloseAnnot(annot);
+      }
+    } finally {
+      pageCtx.release();
+    }
+    return rect;
+  }
+
+  /** Frees the font handle of a closed document. */
+  forget(docId: string): void {
+    const font = this.fonts.get(docId);
+    if (font) this.pdf.FPDFFont_Close(font);
+    this.fonts.delete(docId);
+  }
+}
+
+function parseStyle(json: string | null): TextStyle | null {
+  if (!json) return null;
+  try {
+    const v = JSON.parse(json) as { fontSize?: unknown; color?: unknown };
+    const fontSize = typeof v.fontSize === "number" && v.fontSize > 0 ? v.fontSize : 14;
+    return { fontSize, color: hexColor(typeof v.color === "string" ? v.color : undefined, "#000000") };
+  } catch {
+    return null;
+  }
+}
+
+function rgb(hex: string): [number, number, number] {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+}
