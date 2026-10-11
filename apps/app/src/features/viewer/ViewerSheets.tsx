@@ -1,5 +1,5 @@
 import type { DocHandle, OutlineItem } from "@selis/engine";
-import { ChevronRight, LayoutGrid, ListTree, Moon, RotateCw } from "lucide-react";
+import { ChevronRight, EyeOff, LayoutGrid, ListTree, Moon, RotateCw } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Sheet } from "../../components/Sheet";
@@ -14,12 +14,13 @@ type MoreProps = {
   onThumbnails: () => void;
   onRotate: () => void;
   onNight: (on: boolean) => void;
+  onRedact: () => void;
 };
 
 const row = "selis-focus flex min-h-14 w-full items-center gap-4 px-5 text-left text-md text-neutral-12 active:bg-neutral-3";
 
 /** ⋮ in the top bar: contents, pages, rotate view, night mode. */
-export function ViewerMoreSheet({ open, onClose, rotation, night, onOutline, onThumbnails, onRotate, onNight }: MoreProps) {
+export function ViewerMoreSheet({ open, onClose, rotation, night, onOutline, onThumbnails, onRotate, onNight, onRedact }: MoreProps) {
   const { t } = useTranslation();
   const nightLabel = useId();
   return (
@@ -36,6 +37,13 @@ export function ViewerMoreSheet({ open, onClose, rotation, night, onOutline, onT
           <button type="button" className={row} onClick={onThumbnails}>
             <LayoutGrid size={22} strokeWidth={1.75} className="text-neutral-11" aria-hidden="true" />
             <span className="flex-1">{t("viewer.thumbnails")}</span>
+            <ChevronRight size={20} strokeWidth={1.75} className="text-neutral-9" aria-hidden="true" />
+          </button>
+        </li>
+        <li>
+          <button type="button" className={row} onClick={onRedact} data-testid="more-redact">
+            <EyeOff size={22} strokeWidth={1.75} className="text-neutral-11" aria-hidden="true" />
+            <span className="flex-1">{t("redact.more")}</span>
             <ChevronRight size={20} strokeWidth={1.75} className="text-neutral-9" aria-hidden="true" />
           </button>
         </li>

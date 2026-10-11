@@ -13,6 +13,9 @@ import { FormLayer } from "../features/forms/FormLayer";
 import { flattenCommand, useFormState } from "../features/forms/formState";
 import { useDocStructure } from "../features/pages/pageCommands";
 import { PagesMode } from "../features/pages/PagesMode";
+import { RedactLayer } from "../features/redact/RedactLayer";
+import { applyCommand, discardCommand, useRedactState } from "../features/redact/redactState";
+import { RedactSheet } from "../features/redact/RedactSheet";
 import { SignatureLayer, useSignState } from "../features/sign/SignatureLayer";
 import { SignSheet } from "../features/sign/SignSheet";
 import { PdfViewer, type PdfViewerHandle, type ScrollInfo } from "../features/viewer/PdfViewer";
@@ -60,12 +63,13 @@ function ViewerSkeleton({ insetTop }: { insetTop: number }) {
 
 type Variant = "phone" | "tablet";
 type ViewerSheet = "more" | "outline" | "thumbnails" | null;
-type Mode = "view" | "annotate" | "sign" | "form" | "pages";
+type Mode = "view" | "annotate" | "sign" | "form" | "pages" | "redact";
 
 const MODE_TITLES: Record<Exclude<Mode, "view" | "pages">, { title: string; close: string }> = {
   annotate: { title: "annotate.title", close: "annotate.close" },
   sign: { title: "sign.title", close: "sign.close" },
   form: { title: "forms.title", close: "forms.close" },
+  redact: { title: "redact.title", close: "redact.close" },
 };
 
 const NO_SESSION: SessionState = { status: "saved", canUndo: false, canRedo: false, undoTool: null };
@@ -203,17 +207,30 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     void api.recordDocumentInfo(docId, doc.pageCount, null).catch(() => undefined);
   }, [doc, docId, structure]);
 
-  /** Leaves the editing mode; the session's edits become a version. */
+  /**
+   * Leaves the editing mode; the session's edits become a version. Redaction
+   * marks that were not applied are taken away first: a saved version never
+   * shows a black box over content that is still there.
+   */
   const finishAnnotating = useCallback(() => {
     setMode("view");
     useSignState.getState().activate(null);
     useFormState.getState().setActive(null);
-    if (!session) return;
-    session.commit().catch((err: unknown) => {
-      console.warn("selis: saving the annotations failed", err);
-      showToast(t("annotate.saveFailed"), "error");
-    });
-  }, [session, showToast, t]);
+    if (!session || !doc) return;
+    const pending = [...useRedactState.getState().marks.values()];
+    void (async () => {
+      try {
+        if (pending.length > 0) {
+          await session.run(discardCommand(doc, pending));
+          showToast(t("redact.discarded", { count: pending.length }));
+        }
+        await session.commit();
+      } catch (err) {
+        console.warn("selis: saving the annotations failed", err);
+        showToast(t("annotate.saveFailed"), "error");
+      }
+    })();
+  }, [session, doc, showToast, t]);
   useOverlay(annotating, finishAnnotating);
 
   const startEditing = (next: Exclude<Mode, "view">) => {
@@ -227,6 +244,23 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     setChrome(true);
     setDockHidden(false);
     setMode(next);
+  };
+
+  const [confirmRedact, setConfirmRedact] = useState(false);
+  const [redacting, setRedacting] = useState(false);
+  const redactCount = useRedactState((s) => s.marks.size);
+  const applyRedactions = async () => {
+    setConfirmRedact(false);
+    if (!doc || !session) return;
+    setRedacting(true);
+    try {
+      await session.run(applyCommand(doc, (count) => showToast(t("redact.applied", { count }))));
+    } catch (err) {
+      console.warn("selis: redaction failed", err);
+      showToast(t("redact.failed"), "error");
+    } finally {
+      setRedacting(false);
+    }
   };
 
   const flatten = async () => {
@@ -252,6 +286,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
       if (!doc || !session) return null;
       if (mode === "sign") return <SignatureLayer doc={doc} index={index} scale={scale} session={session} />;
       if (mode === "form") return <FormLayer doc={doc} index={index} scale={scale} session={session} />;
+      if (mode === "redact") return <RedactLayer doc={doc} index={index} scale={scale} session={session} />;
       return <AnnotationLayer doc={doc} index={index} scale={scale} session={session} />;
     },
     [doc, session, mode],
@@ -465,6 +500,8 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           {annotating ? (
             mode === "sign" ? (
               <SignSheet ref={sheetRef} />
+            ) : mode === "redact" ? (
+              <RedactSheet ref={sheetRef} busy={redacting} onApply={() => setConfirmRedact(true)} />
             ) : mode === "form" ? (
               <FormSheet ref={sheetRef} onJump={(index, y) => mainRef.current?.scrollToPage(index, y)} onFlatten={() => void flatten()} />
             ) : (
@@ -490,6 +527,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
             onThumbnails={() => setSheet("thumbnails")}
             onRotate={() => setRotation((r) => nextTurn(r))}
             onNight={(on) => void setNight(on)}
+            onRedact={() => startEditing("redact")}
           />
           <OutlineSheet open={sheet === "outline"} onClose={() => setSheet(null)} doc={doc} onJump={jumpFromSheet} />
           <ThumbnailsSheet
@@ -501,6 +539,17 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           />
         </>
       ) : null}
+      <ConfirmDialog
+        open={confirmRedact}
+        danger
+        title={t("redact.confirmTitle", { count: redactCount })}
+        message={t("redact.confirmBody")}
+        confirmLabel={t("redact.confirm")}
+        cancelLabel={t("redact.cancel")}
+        onConfirm={() => void applyRedactions()}
+        onCancel={() => setConfirmRedact(false)}
+        testId="redact-dialog"
+      />
       <ConfirmDialog
         open={state.status === "recovery"}
         title={t("recovery.title")}

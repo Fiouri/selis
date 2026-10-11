@@ -1,5 +1,6 @@
 import { type DocHandle, EngineError, type PageRect } from "@selis/engine";
 import { useEffect, useMemo, useState } from "react";
+import { useDocStructure } from "../pages/pageCommands";
 import type { PageHighlights } from "./PdfViewer";
 
 /** Typing pauses this long before a search starts (a 1000-page search is not free). */
@@ -39,15 +40,18 @@ export function highlightsByPage(matches: readonly SearchMatch[], active: number
 export function useDocumentSearch(doc: DocHandle | null, query: string) {
   const [stored, setState] = useState<Stored>(IDLE);
   const trimmed = query.trim();
+  // Page operations and redaction change the text: results belong to one version of it.
+  const structure = useDocStructure(doc);
+  const key = `${structure}|${trimmed}`;
   // Results belong to the query they were found for; anything else is "not searched yet".
   const state: SearchState =
-    stored.query === trimmed ? stored : { matches: [], done: trimmed === "", active: 0 };
+    stored.query === key ? stored : { matches: [], done: trimmed === "", active: 0 };
 
   useEffect(() => {
     if (!doc || trimmed === "") return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      setState({ query: trimmed, matches: [], done: false, active: 0 });
+      setState({ query: key, matches: [], done: false, active: 0 });
       const found: SearchMatch[] = [];
       void (async () => {
         try {
@@ -70,13 +74,13 @@ export function useDocumentSearch(doc: DocHandle | null, query: string) {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [doc, trimmed]);
+  }, [doc, trimmed, key]);
 
   const highlights = useMemo(() => highlightsByPage(state.matches, state.active), [state.matches, state.active]);
 
   const step = (delta: number) =>
     setState((s) =>
-      s.query !== trimmed || s.matches.length === 0
+      s.query !== key || s.matches.length === 0
         ? s
         : { ...s, active: (s.active + delta + s.matches.length) % s.matches.length },
     );

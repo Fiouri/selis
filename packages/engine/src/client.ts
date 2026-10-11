@@ -282,6 +282,16 @@ export class WorkerPdfEngine implements PdfEngine {
         restructured(msg.pages);
         return msg.before;
       },
+      applyRedactions: async () => {
+        ensureOpen();
+        const msg = await this.request<Extract<WorkerResponse, { type: "redacted" }>>((reqId) => ({
+          type: "applyRedactions",
+          reqId,
+          docId,
+        }));
+        restructured(msg.pages);
+        return { before: msg.before, applied: msg.applied };
+      },
       extractPages: async (indices) => {
         ensureOpen();
         const msg = await this.request<Extract<WorkerResponse, { type: "extracted" }>>((reqId) => ({

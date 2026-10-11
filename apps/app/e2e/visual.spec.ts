@@ -219,6 +219,40 @@ for (const theme of THEMES) {
       await expect(page).toHaveScreenshot(`pages-delete-${theme}.png`);
     });
 
+    test(`redact: marks, whiteout and the confirm dialog (${theme})`, async ({ page }) => {
+      await page.goto("/");
+      await importFixture(page, "greek.pdf", "Ελληνικό δοκιμαστικό.pdf");
+      await firstPageRendered(page);
+      await page.getByRole("button", { name: "Περισσότερα" }).click();
+      await page.getByTestId("more-redact").click();
+      const layer = page.getByTestId("redact-layer-1");
+      const box = await layer.boundingBox();
+      if (!box) throw new Error("layer not laid out");
+      const s = box.width / 595;
+      const drag = async (a: [number, number], b: [number, number]) => {
+        await page.mouse.move(box.x + a[0] * s, box.y + a[1] * s);
+        await page.mouse.down();
+        await page.mouse.move(box.x + b[0] * s, box.y + b[1] * s, { steps: 6 });
+        await page.mouse.up();
+      };
+      await page.getByTestId("redact-tool-area").click();
+      await drag([50, 143], [545, 163]);
+      await page.getByTestId("redact-tool-whiteout").click();
+      await drag([50, 169], [400, 189]);
+      await page.getByTestId("text-editor-input").fill("Διορθωμένη γραμμή");
+      await page.getByTestId("text-editor-input").blur();
+      await page.getByRole("button", { name: "Προσθήκη" }).click();
+      await expect(page.getByTestId("redact-mark")).toHaveCount(2);
+      await expect(page.getByTestId("save-status")).toHaveText("αποθηκεύτηκε", { timeout: 10_000 });
+      await settle(page);
+      await expect(page).toHaveScreenshot(`redact-marks-${theme}.png`);
+
+      await page.getByTestId("redact-apply").click();
+      await expect(page.getByTestId("redact-dialog")).toBeVisible();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`redact-confirm-${theme}.png`);
+    });
+
     test(`settings and transfer (${theme})`, async ({ page }) => {
       await page.goto("/");
       await page.getByRole("navigation").getByRole("button", { name: "Ρυθμίσεις" }).click();

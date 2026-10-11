@@ -112,6 +112,13 @@ export interface DocHandle {
    * `pageCount` change; `onStructureChange` listeners are told.
    */
   editPages(op: PageOp): Promise<ArrayBuffer>;
+  /**
+   * Applies every redaction mark: the content under it (text, images, vector
+   * art, annotations, form values) is removed from the document; whiteouts get
+   * their text. Resolves to the bytes from before (undo) and the number of marks
+   * applied. Like a page operation, it rebuilds the document (`onStructureChange`).
+   */
+  applyRedactions(): Promise<{ before: ArrayBuffer; applied: number }>;
   /** The pages `indices` as a new PDF (forms kept fillable). */
   extractPages(indices: readonly number[]): Promise<ArrayBuffer>;
   /** Bumped by every change to the list of pages (count, order, sizes). */
@@ -176,6 +183,16 @@ export type Annotation =
    * file; `annotationAppearance` gives a copy that can recreate it.
    */
   | (AnnotationBase & { readonly kind: "signature"; readonly image: StampImage | null })
+  /**
+   * A redaction mark not applied yet (a /Redact annotation). `fill` paints the
+   * area once applied: black, or white with `text` written over it (whiteout).
+   */
+  | (AnnotationBase & {
+      readonly kind: "redact";
+      readonly segments: readonly PageRect[];
+      readonly fill: "black" | "white";
+      readonly text: string;
+    })
   /** Anything else (links, form widgets, foreign stamps…): shown, never edited. */
   | (AnnotationBase & { readonly kind: "other" });
 
