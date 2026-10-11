@@ -93,6 +93,29 @@ describe("overlays (sheets, search)", () => {
     expect(useNavigation.getState().depth).toBe(0);
   });
 
+  it("an overlay opened while the previous one's entry is being popped stays open", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const a = renderHook(({ open }) => useOverlay(open, first), { initialProps: { open: true } });
+    const p = popped();
+    a.rerender({ open: false });
+    // The release timer has run (history.back() is on its way), popstate has not arrived yet.
+    await new Promise((r) => setTimeout(r, 0));
+    const b = renderHook(({ open }) => useOverlay(open, second), { initialProps: { open: true } });
+    await act(() => p);
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(second).not.toHaveBeenCalled();
+    const entry = history.state as { depth: number; overlay?: string };
+    expect(typeof entry.overlay).toBe("string");
+    expect(useNavigation.getState().depth).toBe(1);
+
+    // And back still closes it, then leaves nothing behind.
+    await act(systemBack);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(useNavigation.getState().depth).toBe(0);
+    b.unmount();
+  });
+
   it("a document opened over an overlay comes back to it", async () => {
     const onClose = vi.fn();
     renderHook(() => useOverlay(true, onClose));

@@ -184,8 +184,6 @@ test("rename from the menu (with undo) and delete after a confirm", async ({ pag
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(cards(page)).toHaveCount(2);
-  // The dialog's history entry is popped asynchronously; no finger is that fast.
-  await expect.poll(() => page.evaluate(() => (history.state as { overlay?: string } | null)?.overlay)).toBeUndefined();
 
   await page.getByRole("button", { name: "Open Σημειώσεις" }).click({ button: "right" });
   await page.getByTestId("document-menu").getByRole("button", { name: "Delete" }).click();

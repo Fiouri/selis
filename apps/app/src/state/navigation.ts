@@ -96,23 +96,60 @@ const overlays: Overlay[] = [];
 /** A just-released overlay entry, reused if another overlay opens right away (React StrictMode). */
 let releasing: { token: string; timer: number } | null = null;
 let overlaySeq = 0;
+/**
+ * A released overlay's history.back() is on its way (popstate not yet seen). An
+ * entry pushed now would be the one that pop removes, closing the new overlay at
+ * once, so overlays opened meanwhile wait in `waiting` for the pop to land.
+ */
+let backInFlight: { fallback: number } | null = null;
+const waiting: Overlay[] = [];
+/** If popstate never comes (it always should), the waiting overlays still get their entries. */
+const BACK_FALLBACK_MS = 500;
+
+function pushEntry(overlay: Overlay, reuse: boolean): void {
+  const { route, depth } = useNavigation.getState();
+  overlay.depth = reuse ? depth : depth + 1;
+  const entry: HistoryEntry = { selis: 1, route, depth: overlay.depth, overlay: overlay.token };
+  if (reuse) history.replaceState(entry, "");
+  else history.pushState(entry, "");
+  overlays.push(overlay);
+  useNavigation.setState({ depth: overlay.depth });
+}
+
+function goBackForRelease(): void {
+  if (backInFlight) window.clearTimeout(backInFlight.fallback);
+  backInFlight = { fallback: window.setTimeout(backLanded, BACK_FALLBACK_MS) };
+  history.back();
+}
+
+/** The pop of a released entry has landed: give the waiting overlays their entries. */
+function backLanded(): void {
+  if (backInFlight) window.clearTimeout(backInFlight.fallback);
+  backInFlight = null;
+  for (const overlay of waiting.splice(0)) pushEntry(overlay, false);
+}
 
 function pushOverlay(onPopped: () => void): string {
-  const { route, depth } = useNavigation.getState();
   overlaySeq += 1;
-  const token = `overlay-${overlaySeq}`;
+  const overlay: Overlay = { token: `overlay-${overlaySeq}`, depth: 0, onPopped };
+  if (backInFlight) {
+    waiting.push(overlay);
+    return overlay.token;
+  }
   const reuse = releasing !== null && isEntry(history.state) && history.state.overlay === releasing.token;
   if (releasing) window.clearTimeout(releasing.timer);
   releasing = null;
-  const entry: HistoryEntry = { selis: 1, route, depth: reuse ? depth : depth + 1, overlay: token };
-  if (reuse) history.replaceState(entry, "");
-  else history.pushState(entry, "");
-  overlays.push({ token, depth: entry.depth, onPopped });
-  useNavigation.setState({ depth: entry.depth });
-  return token;
+  pushEntry(overlay, reuse);
+  return overlay.token;
 }
 
 function releaseOverlay(token: string): void {
+  const pending = waiting.findIndex((o) => o.token === token);
+  if (pending >= 0) {
+    // Closed before it got an entry: nothing to undo.
+    waiting.splice(pending, 1);
+    return;
+  }
   const index = overlays.findIndex((o) => o.token === token);
   if (index < 0) return; // already closed by back
   overlays.splice(index, 1);
@@ -123,7 +160,7 @@ function releaseOverlay(token: string): void {
     token,
     timer: window.setTimeout(() => {
       releasing = null;
-      history.back();
+      goBackForRelease();
     }, 0),
   };
 }
@@ -181,11 +218,13 @@ export function installHistorySync(): () => void {
       // An overlay entry whose owner already closed (e.g. its screen unmounted): skip it.
       const owner = state.overlay;
       if (owner !== undefined && releasing?.token !== owner && !overlays.some((o) => o.token === owner)) {
-        history.back();
+        goBackForRelease();
+        return;
       }
     } else {
       useNavigation.setState({ route: ROOT, depth: 0 });
     }
+    if (backInFlight) backLanded();
   };
   window.addEventListener("popstate", onPop);
   return () => window.removeEventListener("popstate", onPop);
