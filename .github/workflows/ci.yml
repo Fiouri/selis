@@ -99,10 +99,17 @@ jobs:
       - name: Build debug APK
         # ANDROID_HOME comes from the runner image, so it is only visible to the shell.
         run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --debug --apk
+      # Release safety: the store-like build (release, no cargo features) must not be
+      # debuggable, must not enable WebView remote debugging and must not be a
+      # `--features measure` build (scripts/check-release-apk.sh).
+      - name: Build store-like release APK (arm64, no features, unsigned)
+        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --apk --target aarch64
+      - name: Release APK has no debugging / measure build
+        run: scripts/check-release-apk.sh apps/app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
       - uses: actions/upload-artifact@v6
         with:
           name: selis-android-debug-apk
-          path: apps/app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: apps/app/src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk
           if-no-files-found: error
 
   ios:
