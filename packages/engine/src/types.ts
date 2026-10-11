@@ -26,6 +26,14 @@ export type RenderOptions = {
   prefetch?: boolean;
 };
 
+/** An encoded page preview, ready to store. */
+export type Thumbnail = {
+  readonly mime: string;
+  readonly bytes: ArrayBuffer;
+  readonly width: number;
+  readonly height: number;
+};
+
 /** An open document inside the engine worker. */
 export interface DocHandle {
   readonly id: string;
@@ -44,6 +52,11 @@ export interface DocHandle {
    * pages drawn into reused canvases: no per-render GPU/shared-memory resource.
    */
   renderPageImage(index: number, scale: number, options?: RenderOptions): Promise<ImageData>;
+  /**
+   * Renders a small preview of one page and encodes it in the worker (WebP;
+   * JPEG where the WebView cannot encode WebP). Queued behind visible pages.
+   */
+  renderThumbnail(index: number, maxWidth: number, maxHeight: number, options?: RenderOptions): Promise<Thumbnail>;
   close(): Promise<void>;
 }
 

@@ -20,7 +20,41 @@
     "pages": "{count, plural, one {# page} other {# pages}}",
     "imported": "Imported “{title}”",
     "duplicate": "“{title}” is already in your library",
-    "openDocument": "Open {title}"
+    "openDocument": "Open {title}",
+    "pagesShort": "{count, plural, one {# page} other {# pages}}",
+    "received": "Received",
+    "favorite": "Favorite",
+    "addFavorite": "Add to favorites",
+    "removeFavorite": "Remove from favorites",
+    "editTags": "Tags…",
+    "search": "Search",
+    "searchLabel": "Search titles",
+    "searchPlaceholder": "Search titles",
+    "searchClear": "Clear search",
+    "searchCancel": "Cancel",
+    "sort": "Sort",
+    "sortTitle": "Sort by",
+    "sortRecent": "Recent",
+    "sortName": "Name",
+    "sortSize": "Size",
+    "view": "View",
+    "viewGrid": "Grid",
+    "viewList": "List",
+    "filters": "Filters",
+    "filterAll": "All",
+    "filterFavorites": "Favorites",
+    "filterReceived": "Received",
+    "filterTags": "Tags",
+    "noResultsTitle": "No results",
+    "noResultsBody": "No title matches “{query}”.",
+    "emptyFavoritesTitle": "No favorites yet",
+    "emptyFavoritesBody": "Long-press a document to add it to your favorites.",
+    "emptyReceivedTitle": "Nothing received yet",
+    "emptyReceivedBody": "Documents sent from your other devices appear here.",
+    "emptyTagTitle": "Nothing tagged “{tag}”",
+    "emptyTagBody": "Long-press a document to tag it.",
+    "showAll": "Show all",
+    "importedMany": "{count, plural, one {Imported # document} other {Imported # documents}}"
   },
   "recent": {
     "title": "Recent",
@@ -65,6 +99,21 @@
     "placeholderTitle": "Selis for desktop is on the way",
     "placeholderBody": "The desktop layout arrives in a later release. Make the window narrower to use the mobile layout today."
   },
+  "tags": {
+    "title": "Tags",
+    "assignTitle": "Tags for “{title}”",
+    "back": "Back",
+    "none": "No tags yet.",
+    "newTag": "New tag",
+    "add": "Add",
+    "done": "Done",
+    "edit": "Edit the tag “{name}”",
+    "rename": "Tag name",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete tag",
+    "confirmDelete": "Tap again to delete (documents stay)"
+  },
   "errors": {
     "notPdf": "That file isn’t a PDF.",
     "emptyFile": "That file is empty.",
@@ -74,6 +123,7 @@
     "dismiss": "Dismiss",
     "retry": "Try again",
     "importTimeout": "Importing took too long, so nothing was added. Try again.",
-    "pickerLost": "The file picker didn’t return a file. Try again."
+    "pickerLost": "The file picker didn’t return a file. Try again.",
+    "conflict": "A tag with this name already exists."
   }
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-document-file"
+description = "Enables the document_file command without any pre-configured scope."
+commands.allow = ["document_file"]
+
+[[permission]]
+identifier = "deny-document-file"
+description = "Denies the document_file command without any pre-configured scope."
+commands.deny = ["document_file"]

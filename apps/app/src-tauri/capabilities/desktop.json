@@ -19,6 +19,16 @@
     "allow-update-settings",
     "allow-device-memory",
     "allow-pick-pdf",
-    "allow-take-result"
+    "allow-take-result",
+    "allow-set-favorite",
+    "allow-document-file",
+    "allow-save-thumbnail",
+    "allow-list-tags",
+    "allow-create-tag",
+    "allow-rename-tag",
+    "allow-delete-tag",
+    "allow-set-document-tags",
+    "allow-pending-opens",
+    "allow-dismiss-open"
   ]
 }

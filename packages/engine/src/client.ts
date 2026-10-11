@@ -1,6 +1,6 @@
 import { DEFAULT_RENDER_LIMITS, type RenderLimits } from "./limits";
 import { LruCache } from "./lru";
-import { clampScale, type WorkerRequest, type WorkerResponse } from "./protocol";
+import { clampScale, RAW_RGBA, type WorkerRequest, type WorkerResponse } from "./protocol";
 import {
   type DocHandle,
   EngineError,
@@ -8,6 +8,7 @@ import {
   type PageSize,
   type PdfEngine,
   type RenderOptions,
+  type Thumbnail,
 } from "./types";
 
 type Pending = {
@@ -105,6 +106,13 @@ export class WorkerPdfEngine implements PdfEngine {
         const effective = clampScale(page, scale, this.currentLimits.maxBitmapPixels);
         return this.render(docId, index, effective, options.signal, options.prefetch ?? false);
       },
+      renderThumbnail: (index, maxWidth, maxHeight, options: RenderOptions = {}) => {
+        if (closed) return Promise.reject(new EngineError("closed", "document is closed"));
+        if (!Number.isInteger(index) || index < 0 || index >= frozenPages.length) {
+          return Promise.reject(new RangeError(`page index ${index} out of range`));
+        }
+        return this.thumbnail(docId, index, maxWidth, maxHeight, options.signal);
+      },
       renderPage: async (index, scale, options: RenderOptions = {}) => {
         const image = await handle.renderPageImage(index, scale, options);
         return createImageBitmap(image);
@@ -150,6 +158,31 @@ export class WorkerPdfEngine implements PdfEngine {
     }
   }
 
+  private async thumbnail(
+    docId: string,
+    index: number,
+    maxWidth: number,
+    maxHeight: number,
+    signal: AbortSignal | undefined,
+  ): Promise<Thumbnail> {
+    if (signal?.aborted) throw new EngineError("cancelled", "aborted");
+    let reqId = 0;
+    const onAbort = () => {
+      if (reqId) this.worker.postMessage({ type: "cancel", reqId });
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      const msg = await this.request<Extract<WorkerResponse, { type: "thumbnail" }>>((id) => {
+        reqId = id;
+        return { type: "thumbnail", reqId: id, docId, index, maxWidth, maxHeight };
+      });
+      if (msg.mime === RAW_RGBA) return await encodeOnMainThread(msg.width, msg.height, msg.bytes);
+      return { mime: msg.mime, bytes: msg.bytes, width: msg.width, height: msg.height };
+    } finally {
+      signal?.removeEventListener("abort", onAbort);
+    }
+  }
+
   private request<T extends WorkerResponse>(
     build: (reqId: number) => WorkerRequest,
     transfer: Transferable[] = [],
@@ -176,6 +209,26 @@ export class WorkerPdfEngine implements PdfEngine {
     for (const p of this.pending.values()) p.reject(err);
     this.pending.clear();
   }
+}
+
+/** Fallback for WebKits without OffscreenCanvas in workers: encode a (small) thumbnail here. */
+async function encodeOnMainThread(width: number, height: number, pixels: ArrayBuffer): Promise<Thumbnail> {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new EngineError("unknown", "no 2d context for thumbnail encoding");
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), 0, 0);
+  const toBlob = (type: string, quality: number) =>
+    new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, type, quality);
+    });
+  let blob = await toBlob("image/webp", 0.8);
+  if (blob?.type !== "image/webp") blob = await toBlob("image/jpeg", 0.85);
+  canvas.width = 0;
+  canvas.height = 0;
+  if (!blob) throw new EngineError("unknown", "thumbnail encoding failed");
+  return { mime: blob.type, bytes: await blob.arrayBuffer(), width, height };
 }
 
 /** Starts the engine worker. One engine per app is enough. */

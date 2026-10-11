@@ -59,15 +59,18 @@ jobs:
       - name: Playwright browsers
         run: npx playwright install --with-deps chromium webkit
         working-directory: apps/app
-      - name: Playwright mobile smoke (Pixel 7, iPhone 15; mock IPC)
+      - name: Playwright mobile smoke (Pixel 7, iPhone 15) + 390×844 visual snapshots; mock IPC
         run: npm run e2e
       - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: playwright-report
+          # The snapshot folders include any baseline written on this run (e.g. a new
+          # *-linux.png): download and commit it (CONTRIBUTING.md, "Visual snapshots").
           path: |
             apps/app/playwright-report
             apps/app/test-results
+            apps/app/e2e/*-snapshots
           if-no-files-found: ignore
 
   android:

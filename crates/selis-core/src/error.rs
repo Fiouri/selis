@@ -30,6 +30,9 @@ pub enum Error {
 
     #[error("invalid argument: {0}")]
     InvalidArgument(&'static str),
+
+    #[error("conflict: {0}")]
+    Conflict(&'static str),
 }
 
 impl Error {

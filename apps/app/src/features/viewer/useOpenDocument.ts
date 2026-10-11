@@ -6,6 +6,7 @@ import { getEngine, warmUpEngine } from "../../lib/engine";
 import { readDocumentBytes } from "../../lib/files";
 import { markStep, markViewerStart } from "../../lib/perf";
 import { documentsKey } from "../library/queries";
+import { thumbnailFromOpenDocument } from "../library/thumbnails";
 
 export type OpenState =
   | { status: "loading" }
@@ -37,6 +38,8 @@ export function useOpenDocument(docId: string): OpenState {
         }
         handle = doc;
         setState({ status: "ready", doc, meta: file.document });
+        // Queued behind the visible pages in the worker, so it never delays them.
+        thumbnailFromOpenDocument(queryClient, file.document, doc);
 
         const needsInfo = file.document.pageCount !== doc.pageCount || (!file.document.title && doc.title);
         if (needsInfo) {

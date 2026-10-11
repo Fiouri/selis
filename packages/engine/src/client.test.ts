@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { WorkerPdfEngine, type WorkerLike } from "./client";
 import { renderLimitsFor } from "./limits";
-import type { WorkerRequest, WorkerResponse } from "./protocol";
+import { thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
 import { EngineError } from "./types";
 
 /** In-memory fake worker; replies are scripted per test. */
@@ -173,5 +173,36 @@ describe("WorkerPdfEngine", () => {
     engine.destroy();
     await expect(pending).rejects.toMatchObject({ code: "closed" });
     expect(worker.terminated).toBe(true);
+  });
+
+  it("asks the worker for an encoded thumbnail and can cancel it", async () => {
+    const { worker, engine } = openedEngine();
+    const doc = await engine.open(new ArrayBuffer(8));
+    worker.autoReply = (req) =>
+      req.type === "thumbnail"
+        ? { type: "thumbnail", reqId: req.reqId, width: 150, height: 300, mime: "image/webp", bytes: new ArrayBuffer(10) }
+        : null;
+    const thumb = await doc.renderThumbnail(0, 300, 420);
+    expect(thumb).toMatchObject({ mime: "image/webp", width: 150, height: 300 });
+    expect(thumb.bytes.byteLength).toBe(10);
+    expect(worker.sent.at(-1)).toMatchObject({ type: "thumbnail", docId: "doc-1", index: 0, maxWidth: 300, maxHeight: 420 });
+
+    worker.autoReply = null;
+    const controller = new AbortController();
+    const pending = doc.renderThumbnail(0, 300, 420, { signal: controller.signal });
+    const sent = worker.sent.at(-1) as Extract<WorkerRequest, { type: "thumbnail" }>;
+    controller.abort();
+    expect(worker.sent.at(-1)).toEqual({ type: "cancel", reqId: sent.reqId });
+    worker.reply({ type: "error", reqId: sent.reqId, code: "cancelled", message: "cancelled" });
+    await expect(pending).rejects.toMatchObject({ code: "cancelled" });
+    await expect(doc.renderThumbnail(3, 10, 10)).rejects.toBeInstanceOf(RangeError);
+  });
+});
+
+describe("thumbnailScale", () => {
+  it("fits the page inside the box, keeping its aspect ratio", () => {
+    expect(thumbnailScale({ width: 600, height: 800 }, 300, 420)).toBeCloseTo(0.5);
+    expect(thumbnailScale({ width: 842, height: 595 }, 300, 420)).toBeCloseTo(300 / 842);
+    expect(thumbnailScale({ width: 0, height: 800 }, 300, 420)).toBe(0);
   });
 });

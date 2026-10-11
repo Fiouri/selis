@@ -39,6 +39,14 @@ targets:
     info:
       path: selis-app_iOS/Info.plist
       properties:
+        # "Open in" / "Copy to Selis" for PDFs; iOS copies the file into the app
+        # (Documents/Inbox) and hands its URL to RunEvent::Opened (src/lib.rs).
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: PDF
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.adobe.pdf]
+        LSSupportsOpeningDocumentsInPlace: false
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]

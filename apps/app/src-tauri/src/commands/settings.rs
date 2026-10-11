@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use selis_core::Library;
+use selis_core::{Library, LibrarySort};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
@@ -26,11 +26,21 @@ pub enum ThemePref {
     Sepia,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryView {
+    #[default]
+    Grid,
+    List,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub locale: LocalePref,
     pub theme: ThemePref,
+    pub library_sort: LibrarySort,
+    pub library_view: LibraryView,
 }
 
 /// Partial update; `None` fields are left unchanged.
@@ -39,10 +49,14 @@ pub struct Settings {
 pub struct SettingsPatch {
     pub locale: Option<LocalePref>,
     pub theme: Option<ThemePref>,
+    pub library_sort: Option<LibrarySort>,
+    pub library_view: Option<LibraryView>,
 }
 
 const KEY_LOCALE: &str = "locale";
 const KEY_THEME: &str = "theme";
+const KEY_LIBRARY_SORT: &str = "librarySort";
+const KEY_LIBRARY_VIEW: &str = "libraryView";
 
 fn load(library: &Library) -> CommandResult<Settings> {
     let mut settings = Settings::default();
@@ -51,6 +65,12 @@ fn load(library: &Library) -> CommandResult<Settings> {
         match key.as_str() {
             KEY_LOCALE => settings.locale = serde_json::from_value(value).unwrap_or_default(),
             KEY_THEME => settings.theme = serde_json::from_value(value).unwrap_or_default(),
+            KEY_LIBRARY_SORT => {
+                settings.library_sort = serde_json::from_value(value).unwrap_or_default();
+            }
+            KEY_LIBRARY_VIEW => {
+                settings.library_view = serde_json::from_value(value).unwrap_or_default();
+            }
             _ => {}
         }
     }
@@ -69,17 +89,19 @@ pub async fn update_settings(
     library: State<'_, Arc<Library>>,
     patch: SettingsPatch,
 ) -> CommandResult<Settings> {
-    if let Some(locale) = patch.locale {
-        library.set_setting(
-            KEY_LOCALE,
-            &serde_json::to_value(locale).map_err(selis_core::Error::from)?,
-        )?;
-    }
-    if let Some(theme) = patch.theme {
-        library.set_setting(
-            KEY_THEME,
-            &serde_json::to_value(theme).map_err(selis_core::Error::from)?,
-        )?;
-    }
+    store(&library, KEY_LOCALE, patch.locale)?;
+    store(&library, KEY_THEME, patch.theme)?;
+    store(&library, KEY_LIBRARY_SORT, patch.library_sort)?;
+    store(&library, KEY_LIBRARY_VIEW, patch.library_view)?;
     load(&library)
+}
+
+fn store<T: Serialize>(library: &Library, key: &str, value: Option<T>) -> CommandResult<()> {
+    if let Some(value) = value {
+        library.set_setting(
+            key,
+            &serde_json::to_value(value).map_err(selis_core::Error::from)?,
+        )?;
+    }
+    Ok(())
 }

@@ -10,7 +10,10 @@ use rusqlite::Connection;
 use crate::error::{Error, Result};
 
 /// Ordered migrations; index + 1 is the schema version they produce.
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/0001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_init.sql"),
+    include_str!("../migrations/0002_library.sql"),
+];
 
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
 
@@ -30,6 +33,7 @@ pub fn open_in_memory() -> Result<Connection> {
 }
 
 fn configure(conn: &Connection) -> Result<()> {
+    crate::fold::register(conn)?;
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
@@ -98,7 +102,10 @@ mod tests {
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")?
             .query_map([], |r| r.get(0))?
             .collect::<std::result::Result<_, _>>()?;
-        assert_eq!(tables, ["documents", "settings", "versions"]);
+        assert_eq!(
+            tables,
+            ["document_tags", "documents", "settings", "tags", "versions"]
+        );
         Ok(())
     }
 
@@ -121,6 +128,41 @@ mod tests {
             conn.pragma_update(None, "user_version", SCHEMA_VERSION + 1)?;
         }
         assert!(matches!(open(&path), Err(Error::SchemaTooNew { .. })));
+        Ok(())
+    }
+
+    /// A v1 database (P0) is snapshotted, then upgraded with its rows intact.
+    #[test]
+    fn upgrade_from_v1_keeps_rows_and_writes_backup() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let path = dir.path().join("selis.db");
+        {
+            let conn = Connection::open(&path)?;
+            conn.execute_batch(MIGRATIONS[0])?;
+            conn.pragma_update(None, "user_version", 1)?;
+            conn.execute(
+                "INSERT INTO documents (id, title, kind, location, blake3, size_bytes,
+                                        created_at, modified_at, favorite)
+                 VALUES ('d1', 'Αναφορά', 'imported', 'library/x.pdf', 'x', 3, 1, 1, 1)",
+                [],
+            )?;
+        }
+        let conn = open(&path)?;
+        assert_eq!(user_version(&conn)?, SCHEMA_VERSION);
+        let (title, origin, favorite): (String, String, i64) = conn.query_row(
+            "SELECT title, origin, favorite FROM documents WHERE id = 'd1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+        assert_eq!(
+            (title.as_str(), origin.as_str(), favorite),
+            ("Αναφορά", "import", 1)
+        );
+
+        let snap = Connection::open(dir.path().join("selis.db.bak-v1"))?;
+        assert_eq!(user_version(&snap)?, 1);
+        let rows: i64 = snap.query_row("SELECT COUNT(*) FROM documents", [], |r| r.get(0))?;
+        assert_eq!(rows, 1);
         Ok(())
     }
 

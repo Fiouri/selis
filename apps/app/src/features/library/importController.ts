@@ -16,7 +16,7 @@ export type ImportErrorState = Extract<ImportState, { status: "error" }>;
 export type ImportDeps = {
   /** Opens the picker; resolves to a source or null (cancelled). */
   pick: () => Promise<string | null>;
-  importDocument: (source: string) => Promise<ImportOutcome>;
+  importDocument: (source: string, name: string | null) => Promise<ImportOutcome>;
   isTimeoutError: (error: unknown) => boolean;
   /** The picker's reply was lost and could not be recovered. */
   isLostResponse: (error: unknown) => boolean;
@@ -62,6 +62,17 @@ export class ImportController {
     this.send({ type: "start" });
   }
 
+  /**
+   * Imports a document handed over by another app ("Open with" / share).
+   * Returns false while another import is running; try again once idle.
+   */
+  importSource(source: string, name: string | null, handlers: ImportHandlers): boolean {
+    if (this.state.status === "picking" || this.state.status === "importing") return false;
+    this.handlers = handlers;
+    this.send({ type: "external", source, name });
+    return true;
+  }
+
   /** After an error: re-imports the same file, or reopens the picker if none was picked. */
   retry(): void {
     this.send({ type: "retry" });
@@ -88,7 +99,7 @@ export class ImportController {
         this.runPick(state.attempt);
         break;
       case "importing":
-        this.runImport(state.attempt, state.source);
+        this.runImport(state.attempt, state.source, state.name ?? null);
         break;
       case "done":
         this.handlers?.onDone(state.outcome);
@@ -118,7 +129,7 @@ export class ImportController {
     })();
   }
 
-  private runImport(attempt: number, source: string): void {
+  private runImport(attempt: number, source: string, name: string | null): void {
     const { deps } = this;
     const timer = deps.setTimer(
       () => this.send({ type: "importFailed", attempt, error: new ImportTimeoutError(), timedOut: true }),
@@ -128,7 +139,7 @@ export class ImportController {
 
     void (async () => {
       try {
-        const outcome = await deps.importDocument(source);
+        const outcome = await deps.importDocument(source, name);
         this.send({ type: "imported", attempt, outcome });
       } catch (error) {
         this.send({ type: "importFailed", attempt, error, timedOut: deps.isTimeoutError(error) });

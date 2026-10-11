@@ -8,7 +8,7 @@ export {
   type PageLayout,
   type PageRange,
 } from "./layout";
-export { clampScale, MAX_BITMAP_PIXELS } from "./protocol";
+export { clampScale, MAX_BITMAP_PIXELS, thumbnailScale } from "./protocol";
 export { DEFAULT_RENDER_LIMITS, memoryTier, type MemoryTier, renderLimitsFor, type RenderLimits } from "./limits";
 export { LruCache } from "./lru";
 export {
@@ -19,4 +19,5 @@ export {
   type PageSize,
   type PdfEngine,
   type RenderOptions,
+  type Thumbnail,
 } from "./types";

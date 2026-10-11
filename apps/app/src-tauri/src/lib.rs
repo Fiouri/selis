@@ -18,6 +18,16 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::library::list_documents,
         commands::library::read_document,
         commands::library::record_document_info,
+        commands::library::set_favorite,
+        commands::library::document_file,
+        commands::library::save_thumbnail,
+        commands::tags::list_tags,
+        commands::tags::create_tag,
+        commands::tags::rename_tag,
+        commands::tags::delete_tag,
+        commands::tags::set_document_tags,
+        commands::open_with::pending_opens::<tauri::Wry>,
+        commands::open_with::dismiss_open,
         commands::settings::get_settings,
         commands::settings::update_settings,
         commands::device::device_memory::<tauri::Wry>,
@@ -29,9 +39,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = specta_builder();
-    let result = tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(commands::open_with::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
@@ -39,14 +50,33 @@ pub fn run() {
             let library = Library::open(root)?;
             app.manage(Arc::new(library));
             app.manage(Arc::new(requests::RequestResults::default()));
+            app.manage(Arc::new(commands::open_with::OpenQueue::default()));
             Ok(())
         })
-        .run(tauri::generate_context!());
-    if let Err(err) = result {
-        // Nothing sensible to recover to; surface the reason in platform logs.
-        eprintln!("selis: fatal error while running the application: {err}");
-        std::process::exit(1);
+        .build(tauri::generate_context!());
+    match app {
+        Ok(app) => app.run(on_run_event),
+        Err(err) => {
+            // Nothing sensible to recover to; surface the reason in platform logs.
+            eprintln!("selis: fatal error while running the application: {err}");
+            std::process::exit(1);
+        }
     }
+}
+
+/// iOS (and macOS) deliver "Open in Selis" documents as file URLs here. Android
+/// uses OpenWithPlugin.kt instead (tao's own intent parsing is ignored).
+fn on_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    if let tauri::RunEvent::Opened { urls } = &event
+        && let Some(queue) = app.try_state::<Arc<commands::open_with::OpenQueue>>()
+    {
+        for url in urls.iter().filter(|u| u.scheme() == "file") {
+            queue.push(url.to_string(), None);
+        }
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "macos")))]
+    let _ = (app, event);
 }
 
 #[cfg(test)]

@@ -37,6 +37,17 @@ body {
   outline-offset: 2px;
 }
 
+/* Horizontal rows that scroll (filter chips, tool rows) without a visible scrollbar. */
+.selis-scroll-x {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.selis-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
 .selis-skeleton {
   background: linear-gradient(90deg, var(--neutral-3) 0%, var(--neutral-4) 50%, var(--neutral-3) 100%);
   background-size: 200% 100%;
@@ -49,6 +60,26 @@ body {
   }
   to {
     background-position: -100% 0;
+  }
+}
+
+.selis-fade-in {
+  animation: selis-fade-in var(--duration-base) var(--ease-standard) both;
+}
+
+.selis-sheet-in {
+  animation: selis-sheet-in var(--duration-slow) var(--ease-spring) both;
+}
+
+@keyframes selis-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes selis-sheet-in {
+  from {
+    transform: translateY(100%);
   }
 }
 
