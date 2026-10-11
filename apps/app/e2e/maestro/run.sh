@@ -11,6 +11,11 @@
 #
 # Optional hooks (e.g. open-with.sh): $PRE_RUN and $POST_RUN are run as
 # "$PRE_RUN <serial>" before / after every run; a failing hook fails the run.
+#
+# Disk guard: before every run, the drives holding .tmp and the AVDs
+# ($ANDROID_AVD_HOME, default ~/.android/avd) must have at least $MIN_FREE_GB
+# (default 30) GB free, or the script stops (exit 3) before Maestro or the
+# emulator can fill the drive.
 set -u
 
 serial="${1:?usage: run.sh <serial> <flow.yaml> [runs]}"
@@ -32,16 +37,40 @@ esac
 export TMP="$win_tmp" TEMP="$win_tmp" JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$win_tmp" MSYS_NO_PATHCONV=1
 maestro="${MAESTRO:-maestro}"
 
+min_free_gb="${MIN_FREE_GB:-30}"
+avd_dir="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+# Prints why and fails when a drive is short of space. Junctions (e.g. the AVD
+# folder moved to another drive) are followed to the drive that really fills up.
+check_disk() {
+  local dir real free_kb
+  for dir in "$tmp" "$avd_dir"; do
+    [ -d "$dir" ] || continue
+    real="$(readlink -f "$dir" 2>/dev/null || echo "$dir")"
+    free_kb="$(df -Pk "$real" 2>/dev/null | awk 'NR == 2 { print $4 }')"
+    [ -n "$free_kb" ] || continue
+    if [ "$free_kb" -lt $((min_free_gb * 1024 * 1024)) ]; then
+      echo "ABORT: only $((free_kb / 1024 / 1024)) GB free on the drive holding $real (needs >= $min_free_gb GB)." >&2
+      echo "Free space first (old .tmp/maestro-runs, .tmp/maestro, emulator snapshots), then rerun." >&2
+      return 1
+    fi
+  done
+}
+
 pass=0
 fail=0
 for i in $(seq 1 "$runs"); do
+  if ! check_disk; then
+    echo "$(basename "$flow"): stopped before run $i/$runs, pass=$pass fail=$fail (disk guard)"
+    exit 3
+  fi
   adb -s "$serial" logcat -c
   if [ -n "${PRE_RUN:-}" ] && ! $PRE_RUN "$serial" > "$out/pre-$i.log" 2>&1; then
     result="FAIL (PRE_RUN: $(tail -1 "$out/pre-$i.log" | tr -d '\r'))"
   elif "$maestro" --device "$serial" test --debug-output "$tmp/maestro" "$flow" > "$out/run-$i.log" 2>&1; then
     result=pass
   else
-    result="FAIL ($(grep -o 'Assert that "[^"]*"[^.]*... FAILED\|Tap on "[^"]*"... FAILED\|[A-Za-z ]*"[^"]*" is visible... FAILED' "$out/run-$i.log" | head -1))"
+    # First failing step; Maestro colours its output, so strip the ANSI codes first.
+    result="FAIL ($(sed 's/\x1b\[[0-9;]*m//g' "$out/run-$i.log" | grep -m1 'FAILED' | tr -d '\r'))"
   fi
   if [ "$result" = pass ] && [ -n "${POST_RUN:-}" ] && ! $POST_RUN "$serial" > "$out/post-$i.log" 2>&1; then
     result="FAIL (POST_RUN: $(tail -1 "$out/post-$i.log" | tr -d '\r'))"

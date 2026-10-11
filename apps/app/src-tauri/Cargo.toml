@@ -14,6 +14,12 @@ publish = false
 name = "selis_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# Release builds for scripts/measure-device.sh only: keeps WebView remote
+# debugging (Chrome DevTools Protocol) on so the script can time the first page
+# and drive the scroll. Never enabled for shipped builds.
+measure = ["tauri/devtools"]
+
 [build-dependencies]
 tauri-build = { version = "~2.7.2", features = [] }
 

@@ -96,6 +96,8 @@ Tier 2 — end of every feature:
 
 Performance gate (docs/spike-p0.md): 1000-page fixture — first page < 1 s, full scroll without
 crash, WebView memory < 600 MB (`adb shell dumpsys meminfo com.anywecon.selis` + renderer).
+On a real device: `scripts/measure-device.sh` (builds, installs, measures, cleans up, appends to
+docs/spike-p0.md).
 
 ## Windows dev notes
 
