@@ -79,6 +79,12 @@ export const commands = {
 	 *  `request_id` (see `take_result`).
 	 */
 	saveVersion: (requestId: string, documentId: string, label: VersionLabel) => typedError<SavedVersion, CommandError>(__TAURI_INVOKE("save_version", { requestId, documentId, label })),
+	/**  Newest first. */
+	listSignatures: () => typedError<Signature[], CommandError>(__TAURI_INVOKE("list_signatures")),
+	/**  Stores a transparent PNG (base64) under the UI-chosen `id`. Safe to repeat. */
+	saveSignature: (id: string, kind: SignatureKind, png: string) => typedError<Signature, CommandError>(__TAURI_INVOKE("save_signature", { id, kind, png })),
+	/**  Forgets a saved signature; placed copies in documents stay. Idempotent. */
+	deleteSignature: (id: string) => typedError<null, CommandError>(__TAURI_INVOKE("delete_signature", { id })),
 	listTags: () => typedError<Tag[], CommandError>(__TAURI_INVOKE("list_tags")),
 	/**  Returns the existing tag when one with the same (folded) name exists. */
 	createTag: (name: string) => typedError<Tag, CommandError>(__TAURI_INVOKE("create_tag", { name })),
@@ -104,6 +110,12 @@ export const commands = {
 	 *  `Cancelled`. Runs once per `request_id`.
 	 */
 	pickPdf: (requestId: string) => typedError<PickOutcome, CommandError>(__TAURI_INVOKE("pick_pdf", { requestId })),
+	/**
+	 *  Opens the system picker for one picture (a signature photographed on paper)
+	 *  and returns its bytes. The file is opened read-only and never kept. Runs
+	 *  once per `request_id`.
+	 */
+	pickImage: (requestId: string) => typedError<PickedImage, CommandError>(__TAURI_INVOKE("pick_image", { requestId })),
 	/**
 	 *  The state of a long-running request: still running, its final result, or
 	 *  unknown (never received, or expired). Read-only; a fresh call the UI makes
@@ -223,6 +235,10 @@ export type PendingOpen = {
 
 export type PickOutcome = { status: "picked"; source: string } | { status: "cancelled" };
 
+export type PickedImage = { status: "picked"; mime: string; 
+/**  Base64 of the file (the Android IPC carries JSON only). */
+data: string } | { status: "cancelled" };
+
 export type SavedVersion = {
 	document: Document,
 	/**  Sequence number of the document's current version. */
@@ -260,6 +276,19 @@ export type SettingsPatch = {
 	historyLimitMb: number | null,
 	appLock: boolean | null,
 };
+
+export type Signature = {
+	id: string,
+	kind: SignatureKind,
+	/**  Absolute path of the PNG (asset protocol). */
+	path: string,
+	width: number,
+	height: number,
+	/**  Unix epoch milliseconds. */
+	createdAt: number,
+};
+
+export type SignatureKind = "drawn" | "typed" | "image";
 
 /**
  *  A command's final result in the same shape the TypeScript bindings use for

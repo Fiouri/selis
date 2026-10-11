@@ -25,12 +25,13 @@ import {
   strokesBounds,
   unionRect,
 } from "@selis/engine";
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../../components/Toast";
 import type { EditSession } from "./session";
 import { NoteEditor, TextEditor } from "./PageEditors";
+import { usePageAnnotations } from "./usePageAnnotations";
 import {
   addCommand,
   COLORS,
@@ -91,30 +92,6 @@ type Props = {
   scale: number;
   session: EditSession;
 };
-
-function usePageAnnotations(doc: DocHandle, index: number, enabled: boolean): readonly Annotation[] {
-  const revision = useSyncExternalStore(
-    useCallback((notify: () => void) => doc.onPageChange((page) => page === index && notify()), [doc, index]),
-    () => doc.pageRevision(index),
-  );
-  const [items, setItems] = useState<readonly Annotation[]>([]);
-  useEffect(() => {
-    if (!enabled) return;
-    const request = { live: true };
-    void (async () => {
-      try {
-        const list = await doc.annotations(index);
-        if (request.live) setItems(list);
-      } catch {
-        // The page is gone (document closed); nothing to show.
-      }
-    })();
-    return () => {
-      request.live = false;
-    };
-  }, [doc, index, enabled, revision]);
-  return items;
-}
 
 export function AnnotationLayer({ doc, index, scale, session }: Props) {
   const { t } = useTranslation();

@@ -34,6 +34,9 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::save::working_copy,
         commands::save::discard_working_copy,
         commands::save::save_version,
+        commands::signatures::list_signatures,
+        commands::signatures::save_signature,
+        commands::signatures::delete_signature,
         commands::tags::list_tags,
         commands::tags::create_tag,
         commands::tags::rename_tag,
@@ -46,6 +49,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::settings::update_settings,
         commands::device::device_memory::<tauri::Wry>,
         commands::picker::pick_pdf::<tauri::Wry>,
+        commands::picker::pick_image::<tauri::Wry>,
         commands::requests::take_result,
     ])
 }

@@ -129,6 +129,12 @@
   --note-action: #24438f;
   --note-danger: #a12f23;
   --note-muted: #6b6253;
+
+  /* Paper areas (signature pad, picture preview): white in every theme. */
+  --paper: #ffffff;
+  --paper-rule: #c9c0b2;
+  --paper-hint: #6b6253;
+  --paper-checker: #f1eee8;
   --topbar-height: 52px;
 }
 

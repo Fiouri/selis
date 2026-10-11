@@ -9,6 +9,7 @@ pub mod requests;
 pub mod save;
 pub mod settings;
 pub mod share;
+pub mod signatures;
 pub mod tags;
 
 use serde::Serialize;

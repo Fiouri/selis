@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-signature"
+description = "Enables the save_signature command without any pre-configured scope."
+commands.allow = ["save_signature"]
+
+[[permission]]
+identifier = "deny-save-signature"
+description = "Denies the save_signature command without any pre-configured scope."
+commands.deny = ["save_signature"]

@@ -1,5 +1,5 @@
 import type { QuarterTurns } from "./geometry";
-import type { Annotation, EngineErrorCode, Glyph, OutlineItem, PageSize, SearchHit, TextRun } from "./types";
+import type { Annotation, EngineErrorCode, FieldChange, FormField, Glyph, OutlineItem, PageSize, SearchHit, StampImage, TextRun } from "./types";
 
 /** Max pixels per rendered bitmap (≈ 4096²): bounds WebView memory on mobile. */
 export const MAX_BITMAP_PIXELS = 16_777_216;
@@ -26,6 +26,12 @@ export type WorkerRequest =
   | { type: "addAnnotation"; reqId: number; docId: string; annotation: Annotation }
   | { type: "removeAnnotation"; reqId: number; docId: string; index: number; id: string }
   | { type: "save"; reqId: number; docId: string }
+  | { type: "formFields"; reqId: number; docId: string; index: number }
+  | { type: "documentFields"; reqId: number; docId: string }
+  | { type: "setFormField"; reqId: number; docId: string; index: number; id: string; change: FieldChange }
+  | { type: "flatten"; reqId: number; docId: string }
+  | { type: "reload"; reqId: number; docId: string; bytes: ArrayBuffer }
+  | { type: "appearance"; reqId: number; docId: string; index: number; id: string }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
 
@@ -44,6 +50,10 @@ export type WorkerResponse =
   | { type: "annotation"; reqId: number; annotation: Annotation }
   | { type: "removed"; reqId: number; removed: boolean }
   | { type: "saved"; reqId: number; bytes: ArrayBuffer }
+  | { type: "formFields"; reqId: number; fields: FormField[] }
+  | { type: "flattened"; reqId: number; pages: number }
+  | { type: "reloaded"; reqId: number }
+  | { type: "appearance"; reqId: number; image: StampImage }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };
 

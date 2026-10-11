@@ -16,6 +16,8 @@ import type {
   PendingOpen,
   SavedVersion,
   Settings,
+  Signature,
+  SignatureKind,
   SettingsPatch,
   StoredResult,
   Tag,
@@ -48,6 +50,7 @@ const uploads = new Map<string, Uint8Array[]>();
 const workingCopies = new Map<string, { copy: WorkingCopy; bytes: Uint8Array }>();
 /** Saved versions per document (v1 = the import), labels in order. */
 const versions = new Map<string, VersionLabel[]>();
+const signatures = new Map<string, Signature>();
 
 /** Registers a picked browser File and returns a source token for import. */
 export function registerMockFile(file: File): string {
@@ -333,6 +336,29 @@ async function saveVersion(documentId: string, label: VersionLabel): Promise<Sav
   return { document, seq: list.length + 1, created: true };
 }
 
+function pngSize(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
+function saveSignature(id: string, kind: SignatureKind, png: string): Signature {
+  const existing = signatures.get(id);
+  if (existing) return existing;
+  const bytes = Uint8Array.from(atob(png), (c) => c.charCodeAt(0));
+  const size = pngSize(bytes) ?? fail("invalidArgument", "signature image must be a PNG");
+  const signature: Signature = {
+    id,
+    kind,
+    path: URL.createObjectURL(new Blob([bytes], { type: "image/png" })),
+    width: size.width,
+    height: size.height,
+    createdAt: Date.now(),
+  };
+  signatures.set(id, signature);
+  return signature;
+}
+
 function deleteDocument(id: string): DeleteReport {
   const entry = entryOf(id);
   docs.delete(id);
@@ -485,6 +511,13 @@ export function installMockIpc(): void {
         return null;
       case "save_version":
         return runOnce(cmd, String(args.requestId), () => saveVersion(String(args.documentId), args.label as VersionLabel));
+      case "list_signatures":
+        return [...signatures.values()].sort((a, b) => b.createdAt - a.createdAt);
+      case "save_signature":
+        return saveSignature(id, args.kind as SignatureKind, String(args.png));
+      case "delete_signature":
+        signatures.delete(id);
+        return null;
       case "device_memory": {
         // navigator.deviceMemory is Chromium-only and capped at 8 (GiB).
         const gib = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;

@@ -212,6 +212,60 @@ export class WorkerPdfEngine implements PdfEngine {
         if (msg.removed) changed(index);
         return msg.removed;
       },
+      documentFields: async () => {
+        ensureOpen();
+        const msg = await this.request<Extract<WorkerResponse, { type: "formFields" }>>((reqId) => ({ type: "documentFields", reqId, docId }));
+        return msg.fields;
+      },
+      formFields: async (index) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "formFields" }>>((reqId) => ({
+          type: "formFields",
+          reqId,
+          docId,
+          index,
+        }));
+        return msg.fields;
+      },
+      setFormField: async (page, id, change) => {
+        ensureOpen();
+        checkIndex(page);
+        const msg = await this.request<Extract<WorkerResponse, { type: "formFields" }>>((reqId) => ({
+          type: "setFormField",
+          reqId,
+          docId,
+          index: page,
+          id,
+          change,
+        }));
+        changed(page);
+        return msg.fields;
+      },
+      flatten: async () => {
+        ensureOpen();
+        const msg = await this.request<Extract<WorkerResponse, { type: "flattened" }>>((reqId) => ({ type: "flatten", reqId, docId }));
+        for (let i = 0; i < frozenPages.length; i++) changed(i);
+        return msg.pages;
+      },
+      reload: async (bytes) => {
+        ensureOpen();
+        await this.request((reqId) => ({ type: "reload", reqId, docId, bytes }), [bytes]);
+        this.textCache.deleteWhere((key) => key.startsWith(`${docId}:`));
+        for (let i = 0; i < frozenPages.length; i++) changed(i);
+      },
+      annotationAppearance: async (page, id) => {
+        ensureOpen();
+        checkIndex(page);
+        const msg = await this.request<Extract<WorkerResponse, { type: "appearance" }>>((reqId) => ({
+          type: "appearance",
+          reqId,
+          docId,
+          index: page,
+          id,
+        }));
+        return msg.image;
+      },
       pageRevision: (index) => revisions.get(index) ?? 0,
       onPageChange: (listener) => {
         listeners.add(listener);

@@ -8,6 +8,11 @@ import { useToast } from "../components/Toast";
 import { AnnotateBar, ToolSheet } from "../features/annotate/AnnotateChrome";
 import { AnnotationLayer } from "../features/annotate/AnnotationLayer";
 import type { EditSession, SaveStatus, SessionState } from "../features/annotate/session";
+import { FormBanner, FormSheet } from "../features/forms/FormChrome";
+import { FormLayer } from "../features/forms/FormLayer";
+import { flattenCommand, useFormState } from "../features/forms/formState";
+import { SignatureLayer, useSignState } from "../features/sign/SignatureLayer";
+import { SignSheet } from "../features/sign/SignSheet";
 import { PdfViewer, type PdfViewerHandle, type ScrollInfo } from "../features/viewer/PdfViewer";
 import { shareDocument } from "../features/viewer/share";
 import { type OpenState, useOpenDocument } from "../features/viewer/useOpenDocument";
@@ -53,7 +58,13 @@ function ViewerSkeleton({ insetTop }: { insetTop: number }) {
 
 type Variant = "phone" | "tablet";
 type ViewerSheet = "more" | "outline" | "thumbnails" | null;
-type Mode = "view" | "annotate";
+type Mode = "view" | "annotate" | "sign" | "form";
+
+const MODE_TITLES: Record<Exclude<Mode, "view">, { title: string; close: string }> = {
+  annotate: { title: "annotate.title", close: "annotate.close" },
+  sign: { title: "sign.title", close: "sign.close" },
+  form: { title: "forms.title", close: "forms.close" },
+};
 
 const NO_SESSION: SessionState = { status: "saved", canUndo: false, canRedo: false, undoTool: null };
 const noop = () => () => undefined;
@@ -102,7 +113,9 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   const doc = state.status === "ready" ? state.doc : null;
   const session = state.status === "ready" ? state.session : null;
   const sessionState = useSessionState(session);
-  const annotating = mode === "annotate" && doc !== null && session !== null;
+  // Any editing mode (annotate, sign, form): its own top bar, docked sheet and page layer.
+  const editing = mode !== "view" && doc !== null && session !== null;
+  const annotating = editing;
   const search = useDocumentSearch(searching ? doc : null, query);
 
   const closeSearch = useCallback(() => {
@@ -150,9 +163,30 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     if (recovered) showToast(t("recovery.restored"));
   }, [recovered, showToast, t]);
 
-  /** Leaves annotate mode; the session's edits become a version. */
+  // The form's fields, for the banner and form mode (empty without an AcroForm).
+  const setFormFields = useFormState((s) => s.setFields);
+  useEffect(() => {
+    if (!doc) return;
+    const request = { live: true };
+    void (async () => {
+      try {
+        const fields = await doc.documentFields();
+        if (request.live) setFormFields(fields);
+      } catch (err) {
+        console.warn("selis: form fields unavailable", err);
+      }
+    })();
+    return () => {
+      request.live = false;
+      setFormFields(null);
+    };
+  }, [doc, setFormFields]);
+
+  /** Leaves the editing mode; the session's edits become a version. */
   const finishAnnotating = useCallback(() => {
     setMode("view");
+    useSignState.getState().activate(null);
+    useFormState.getState().setActive(null);
     if (!session) return;
     session.commit().catch((err: unknown) => {
       console.warn("selis: saving the annotations failed", err);
@@ -161,15 +195,26 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   }, [session, showToast, t]);
   useOverlay(annotating, finishAnnotating);
 
-  const startAnnotating = () => {
-    // Annotate works on the unrotated page with the chrome shown.
+  const startEditing = (next: Exclude<Mode, "view">) => {
+    // Editing works on the unrotated page with the chrome shown.
     setRotation(0);
     setSearching(false);
     setQuery("");
     setSheet(null);
     setChrome(true);
     setDockHidden(false);
-    setMode("annotate");
+    setMode(next);
+  };
+
+  const flatten = async () => {
+    if (!doc || !session) return;
+    try {
+      await session.run(flattenCommand(doc));
+      showToast(t("forms.flattened"));
+    } catch (err) {
+      console.warn("selis: flatten failed", err);
+      showToast(t("annotate.failed"), "error");
+    }
   };
 
   const undo = () => {
@@ -180,9 +225,13 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   };
 
   const renderOverlay = useCallback(
-    (index: number, scale: number) =>
-      doc && session ? <AnnotationLayer doc={doc} index={index} scale={scale} session={session} /> : null,
-    [doc, session],
+    (index: number, scale: number) => {
+      if (!doc || !session) return null;
+      if (mode === "sign") return <SignatureLayer doc={doc} index={index} scale={scale} session={session} />;
+      if (mode === "form") return <FormLayer doc={doc} index={index} scale={scale} session={session} />;
+      return <AnnotationLayer doc={doc} index={index} scale={scale} session={session} />;
+    },
+    [doc, session, mode],
   );
 
   // Remember the reading position (debounced), and once more when leaving.
@@ -329,6 +378,8 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
       {annotating ? (
         <AnnotateBar
           ref={barRef}
+          title={t(MODE_TITLES[mode].title)}
+          closeLabel={t(MODE_TITLES[mode].close)}
           status={saveStatus}
           canUndo={sessionState.canUndo}
           canRedo={sessionState.canRedo}
@@ -375,15 +426,23 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
             />
           ) : null}
           {annotating ? (
-            <ToolSheet ref={sheetRef} />
+            mode === "sign" ? (
+              <SignSheet ref={sheetRef} />
+            ) : mode === "form" ? (
+              <FormSheet ref={sheetRef} onJump={(index, y) => mainRef.current?.scrollToPage(index, y)} onFlatten={() => void flatten()} />
+            ) : (
+              <ToolSheet ref={sheetRef} />
+            )
           ) : (
             <ViewerDock
               hidden={!showChrome || (dockHidden && !searching)}
               onSoon={() => showToast(t("viewer.soon"))}
               onShare={() => void share()}
-              onAnnotate={startAnnotating}
+              onAnnotate={() => startEditing("annotate")}
+              onSign={() => startEditing("sign")}
             />
           )}
+          {annotating ? null : <FormBanner top={barHeight} hidden={!showChrome} onFill={() => startEditing("form")} />}
           <ViewerMoreSheet
             open={sheet === "more"}
             onClose={() => setSheet(null)}

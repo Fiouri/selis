@@ -10,19 +10,19 @@ import type { PdfAnnotationObject, PdfDocumentObject, PdfPageObject } from "@emb
 import { init } from "@embedpdf/pdfium";
 import { FIXTURES, type FixtureName } from "@selis/fixtures";
 import { beforeAll, describe, expect, it } from "vitest";
-import { fromPdfAnnotation, TEXT_STAMP_PREFIX, TextStamps, toPdfAnnotation } from "./annotations";
+import { EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX, toPdfAnnotation, toSignatureStamp } from "./annotations";
 import type { Annotation } from "./types";
 
 const require = createRequire(import.meta.url);
 const FONT = new Uint8Array(readFileSync(new URL("../assets/SelisSans-LatinGreek.ttf", import.meta.url)));
 let engine: PdfiumNative;
-let stamps: TextStamps;
+let stamps: EmbeddedText;
 
 beforeAll(async () => {
   const wasm = readFileSync(require.resolve("@embedpdf/pdfium/pdfium.wasm"));
   const pdf = await init({ wasmBinary: wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength) });
   engine = new PdfiumNative(pdf, { fontFallback: null });
-  stamps = new TextStamps(engine, pdf, () => Promise.resolve(FONT));
+  stamps = new EmbeddedText(engine, pdf, () => Promise.resolve(FONT));
 }, 60_000);
 
 let nextId = 0;
@@ -46,7 +46,10 @@ async function add(doc: PdfDocumentObject, a: Annotation): Promise<void> {
   const page = doc.pages[a.page];
   if (!page) throw new Error("no page");
   if (a.kind === "text") await stamps.create(doc, page, a);
-  else if (a.kind !== "other") await engine.createPageAnnotation(doc, page, toPdfAnnotation(a)).toPromise();
+  else if (a.kind === "signature") {
+    if (!a.image) throw new Error("signature without image");
+    await engine.createPageAnnotation(doc, page, toSignatureStamp(a), { data: a.image.bytes }).toPromise();
+  } else if (a.kind !== "other") await engine.createPageAnnotation(doc, page, toPdfAnnotation(a)).toPromise();
 }
 
 async function read(doc: PdfDocumentObject, index = 0): Promise<Annotation[]> {

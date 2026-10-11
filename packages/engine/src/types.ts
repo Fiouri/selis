@@ -94,6 +94,18 @@ export interface DocHandle {
   addAnnotation(annotation: Annotation): Promise<Annotation>;
   /** Removes an annotation; resolves false if it was not there. */
   removeAnnotation(page: number, id: string): Promise<boolean>;
+  /** Every form widget of the document, by page (empty without an AcroForm). */
+  documentFields(): Promise<FormField[]>;
+  /** Form widgets of one page, in drawing order. */
+  formFields(index: number): Promise<FormField[]>;
+  /** Changes a field through one of its widgets; resolves to the page's widgets after the change. */
+  setFormField(page: number, id: string, change: FieldChange): Promise<FormField[]>;
+  /** Turns form fields and annotations of every page into page content. Resolves to the pages changed. */
+  flatten(): Promise<number>;
+  /** Replaces the document's content with `bytes` (same pages; undo of flatten). */
+  reload(bytes: ArrayBuffer): Promise<void>;
+  /** A one-page PDF of an annotation's appearance (to recreate it later). */
+  annotationAppearance(page: number, id: string): Promise<StampImage>;
   /** Monotonic counter per page, bumped by every change to the page. */
   pageRevision(index: number): number;
   /** Called with the page index after each change; returns an unsubscribe function. */
@@ -145,6 +157,12 @@ export type Annotation =
   | (AnnotationBase & { readonly kind: "text"; readonly text: string; readonly fontSize: number })
   /** Sticky note: an icon on the page with a comment (a Text annotation). */
   | (AnnotationBase & { readonly kind: "note"; readonly text: string })
+  /**
+   * Visual signature: a Stamp showing an image, labelled "visual signature" in
+   * /Contents (not a digital signature). `image` is null when read back from a
+   * file; `annotationAppearance` gives a copy that can recreate it.
+   */
+  | (AnnotationBase & { readonly kind: "signature"; readonly image: StampImage | null })
   /** Anything else (links, form widgets, foreign stamps…): shown, never edited. */
   | (AnnotationBase & { readonly kind: "other" });
 
@@ -159,6 +177,43 @@ type AnnotationBase = {
 };
 
 export type AnnotationKind = Annotation["kind"];
+
+/** Image (PNG / JPEG) or one-page PDF drawn as a stamp's appearance. */
+export type StampImage = {
+  readonly mime: "image/png" | "image/jpeg" | "application/pdf";
+  readonly bytes: ArrayBuffer;
+};
+
+export type FormFieldKind = "text" | "checkbox" | "radio" | "combobox" | "listbox" | "button" | "signature" | "unknown";
+
+/** One form widget (a field can have several, e.g. the options of a radio group). */
+export type FormField = {
+  /** /NM of the widget annotation (stable for the open document). */
+  readonly id: string;
+  readonly page: number;
+  readonly rect: PageRect;
+  /** Fully qualified field name. */
+  readonly name: string;
+  readonly kind: FormFieldKind;
+  /** Text value, or the field's current export value for buttons and choices. */
+  readonly value: string;
+  /** Checkbox / radio widget: whether this widget is on. */
+  readonly checked: boolean;
+  /** Choice fields: options in order. */
+  readonly options: readonly { readonly label: string; readonly selected: boolean }[];
+  readonly readOnly: boolean;
+  readonly required: boolean;
+  readonly multiline: boolean;
+  readonly maxLength: number | null;
+  /** Points; 0 = auto. */
+  readonly fontSize: number;
+  readonly fontColor: string;
+};
+
+export type FieldChange =
+  | { readonly kind: "text"; readonly text: string }
+  | { readonly kind: "checked"; readonly checked: boolean }
+  | { readonly kind: "select"; readonly index: number };
 
 /** One glyph of the page text, in logical (reading) order. */
 export type Glyph = PageRect & {

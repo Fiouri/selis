@@ -27,6 +27,9 @@ export {
   type DocHandle,
   EngineError,
   type EngineErrorCode,
+  type FieldChange,
+  type FormField,
+  type FormFieldKind,
   type Glyph,
   type OpenOptions,
   type PageSize,
@@ -36,6 +39,7 @@ export {
   type RenderOptions,
   type SearchHit,
   type SearchOptions,
+  type StampImage,
   type TextRun,
   type Thumbnail,
 } from "./types";

@@ -47,6 +47,9 @@
   --color-note-action: var(--note-action);
   --color-note-danger: var(--note-danger);
   --color-note-muted: var(--note-muted);
+  --color-paper: var(--paper);
+  --color-paper-rule: var(--paper-rule);
+  --color-paper-hint: var(--paper-hint);
 
   --font-sans: var(--font-sans);
 

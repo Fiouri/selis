@@ -26,7 +26,8 @@ import {
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 import wasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 import fontUrl from "../assets/SelisSans-LatinGreek.ttf?url";
-import { fromPdfAnnotation, TEXT_STAMP_PREFIX, TextStamps, toPdfAnnotation } from "./annotations";
+import { EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX, toPdfAnnotation, toSignatureStamp } from "./annotations";
+import { documentFields, flattenAll, pageWidgets, setField, toFormField } from "./forms";
 import { applyNightMode, type PageRect, rotateRect } from "./geometry";
 import { documentPointer, imageRectsOnPage } from "./pdfium-objects";
 import { clampScale, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
@@ -47,7 +48,7 @@ const SEARCH_BATCH = 8;
 
 let nativePromise: Promise<PdfiumNative> | null = null;
 let wasmModule: WrappedPdfiumModule | null = null;
-let textStamps: TextStamps | null = null;
+let textStamps: EmbeddedText | null = null;
 let fontPromise: Promise<Uint8Array> | null = null;
 /** Image rects per page (page points, top-left), for night mode. */
 const imageRectCache = new Map<string, PageRect[]>();
@@ -65,7 +66,7 @@ function native(): Promise<PdfiumNative> {
     const module = await init({ locateFile: () => wasmUrl });
     wasmModule = module;
     const engine = new PdfiumNative(module, { fontFallback: null });
-    textStamps = new TextStamps(engine, module, embeddedFont);
+    textStamps = new EmbeddedText(engine, module, embeddedFont);
     return engine;
   })();
   return nativePromise;
@@ -413,6 +414,12 @@ async function handleAddAnnotation(req: Extract<WorkerRequest, { type: "addAnnot
     if (a.kind === "text") {
       if (!textStamps) throw new Error("engine not ready");
       stored = { ...a, rect: await textStamps.create(t.doc, t.page, a) };
+    } else if (a.kind === "signature") {
+      if (!a.image) throw new Error("a signature needs its image");
+      await removeById(engine, t.doc, t.page, a.id);
+      await engine.createPageAnnotation(t.doc, t.page, toSignatureStamp(a), { data: a.image.bytes }).toPromise();
+      // The image stays with the caller (undo); the worker does not keep a copy.
+      stored = { ...a, image: null };
     } else {
       await removeById(engine, t.doc, t.page, a.id);
       await engine.createPageAnnotation(t.doc, t.page, toPdfAnnotation(a)).toPromise();
@@ -440,6 +447,89 @@ async function handleSave(req: Extract<WorkerRequest, { type: "save" }>): Promis
   try {
     const bytes = (await (await native()).saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
     post({ type: "saved", reqId: req.reqId, bytes }, [bytes]);
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleFormFields(req: Extract<WorkerRequest, { type: "formFields" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    const list = await pageWidgets(await native(), t.doc, t.page);
+    post({ type: "formFields", reqId: req.reqId, fields: list.map(toFormField) });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleDocumentFields(req: Extract<WorkerRequest, { type: "documentFields" }>): Promise<void> {
+  const t = target(req);
+  if (!t) return;
+  try {
+    const engine = await native();
+    if (!wasmModule) throw new Error("engine not ready");
+    post({ type: "formFields", reqId: req.reqId, fields: await documentFields(engine, wasmModule, t.doc) });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleSetFormField(req: Extract<WorkerRequest, { type: "setFormField" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    const engine = await native();
+    if (!textStamps) throw new Error("engine not ready");
+    const fields = await setField(engine, textStamps, t.doc, t.page, req.id, req.change);
+    post({ type: "formFields", reqId: req.reqId, fields });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleFlatten(req: Extract<WorkerRequest, { type: "flatten" }>): Promise<void> {
+  const t = target(req);
+  if (!t) return;
+  try {
+    const pages = await flattenAll(await native(), t.doc);
+    for (const key of imageRectCache.keys()) if (key.startsWith(`${t.doc.id}:`)) imageRectCache.delete(key);
+    post({ type: "flattened", reqId: req.reqId, pages });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleReload(req: Extract<WorkerRequest, { type: "reload" }>): Promise<void> {
+  const t = target(req);
+  if (!t) return;
+  try {
+    const engine = await native();
+    const fresh = await engine.openDocumentBuffer({ id: `${req.docId}-r${nextDocId++}`, content: req.bytes }).toPromise();
+    if (fresh.pageCount !== t.doc.pageCount) {
+      await engine.closeDocument(fresh).toPromise();
+      throw new Error("reloaded document has a different page count");
+    }
+    textStamps?.forget(t.doc.id);
+    await engine.closeDocument(t.doc).toPromise();
+    docs.set(req.docId, fresh);
+    for (const key of imageRectCache.keys()) if (key.startsWith(`${req.docId}:`)) imageRectCache.delete(key);
+    post({ type: "reloaded", reqId: req.reqId });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleAppearance(req: Extract<WorkerRequest, { type: "appearance" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    const engine = await native();
+    const raw = (await engine.getPageAnnotations(t.doc, t.page).toPromise()) as PdfAnnotationObject[];
+    const found = raw.find((a) => a.id === req.id);
+    if (!found) throw new Error("annotation not found");
+    const bytes = await engine.exportAnnotationAppearanceAsPdf(t.doc, t.page, found).toPromise();
+    post({ type: "appearance", reqId: req.reqId, image: { mime: "application/pdf", bytes } }, [bytes]);
   } catch (err) {
     post({ type: "error", reqId: req.reqId, ...toError(err) });
   }
@@ -522,6 +612,24 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "save":
       void handleSave(req);
+      break;
+    case "formFields":
+      void handleFormFields(req);
+      break;
+    case "documentFields":
+      void handleDocumentFields(req);
+      break;
+    case "setFormField":
+      void handleSetFormField(req);
+      break;
+    case "flatten":
+      void handleFlatten(req);
+      break;
+    case "reload":
+      void handleReload(req);
+      break;
+    case "appearance":
+      void handleAppearance(req);
       break;
     case "close":
       void handleClose(req);

@@ -56,7 +56,8 @@
             "$APPDATA/library/*.pdf",
             "$APPDATA/thumbs/*.webp",
             "$APPDATA/thumbs/*.png",
-            "$APPDATA/thumbs/*.jpg"
+            "$APPDATA/thumbs/*.jpg",
+            "$APPDATA/signatures/*.png"
           ],
           "requireLiteralLeadingDot": true
         }
