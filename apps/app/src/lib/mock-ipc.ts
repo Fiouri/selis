@@ -21,7 +21,13 @@ import type {
 
 const SETTINGS_KEY = "selis.mock.settings";
 
-const DEFAULT_SETTINGS: Settings = { locale: "system", theme: "system", librarySort: "recent", libraryView: "grid" };
+const DEFAULT_SETTINGS: Settings = {
+  locale: "system",
+  theme: "system",
+  librarySort: "recent",
+  libraryView: "grid",
+  nightMode: false,
+};
 
 const files = new Map<string, File>();
 const docs = new Map<string, { doc: Document; url: string }>();
@@ -293,6 +299,7 @@ function updateSettings(patch: SettingsPatch): Settings {
   if (patch.theme) next.theme = patch.theme;
   if (patch.librarySort) next.librarySort = patch.librarySort;
   if (patch.libraryView) next.libraryView = patch.libraryView;
+  if (patch.nightMode !== null) next.nightMode = patch.nightMode;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
   return next;
 }
@@ -317,6 +324,11 @@ export function installMockIpc(): void {
         return readDocument(id, false);
       case "record_document_info":
         return recordDocumentInfo(id, Number(args.pageCount), (args.pdfTitle as string | null) ?? null);
+      case "set_last_page": {
+        const doc = entryOf(id).doc;
+        const page = Number(args.page);
+        return update(id, { lastPage: doc.pageCount === null ? page : Math.min(page, doc.pageCount - 1) });
+      }
       case "set_favorite":
         return update(id, { favorite: Boolean(args.favorite) });
       case "save_thumbnail":
@@ -331,6 +343,8 @@ export function installMockIpc(): void {
         return deleteTag(id);
       case "set_document_tags":
         return setDocumentTags(String(args.documentId), args.tagIds as string[]);
+      case "share_document":
+        return fail("unsupported", "no native share sheet in the browser");
       case "pending_opens":
         return [...pendingOpens];
       case "dismiss_open": {

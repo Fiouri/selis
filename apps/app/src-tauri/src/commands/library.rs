@@ -106,6 +106,17 @@ pub async fn list_documents(
     Ok(library.list_documents(&query)?)
 }
 
+/// The reader's position (zero-based page); restored when the document opens again.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_last_page(
+    library: State<'_, Arc<Library>>,
+    id: String,
+    page: u32,
+) -> CommandResult<Document> {
+    Ok(library.set_last_page(&id, page)?)
+}
+
 /// Idempotent: sets the flag, does not toggle it.
 #[tauri::command]
 #[specta::specta]

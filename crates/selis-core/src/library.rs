@@ -377,6 +377,21 @@ impl Library {
         self.get_locked(&conn, id)
     }
 
+    /// Remembers the page the reader is on (zero-based). Idempotent.
+    pub fn set_last_page(&self, id: &str, page: u32) -> Result<Document> {
+        let conn = self.conn();
+        let changed = conn.execute(
+            "UPDATE documents
+                SET last_page = CASE WHEN page_count IS NULL OR ?2 < page_count THEN ?2 ELSE page_count - 1 END
+              WHERE id = ?1",
+            params![id, page],
+        )?;
+        if changed == 0 {
+            return Err(Error::NotFound(id.to_owned()));
+        }
+        self.get_locked(&conn, id)
+    }
+
     pub fn get_document(&self, id: &str) -> Result<Document> {
         let conn = self.conn();
         self.get_locked(&conn, id)
@@ -894,6 +909,35 @@ mod tests {
         let doc = lib.get_document(&id)?;
         assert!(doc.favorite);
         assert!(doc.last_opened_at.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn last_page_is_remembered_and_clamped() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let id = {
+            let lib = Library::open(dir.path())?;
+            let id = lib
+                .import_reader(pdf_bytes("p").as_slice(), "p")?
+                .document
+                .id;
+            assert_eq!(lib.get_document(&id)?.last_page, None);
+            lib.record_document_info(&id, 12, None)?;
+            assert_eq!(lib.set_last_page(&id, 7)?.last_page, Some(7));
+            assert_eq!(
+                lib.set_last_page(&id, 99)?.last_page,
+                Some(11),
+                "clamped to the last page"
+            );
+            lib.set_last_page(&id, 4)?;
+            id
+        };
+        let lib = Library::open(dir.path())?;
+        assert_eq!(lib.get_document(&id)?.last_page, Some(4));
+        assert!(matches!(
+            lib.set_last_page("nope", 1),
+            Err(Error::NotFound(_))
+        ));
         Ok(())
     }
 

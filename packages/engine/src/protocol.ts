@@ -1,4 +1,5 @@
-import type { EngineErrorCode, PageSize } from "./types";
+import type { QuarterTurns } from "./geometry";
+import type { EngineErrorCode, OutlineItem, PageSize, SearchHit, TextRun } from "./types";
 
 /** Max pixels per rendered bitmap (≈ 4096²): bounds WebView memory on mobile. */
 export const MAX_BITMAP_PIXELS = 16_777_216;
@@ -6,7 +7,19 @@ export const MAX_BITMAP_PIXELS = 16_777_216;
 export type WorkerRequest =
   | { type: "warmup"; reqId: number }
   | { type: "open"; reqId: number; bytes: ArrayBuffer; password?: string }
-  | { type: "render"; reqId: number; docId: string; index: number; scale: number; prefetch: boolean }
+  | {
+      type: "render";
+      reqId: number;
+      docId: string;
+      index: number;
+      scale: number;
+      prefetch: boolean;
+      rotation: QuarterTurns;
+      night: boolean;
+    }
+  | { type: "outline"; reqId: number; docId: string }
+  | { type: "search"; reqId: number; docId: string; query: string }
+  | { type: "text"; reqId: number; docId: string; index: number }
   | { type: "thumbnail"; reqId: number; docId: string; index: number; maxWidth: number; maxHeight: number }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
@@ -16,6 +29,11 @@ export type WorkerResponse =
   | { type: "opened"; reqId: number; docId: string; pages: PageSize[]; title: string | null }
   | { type: "rendered"; reqId: number; width: number; height: number; pixels: ArrayBuffer }
   | { type: "thumbnail"; reqId: number; width: number; height: number; mime: string; bytes: ArrayBuffer }
+  | { type: "outline"; reqId: number; items: OutlineItem[] }
+  /** Progress of a search (not its final reply): hits on one page. */
+  | { type: "searchHits"; reqId: number; page: number; hits: SearchHit[] }
+  | { type: "searchDone"; reqId: number; total: number }
+  | { type: "text"; reqId: number; runs: TextRun[] }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };
 

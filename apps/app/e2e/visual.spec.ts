@@ -3,7 +3,7 @@
  * committed baselines (docs/design/p1-ui-brief.md). Greek UI, as in the brief.
  */
 import { expect, type Page, test } from "@playwright/test";
-import { addToLibrary, presetSettings, thumbnailsLoaded } from "./helpers";
+import { addToLibrary, firstPageRendered, importFixture, presetSettings, thumbnailsLoaded } from "./helpers";
 
 const THEMES = ["light", "dark", "sepia"] as const;
 
@@ -52,6 +52,29 @@ for (const theme of THEMES) {
       await expect(page).toHaveScreenshot(`library-list-${theme}.png`);
     });
 
+    test(`viewer, more sheet, search (${theme})`, async ({ page }) => {
+      await page.goto("/");
+      await importFixture(page, "greek.pdf", "Ελληνικό δοκιμαστικό.pdf");
+      await firstPageRendered(page);
+      await expect(page.locator('[data-page="2"] canvas')).toHaveCount(1);
+      await settle(page);
+      await expect(page).toHaveScreenshot(`viewer-${theme}.png`);
+
+      await page.getByRole("button", { name: "Περισσότερα" }).click();
+      await expect(page.getByTestId("viewer-more")).toBeVisible();
+      await settle(page);
+      await expect(page).toHaveScreenshot(`viewer-more-${theme}.png`);
+      await page.keyboard.press("Escape");
+
+      await page.getByRole("button", { name: "Αναζήτηση στο έγγραφο" }).click();
+      await page.getByRole("searchbox").fill("κείμενο");
+      await expect(page.getByTestId("search-status")).toHaveText(/^1 \//);
+      await page.locator("input").blur();
+      await expect(page.getByTestId("page-chip")).toHaveCSS("opacity", "0", { timeout: 4_000 });
+      await settle(page);
+      await expect(page).toHaveScreenshot(`viewer-search-${theme}.png`);
+    });
+
     test(`recent (${theme})`, async ({ page }) => {
       await page.goto("/");
       await stockLibrary(page);
@@ -62,3 +85,16 @@ for (const theme of THEMES) {
     });
   });
 }
+
+test("viewer night mode keeps the image on page 2", async ({ page }) => {
+  await presetSettings(page, { theme: "light", locale: "el", nightMode: true });
+  await page.goto("/");
+  await importFixture(page, "greek.pdf", "Ελληνικό δοκιμαστικό.pdf");
+  await firstPageRendered(page);
+  await page.getByTestId("pdf-viewer").evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await expect(page.getByTestId("page-chip")).toHaveCSS("opacity", "0", { timeout: 4_000 });
+  await settle(page);
+  await expect(page).toHaveScreenshot("viewer-night.png");
+});

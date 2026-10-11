@@ -10,7 +10,7 @@ import { thumbnailFromOpenDocument } from "../library/thumbnails";
 
 export type OpenState =
   | { status: "loading" }
-  | { status: "ready"; doc: DocHandle; meta: Document }
+  | { status: "ready"; doc: DocHandle; meta: Document; /** Library copy (sharing). */ path: string }
   | { status: "error"; code: EngineErrorCode | "io" };
 
 /** Loads a library document into the engine; closes it (freeing WASM memory) on unmount. */
@@ -37,7 +37,7 @@ export function useOpenDocument(docId: string): OpenState {
           return;
         }
         handle = doc;
-        setState({ status: "ready", doc, meta: file.document });
+        setState({ status: "ready", doc, meta: file.document, path: file.path });
         // Queued behind the visible pages in the worker, so it never delays them.
         thumbnailFromOpenDocument(queryClient, file.document, doc);
 

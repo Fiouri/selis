@@ -93,7 +93,36 @@
     "errorPassword": "It is protected with a password. Password support is coming soon.",
     "errorFormat": "The file looks damaged or is not a valid PDF.",
     "errorGeneric": "Something went wrong while opening it.",
-    "selectDocument": "Select a document to read it here"
+    "selectDocument": "Select a document to read it here",
+    "search": "Search in document",
+    "more": "More",
+    "searchClose": "Close search",
+    "searchLabel": "Search the text",
+    "searchPlaceholder": "Search the text",
+    "searchPrevious": "Previous",
+    "searchNext": "Next",
+    "searchCount": "{current} / {total}",
+    "searchNone": "None",
+    "searching": "Searching…",
+    "dock": "Document tools",
+    "dockAnnotate": "Annotate",
+    "dockSign": "Sign",
+    "dockPages": "Pages",
+    "dockSend": "Send",
+    "dockShare": "Share",
+    "soon": "Coming soon",
+    "scrubber": "Fast scroll through the document",
+    "outline": "Contents",
+    "thumbnails": "Thumbnails",
+    "rotate": "Rotate view",
+    "rotation": "{degrees}°",
+    "night": "Night mode",
+    "collapse": "Collapse “{title}”",
+    "expand": "Expand “{title}”",
+    "untitledEntry": "(untitled)",
+    "noOutline": "This document has no table of contents.",
+    "shareUnsupported": "Sharing is not available here.",
+    "shareFailed": "Sharing failed. Try again."
   },
   "desktop": {
     "placeholderTitle": "Selis for desktop is on the way",
@@ -124,6 +153,7 @@
     "retry": "Try again",
     "importTimeout": "Importing took too long, so nothing was added. Try again.",
     "pickerLost": "The file picker didn’t return a file. Try again.",
-    "conflict": "A tag with this name already exists."
+    "conflict": "A tag with this name already exists.",
+    "unsupported": "Not supported on this device."
   }
 }

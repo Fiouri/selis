@@ -7,6 +7,7 @@ pub mod open_with;
 pub mod picker;
 pub mod requests;
 pub mod settings;
+pub mod share;
 pub mod tags;
 
 use serde::Serialize;
@@ -23,6 +24,8 @@ pub enum ErrorCode {
     InvalidArgument,
     /// The name (e.g. of a tag) is already taken.
     Conflict,
+    /// Not available on this platform (e.g. the native share sheet).
+    Unsupported,
     /// The operation did not finish in time (nothing was written).
     Timeout,
     Internal,

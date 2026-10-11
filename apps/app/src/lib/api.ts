@@ -52,6 +52,9 @@ export const api = {
   // Sets (never toggles) the flag, so a retry is harmless.
   setFavorite: (id: string, favorite: boolean) =>
     unwrap(ipc().short("set_favorite", () => commands.setFavorite(id, favorite), READ)),
+  // Sets the position (never increments): safe to repeat.
+  setLastPage: (id: string, page: number) =>
+    unwrap(ipc().short("set_last_page", () => commands.setLastPage(id, page), READ)),
   documentFile: (id: string) => unwrap(ipc().short("document_file", () => commands.documentFile(id), READ)),
   // Idempotent per document (same bytes, same file).
   saveThumbnail: (id: string, image: Uint8Array) =>
@@ -64,6 +67,8 @@ export const api = {
   // Replaces the whole set: safe to repeat.
   setDocumentTags: (documentId: string, tagIds: string[]) =>
     unwrap(ipc().short("set_document_tags", () => commands.setDocumentTags(documentId, tagIds), READ)),
+  // Opens a share sheet: never repeated automatically (it would open twice).
+  shareDocument: (id: string) => unwrap(ipc().short("share_document", () => commands.shareDocument(id), WRITE)),
   pendingOpens: () => unwrap(ipc().short("pending_opens", () => commands.pendingOpens(), READ)),
   dismissOpen: (id: string) => unwrap(ipc().short("dismiss_open", () => commands.dismissOpen(id), READ)),
   // Also stamps "last opened", which is safe to repeat.
@@ -94,6 +99,8 @@ export function errorMessageKey(err: unknown): string {
         return "errors.importTimeout";
       case "conflict":
         return "errors.conflict";
+      case "unsupported":
+        return "errors.unsupported";
       case "invalidArgument":
       case "internal":
         return "errors.generic";

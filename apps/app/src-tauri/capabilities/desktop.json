@@ -29,6 +29,8 @@
     "allow-delete-tag",
     "allow-set-document-tags",
     "allow-pending-opens",
-    "allow-dismiss-open"
+    "allow-dismiss-open",
+    "allow-set-last-page",
+    "allow-share-document"
   ]
 }

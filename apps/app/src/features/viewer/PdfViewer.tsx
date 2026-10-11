@@ -1,10 +1,13 @@
 import {
   type DocHandle,
   layoutPages,
-  pageAt,
   type PageLayout,
   type PageRange,
+  type PageRect,
+  pageAt,
+  type QuarterTurns,
   renderWindow,
+  rotateSize,
   visibleRange,
 } from "@selis/engine";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -13,10 +16,22 @@ import { PageView } from "./PageView";
 
 export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 5;
+/** Double tap toggles between fit-width and this zoom. */
+export const DOUBLE_TAP_ZOOM = 2.5;
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP_PX = 30;
 
 export type PdfViewerHandle = {
-  scrollToPage: (index: number) => void;
+  /** Scrolls so that `index` starts at the top; `offsetPts` moves further down the page (PDF points). */
+  scrollToPage: (index: number, offsetPts?: number) => void;
+  /** 0 = top of the document, 1 = bottom (the scrubber). */
+  scrollToFraction: (fraction: number) => void;
 };
+
+/** Search highlights of one page (unrotated page points). */
+export type PageHighlights = { readonly rects: readonly PageRect[]; readonly active: readonly PageRect[] };
+
+export type ScrollInfo = { readonly top: number; readonly fraction: number; readonly delta: number };
 
 type Props = {
   doc: DocHandle;
@@ -26,15 +41,23 @@ type Props = {
   /** Space reserved under overlaid chrome (CSS px). */
   insetTop?: number;
   insetBottom?: number;
-  /** Pinch / ctrl+wheel zoom. Off for the thumbnail strip. */
+  /** Pinch / ctrl+wheel / double-tap zoom. Off for thumbnail strips. */
   zoomable?: boolean;
   /** Pages kept rendered beyond the visible ones, on each side. */
   buffer?: number;
   maxPixels: number;
+  rotation?: QuarterTurns;
+  night?: boolean;
+  /** Selectable text over the page images (needs rotation 0). */
+  textLayer?: boolean;
+  highlights?: ReadonlyMap<number, PageHighlights> | undefined;
+  /** Page to show first (restored reading position). */
+  initialPage?: number;
   activePage?: number | undefined;
   onPageChange?: ((index: number) => void) | undefined;
   onPageClick?: ((index: number) => void) | undefined;
   onTap?: (() => void) | undefined;
+  onScroll?: ((info: ScrollInfo) => void) | undefined;
   testId?: string | undefined;
   ariaLabel?: string | undefined;
 };
@@ -85,10 +108,16 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
     zoomable = true,
     buffer = 1,
     maxPixels,
+    rotation = 0,
+    night = false,
+    textLayer = false,
+    highlights,
+    initialPage = 0,
     activePage,
     onPageChange,
     onPageClick,
     onTap,
+    onScroll,
     testId,
     ariaLabel,
   },
@@ -107,9 +136,14 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   /** Page → canvas slot. Slots are React keys, so canvases are recycled across pages. */
   const slots = useRef(new Map<number, number>());
   const gestureActive = useRef(false);
+  const lastScrollTop = useRef(0);
+  const restored = useRef(initialPage <= 0);
+  const lastTap = useRef<{ time: number; x: number; y: number } | null>(null);
+  const tapTimer = useRef<number | null>(null);
 
+  const pages = useMemo(() => (rotation === 0 ? doc.pages : doc.pages.map((p) => rotateSize(p, rotation))), [doc, rotation]);
   const fitWidth = Math.max(0, viewport.width - 2 * gutter);
-  const layout = useMemo(() => layoutPages(doc.pages, fitWidth, zoom, gap), [doc, fitWidth, zoom, gap]);
+  const layout = useMemo(() => layoutPages(pages, fitWidth, zoom, gap), [pages, fitWidth, zoom, gap]);
   const contentWidth = Math.max(viewport.width, layout.maxWidth + 2 * gutter);
   const contentHeight = insetTop + layout.totalHeight + insetBottom;
 
@@ -160,27 +194,37 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       el.scrollTop = insetTop + top + anchor.fracY * height - anchor.screenY;
       el.scrollLeft = anchor.fracX * contentWidth - anchor.screenX;
     }
+    // Restore the reading position once the layout knows real page heights.
+    if (el && !restored.current && fitWidth > 0) {
+      restored.current = true;
+      // Content y = insetTop + page top; the page lands right under the overlaid chrome.
+      el.scrollTop = (layout.tops[initialPage] ?? 0) - gap;
+    }
     update();
-  }, [layout, contentWidth, insetTop, update]);
+  }, [layout, contentWidth, insetTop, update, fitWidth, initialPage, gap]);
 
   // rAF-throttled scroll handling.
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     let frame = 0;
-    const onScroll = () => {
+    const onScrollEvent = () => {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
         update();
+        const max = Math.max(1, el.scrollHeight - el.clientHeight);
+        const delta = el.scrollTop - lastScrollTop.current;
+        lastScrollTop.current = el.scrollTop;
+        onScroll?.({ top: el.scrollTop, fraction: Math.min(1, Math.max(0, el.scrollTop / max)), delta });
       });
     };
-    el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("scroll", onScrollEvent, { passive: true });
     return () => {
-      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("scroll", onScrollEvent);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [update]);
+  }, [update, onScroll]);
 
   /**
    * Re-lays out at `nextZoom` so the content point (contentX, contentY) — in
@@ -286,25 +330,77 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
     };
   }, [zoom, zoomable, commitZoom]);
 
+  useEffect(
+    () => () => {
+      if (tapTimer.current !== null) window.clearTimeout(tapTimer.current);
+    },
+    [],
+  );
+
+  /** Single tap toggles chrome (after the double-tap window); double tap zooms around the point. */
+  const onClick = (event: React.MouseEvent) => {
+    if (gestureActive.current) return;
+    // A tap that ends a text selection must not toggle anything.
+    if (window.getSelection()?.toString()) return;
+    const el = scrollerRef.current;
+    const now = Date.now();
+    const previous = lastTap.current;
+    if (
+      zoomable &&
+      el &&
+      previous &&
+      now - previous.time < DOUBLE_TAP_MS &&
+      Math.hypot(event.clientX - previous.x, event.clientY - previous.y) < DOUBLE_TAP_SLOP_PX
+    ) {
+      lastTap.current = null;
+      if (tapTimer.current !== null) window.clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      const rect = el.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      commitZoom(zoom > 1.2 ? 1 : DOUBLE_TAP_ZOOM, el.scrollLeft + x, el.scrollTop + y, x, y);
+      return;
+    }
+    lastTap.current = { time: now, x: event.clientX, y: event.clientY };
+    if (!onTap) return;
+    if (tapTimer.current !== null) window.clearTimeout(tapTimer.current);
+    tapTimer.current = window.setTimeout(
+      () => {
+        tapTimer.current = null;
+        onTap();
+      },
+      zoomable ? DOUBLE_TAP_MS : 0,
+    );
+  };
+
   useImperativeHandle(
     ref,
     () => ({
-      scrollToPage: (index: number) => {
+      scrollToPage: (index: number, offsetPts = 0) => {
         const el = scrollerRef.current;
         const top = layout.tops[index];
-        if (!el || top === undefined) return;
-        el.scrollTo({ top: insetTop + top - gap });
+        const page = pages[index];
+        if (!el || top === undefined || !page) return;
+        const scale = (layout.widths[index] ?? 0) / page.width;
+        // Content y = insetTop + page top; the target lands right under the overlaid chrome.
+        el.scrollTo({ top: top + offsetPts * scale - gap });
+      },
+      scrollToFraction: (fraction: number) => {
+        const el = scrollerRef.current;
+        if (!el) return;
+        el.scrollTop = Math.min(1, Math.max(0, fraction)) * Math.max(0, el.scrollHeight - el.clientHeight);
       },
     }),
-    [layout, insetTop, gap],
+    [layout, gap, pages],
   );
 
-  const pages = [];
+  const items = [];
   if (win && win.layout === layout && fitWidth > 0) {
     const assigned = assignSlots(slots.current, win.window);
     for (let i = win.window.first; i <= win.window.last; i++) {
       const width = layout.widths[i] ?? 0;
-      pages.push(
+      const prefetch = i < win.visible.first || i > win.visible.last;
+      items.push(
         <PageView
           key={assigned.get(i)}
           doc={doc}
@@ -314,9 +410,13 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
           width={width}
           height={layout.heights[i] ?? 0}
           maxPixels={maxPixels}
+          rotation={rotation}
+          night={night}
+          textLayer={textLayer && rotation === 0 && !prefetch}
+          highlights={highlights?.get(i)}
           label={t("viewer.pageLabel", { page: i + 1 })}
           active={activePage === i}
-          prefetch={i < win.visible.first || i > win.visible.last}
+          prefetch={prefetch}
           {...(onPageClick ? { onClick: onPageClick } : {})}
         />,
       );
@@ -331,13 +431,11 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       aria-label={ariaLabel}
       role="region"
       tabIndex={0}
-      onClick={() => {
-        if (!gestureActive.current) onTap?.();
-      }}
+      onClick={onClick}
       className="selis-viewer-scroller relative h-full w-full overflow-auto bg-page-canvas outline-none"
     >
       <div ref={contentRef} className="relative" style={{ width: contentWidth, height: contentHeight }}>
-        {pages}
+        {items}
       </div>
     </div>
   );

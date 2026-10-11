@@ -17,9 +17,16 @@ type SettingsState = Settings & {
   setTheme: (theme: ThemePref) => Promise<void>;
   setLibrarySort: (sort: LibrarySort) => Promise<void>;
   setLibraryView: (view: LibraryView) => Promise<void>;
+  setNightMode: (on: boolean) => Promise<void>;
 };
 
-const DEFAULTS: Settings = { locale: "system", theme: "system", librarySort: "recent", libraryView: "grid" };
+const DEFAULTS: Settings = {
+  locale: "system",
+  theme: "system",
+  librarySort: "recent",
+  libraryView: "grid",
+  nightMode: false,
+};
 
 const SORTS: readonly LibrarySort[] = ["recent", "name", "size", "lastOpened"];
 
@@ -29,7 +36,13 @@ function pick<T extends string>(value: unknown, allowed: readonly T[], fallback:
 
 /** Only the persisted fields (the store also holds actions and `loaded`). */
 function snapshot(s: Settings): Settings {
-  return { locale: s.locale, theme: s.theme, librarySort: s.librarySort, libraryView: s.libraryView };
+  return {
+    locale: s.locale,
+    theme: s.theme,
+    librarySort: s.librarySort,
+    libraryView: s.libraryView,
+    nightMode: s.nightMode,
+  };
 }
 
 function readBootSettings(): Settings {
@@ -42,6 +55,7 @@ function readBootSettings(): Settings {
       theme: pick(parsed.theme, ["system", "light", "dark", "sepia"], DEFAULTS.theme),
       librarySort: pick(parsed.librarySort, SORTS, DEFAULTS.librarySort),
       libraryView: pick(parsed.libraryView, ["grid", "list"], DEFAULTS.libraryView),
+      nightMode: parsed.nightMode === true,
     };
   } catch {
     return DEFAULTS;
@@ -91,6 +105,7 @@ export const useSettings = create<SettingsState>()((set, get) => {
         theme: patch.theme ?? null,
         librarySort: patch.librarySort ?? null,
         libraryView: patch.libraryView ?? null,
+        nightMode: patch.nightMode ?? null,
       });
       set(saved);
       writeBootSettings(saved);
@@ -118,6 +133,9 @@ export const useSettings = create<SettingsState>()((set, get) => {
     },
     setLibraryView: async (libraryView) => {
       await persist({ libraryView });
+    },
+    setNightMode: async (nightMode) => {
+      await persist({ nightMode });
     },
   };
 });

@@ -199,6 +199,52 @@ describe("WorkerPdfEngine", () => {
   });
 });
 
+describe("viewer queries", () => {
+  it("streams search hits per page, resolves with the total, and can be cancelled", async () => {
+    const { worker, engine } = openedEngine();
+    const doc = await engine.open(new ArrayBuffer(8));
+    worker.autoReply = null;
+    const seen: number[] = [];
+    const done = doc.search("σελίδα", { onHits: (page) => seen.push(page) });
+    const req = worker.sent.at(-1) as Extract<WorkerRequest, { type: "search" }>;
+    expect(req).toMatchObject({ type: "search", query: "σελίδα" });
+    const rect = { x: 1, y: 2, width: 3, height: 4 };
+    worker.reply({ type: "searchHits", reqId: req.reqId, page: 0, hits: [{ rects: [rect] }] });
+    worker.reply({ type: "searchHits", reqId: req.reqId, page: 2, hits: [{ rects: [rect] }, { rects: [rect] }] });
+    worker.reply({ type: "searchDone", reqId: req.reqId, total: 3 });
+    await expect(done).resolves.toBe(3);
+    expect(seen).toEqual([0, 2]);
+
+    const controller = new AbortController();
+    const cancelled = doc.search("x", { signal: controller.signal, onHits: () => seen.push(99) });
+    const second = worker.sent.at(-1) as Extract<WorkerRequest, { type: "search" }>;
+    controller.abort();
+    expect(worker.sent.at(-1)).toEqual({ type: "cancel", reqId: second.reqId });
+    worker.reply({ type: "searchHits", reqId: second.reqId, page: 1, hits: [{ rects: [rect] }] });
+    worker.reply({ type: "error", reqId: second.reqId, code: "cancelled", message: "search cancelled" });
+    await expect(cancelled).rejects.toMatchObject({ code: "cancelled" });
+    expect(seen).not.toContain(99);
+  });
+
+  it("caches text runs per page and passes rotation / night mode to renders", async () => {
+    const { worker, engine } = openedEngine();
+    const doc = await engine.open(new ArrayBuffer(8));
+    worker.autoReply = (req) => {
+      if (req.type === "text") return { type: "text", reqId: req.reqId, runs: [{ x: 0, y: 0, width: 5, height: 5, text: "a", fontSize: 5 }] };
+      if (req.type === "render") return rendered(req.reqId);
+      return null;
+    };
+    await doc.textRuns(0);
+    await doc.textRuns(0);
+    expect(worker.sent.filter((m) => m.type === "text")).toHaveLength(1);
+    await doc.renderPageImage(0, 1, { rotation: 1, night: true });
+    expect(worker.sent.at(-1)).toMatchObject({ type: "render", rotation: 1, night: true });
+    await doc.renderPageImage(0, 1);
+    // A different rotation / night combination is a different cached bitmap.
+    expect(worker.sent.filter((m) => m.type === "render")).toHaveLength(2);
+  });
+});
+
 describe("thumbnailScale", () => {
   it("fits the page inside the box, keeping its aspect ratio", () => {
     expect(thumbnailScale({ width: 600, height: 800 }, 300, 420)).toBeCloseTo(0.5);
