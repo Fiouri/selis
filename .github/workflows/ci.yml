@@ -61,7 +61,7 @@ jobs:
         working-directory: apps/app
       - name: Playwright mobile smoke (Pixel 7, iPhone 15) + 390×844 visual snapshots; mock IPC
         run: npm run e2e
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
@@ -99,7 +99,7 @@ jobs:
       - name: Build debug APK
         # ANDROID_HOME comes from the runner image, so it is only visible to the shell.
         run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --debug --apk
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: selis-android-debug-apk
           path: apps/app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
