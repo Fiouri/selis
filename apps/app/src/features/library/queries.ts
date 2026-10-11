@@ -26,7 +26,7 @@ export function patchCachedDocument(queryClient: QueryClient, doc: Document): vo
   );
 }
 
-function refreshLibrary(queryClient: QueryClient): void {
+export function refreshLibrary(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: documentsKey });
 }
 

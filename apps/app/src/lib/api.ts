@@ -110,6 +110,10 @@ export const api = {
     unwrap(ipc().short("discard_working_copy", () => commands.discardWorkingCopy(documentId), READ)),
   saveVersion: (documentId: string, label: VersionLabel) =>
     unwrap(ipc().long("save_version", (requestId) => commands.saveVersion(requestId, documentId, label), SAVE)),
+  importUpload: (uploadId: string, title: string) =>
+    unwrap(ipc().long("import_upload", (requestId) => commands.importUpload(requestId, uploadId, title), IMPORT)),
+  stagePdf: (source: string) => unwrap(ipc().long("stage_pdf", (requestId) => commands.stagePdf(requestId, source), IMPORT)),
+  unstage: (path: string) => unwrap(ipc().short("unstage", () => commands.unstage(path), READ)),
   listSignatures: () => unwrap(ipc().short("list_signatures", () => commands.listSignatures(), READ)),
   // Keyed by the UI-chosen id: a repeat returns the stored signature.
   saveSignature: (id: string, kind: SignatureKind, pngBase64: string) =>

@@ -336,6 +336,22 @@ async function saveVersion(documentId: string, label: VersionLabel): Promise<Sav
   return { document, seq: list.length + 1, created: true };
 }
 
+/** New library document from an upload (pages extracted in the UI). */
+async function importUpload(uploadId: string, title: string): Promise<ImportOutcome> {
+  const chunks = uploads.get(uploadId) ?? fail("notFound", uploadId);
+  uploads.delete(uploadId);
+  const file = new File(chunks.map((c) => c.slice()), `${title}.pdf`, { type: "application/pdf" });
+  return importDocument(registerMockFile(file), `${title}.pdf`);
+}
+
+/** The browser build "stages" a picked file by handing out a blob URL to it. */
+async function stagePdf(source: string): Promise<string> {
+  const file = files.get(source) ?? fail("io", "unknown mock source");
+  const head = new TextDecoder("latin1").decode((await file.arrayBuffer()).slice(0, 1024));
+  if (!head.includes("%PDF-")) fail("notPdf", "not a pdf");
+  return URL.createObjectURL(file);
+}
+
 function pngSize(bytes: Uint8Array): { width: number; height: number } | null {
   if (bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -511,6 +527,13 @@ export function installMockIpc(): void {
         return null;
       case "save_version":
         return runOnce(cmd, String(args.requestId), () => saveVersion(String(args.documentId), args.label as VersionLabel));
+      case "import_upload":
+        return runOnce(cmd, String(args.requestId), () => importUpload(String(args.uploadId), String(args.title)));
+      case "stage_pdf":
+        return runOnce(cmd, String(args.requestId), () => stagePdf(String(args.source)));
+      case "unstage":
+        if (String(args.path).startsWith("blob:")) URL.revokeObjectURL(String(args.path));
+        return null;
       case "list_signatures":
         return [...signatures.values()].sort((a, b) => b.createdAt - a.createdAt);
       case "save_signature":

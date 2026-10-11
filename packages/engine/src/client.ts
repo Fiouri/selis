@@ -102,9 +102,21 @@ export class WorkerPdfEngine implements PdfEngine {
 
   private makeHandle(docId: string, pages: PageSize[], title: string | null): DocHandle {
     let closed = false;
-    const frozenPages = Object.freeze(pages.map((p) => Object.freeze({ ...p })));
+    const freeze = (list: readonly PageSize[]) => Object.freeze(list.map((p) => Object.freeze({ ...p })));
+    let frozenPages = freeze(pages);
+    let structure = 0;
     const revisions = new Map<number, number>();
     const listeners = new Set<(index: number) => void>();
+    const structureListeners = new Set<() => void>();
+    /** The page list changed: every cached bitmap and text run of the document is stale. */
+    const restructured = (next: readonly PageSize[]) => {
+      frozenPages = freeze(next);
+      structure++;
+      revisions.clear();
+      this.cache.deleteWhere((key) => key.startsWith(`${docId}:`));
+      this.textCache.deleteWhere((key) => key.startsWith(`${docId}:`));
+      for (const listener of structureListeners) listener();
+    };
     const checkIndex = (index: number) => {
       if (!Number.isInteger(index) || index < 0 || index >= frozenPages.length) {
         throw new RangeError(`page index ${index} out of range`);
@@ -121,8 +133,12 @@ export class WorkerPdfEngine implements PdfEngine {
     };
     const handle: DocHandle = {
       id: docId,
-      pageCount: frozenPages.length,
-      pages: frozenPages,
+      get pageCount() {
+        return frozenPages.length;
+      },
+      get pages() {
+        return frozenPages;
+      },
       title,
       renderPageImage: (index, scale, options: RenderOptions = {}) => {
         if (closed) return Promise.reject(new EngineError("closed", "document is closed"));
@@ -250,9 +266,36 @@ export class WorkerPdfEngine implements PdfEngine {
       },
       reload: async (bytes) => {
         ensureOpen();
-        await this.request((reqId) => ({ type: "reload", reqId, docId, bytes }), [bytes]);
-        this.textCache.deleteWhere((key) => key.startsWith(`${docId}:`));
-        for (let i = 0; i < frozenPages.length; i++) changed(i);
+        const msg = await this.request<Extract<WorkerResponse, { type: "reloaded" }>>(
+          (reqId) => ({ type: "reload", reqId, docId, bytes }),
+          [bytes],
+        );
+        restructured(msg.pages);
+      },
+      editPages: async (op) => {
+        ensureOpen();
+        const transfer = op.op === "insertPdf" ? [op.bytes] : [];
+        const msg = await this.request<Extract<WorkerResponse, { type: "pagesEdited" }>>(
+          (reqId) => ({ type: "editPages", reqId, docId, op }),
+          transfer,
+        );
+        restructured(msg.pages);
+        return msg.before;
+      },
+      extractPages: async (indices) => {
+        ensureOpen();
+        const msg = await this.request<Extract<WorkerResponse, { type: "extracted" }>>((reqId) => ({
+          type: "extract",
+          reqId,
+          docId,
+          indices: [...indices],
+        }));
+        return msg.bytes;
+      },
+      structureRevision: () => structure,
+      onStructureChange: (listener) => {
+        structureListeners.add(listener);
+        return () => structureListeners.delete(listener);
       },
       annotationAppearance: async (page, id) => {
         ensureOpen();
@@ -284,6 +327,7 @@ export class WorkerPdfEngine implements PdfEngine {
         if (closed) return;
         closed = true;
         listeners.clear();
+        structureListeners.clear();
         this.cache.deleteWhere((key) => key.startsWith(`${docId}:`));
         this.textCache.deleteWhere((key) => key.startsWith(`${docId}:`));
         await this.request((reqId) => ({ type: "close", reqId, docId }));

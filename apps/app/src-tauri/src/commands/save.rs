@@ -5,8 +5,11 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use selis_core::{Library, SavedVersion, VersionLabel, WorkingCopy, save::MAX_CHUNK_BYTES};
-use tauri::State;
+use selis_core::{
+    ImportOutcome, Library, SavedVersion, VersionLabel, WorkingCopy, save::MAX_CHUNK_BYTES,
+};
+use tauri::{AppHandle, Runtime, State};
+use tauri_plugin_fs::{FsExt, OpenOptions};
 
 use super::{CommandError, CommandResult, ErrorCode};
 use crate::requests::RequestResults;
@@ -129,4 +132,63 @@ pub async fn save_version(
             .await
         })
         .await
+}
+
+/// Imports a finished upload (pages extracted or split off in the UI) as a new
+/// library document. Runs once per `request_id`.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_upload(
+    library: State<'_, Arc<Library>>,
+    results: State<'_, Arc<RequestResults>>,
+    request_id: String,
+    upload_id: String,
+    title: String,
+) -> CommandResult<ImportOutcome> {
+    let library = Arc::clone(&library);
+    results
+        .run_once(&request_id, "import_upload", async move {
+            blocking("import", move || library.import_upload(&upload_id, &title)).await
+        })
+        .await
+}
+
+/// Copies a picked PDF (a path, or a content:// URI on Android) into the stage
+/// and returns its path for the asset protocol: the UI reads it and inserts its
+/// pages. The source is opened read-only. Runs once per `request_id`.
+#[tauri::command]
+#[specta::specta]
+pub async fn stage_pdf<R: Runtime>(
+    app: AppHandle<R>,
+    library: State<'_, Arc<Library>>,
+    results: State<'_, Arc<RequestResults>>,
+    request_id: String,
+    source: String,
+) -> CommandResult<String> {
+    let library = Arc::clone(&library);
+    results
+        .run_once(&request_id, "stage_pdf", async move {
+            let path = super::library::parse_source(source.trim())?;
+            tauri::async_runtime::spawn_blocking(move || {
+                let mut opts = OpenOptions::new();
+                opts.read(true);
+                let file = app.fs().open(path, opts).map_err(|e| {
+                    CommandError::new(ErrorCode::Io, format!("cannot open source: {e}"))
+                })?;
+                let staged = library.stage_reader(file)?;
+                Ok(staged.to_string_lossy().into_owned())
+            })
+            .await
+            .map_err(|e| {
+                CommandError::new(ErrorCode::Internal, format!("stage task failed: {e}"))
+            })?
+        })
+        .await
+}
+
+/// Removes a staged PDF once its pages are in. Idempotent.
+#[tauri::command]
+#[specta::specta]
+pub async fn unstage(library: State<'_, Arc<Library>>, path: String) -> CommandResult<()> {
+    Ok(library.unstage(&path)?)
 }

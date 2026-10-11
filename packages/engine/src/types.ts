@@ -1,6 +1,7 @@
 /** Page size in PDF points (1/72 in), after the page's own /Rotate is applied. */
 import type { PageRect, QuarterTurns } from "./geometry";
 import type { RenderLimits } from "./limits";
+import type { PageOp } from "./pages";
 
 export type PageSize = { readonly width: number; readonly height: number };
 
@@ -57,6 +58,7 @@ export type Thumbnail = {
 /** An open document inside the engine worker. */
 export interface DocHandle {
   readonly id: string;
+  /** Current pages: replaced (not mutated) by page operations and reloads. */
   readonly pageCount: number;
   readonly pages: readonly PageSize[];
   /** /Title from the document info dictionary, if any. */
@@ -102,8 +104,19 @@ export interface DocHandle {
   setFormField(page: number, id: string, change: FieldChange): Promise<FormField[]>;
   /** Turns form fields and annotations of every page into page content. Resolves to the pages changed. */
   flatten(): Promise<number>;
-  /** Replaces the document's content with `bytes` (same pages; undo of flatten). */
+  /** Replaces the document's content with `bytes` (undo of flatten and page operations). */
   reload(bytes: ArrayBuffer): Promise<void>;
+  /**
+   * Changes the pages (rotate, delete, move, insert, duplicate, insert a PDF).
+   * Resolves to the document's bytes from before, for undo. `pages` and
+   * `pageCount` change; `onStructureChange` listeners are told.
+   */
+  editPages(op: PageOp): Promise<ArrayBuffer>;
+  /** The pages `indices` as a new PDF (forms kept fillable). */
+  extractPages(indices: readonly number[]): Promise<ArrayBuffer>;
+  /** Bumped by every change to the list of pages (count, order, sizes). */
+  structureRevision(): number;
+  onStructureChange(listener: () => void): () => void;
   /** A one-page PDF of an annotation's appearance (to recreate it later). */
   annotationAppearance(page: number, id: string): Promise<StampImage>;
   /** Monotonic counter per page, bumped by every change to the page. */

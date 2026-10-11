@@ -1,0 +1,84 @@
+# Pages on Android: select, rotate, duplicate, undo/redo, delete (confirm),
+# add a PDF with a form through the system picker, extract a page into a new
+# library document, close → a new version. Long-press drag is checked with
+# `pages.sh drag` (Maestro cannot hold before it moves; adb draganddrop can).
+# Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh and
+#   POST_RUN="apps/app/e2e/maestro/pages.sh check"
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Pages - rotate, duplicate, delete, add PDF, extract
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "mixed-sizes.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 7"
+    timeout: 20000
+
+- tapOn: "Pages"
+- extendedWaitUntil:
+    visible: "0 selected"
+    timeout: 5000
+- assertVisible: "7 pages · Long-press and drag to reorder"
+
+- tapOn:
+    id: "Page 1"
+- assertVisible: "1 selected"
+- tapOn: "Rotate"
+- extendedWaitUntil:
+    visible: "7 pages · Long-press and drag to reorder"
+    timeout: 10000
+- tapOn: "Duplicate"
+- extendedWaitUntil:
+    visible: "8 pages · Long-press and drag to reorder"
+    timeout: 10000
+- tapOn: "Undo"
+- extendedWaitUntil:
+    visible: "7 pages · Long-press and drag to reorder"
+    timeout: 10000
+- tapOn: "Redo"
+- extendedWaitUntil:
+    visible: "8 pages · Long-press and drag to reorder"
+    timeout: 10000
+
+# The copy (page 2) is selected: delete it, after the confirm dialog.
+- assertVisible: "1 selected"
+- tapOn:
+    text: "Delete"
+    index: 0
+- extendedWaitUntil:
+    visible: "Delete 1 page?"
+    timeout: 5000
+- tapOn:
+    text: "Delete"
+    below: "Delete 1 page?"
+- extendedWaitUntil:
+    visible: "7 pages · Long-press and drag to reorder"
+    timeout: 10000
+
+# Add a PDF with a form at the end (system picker, read-only).
+- tapOn: "Add PDF"
+- tapOn: "PDF from a file…"
+- tapOn: "acroform.pdf"
+- extendedWaitUntil:
+    visible: "Added 1 page."
+    timeout: 20000
+- assertVisible: "8 pages · Long-press and drag to reorder"
+
+# The new page is selected: extract it into a new library document.
+- tapOn: "Extract"
+- tapOn: "New document with the selected pages"
+- extendedWaitUntil:
+    visible: "Created 1 new document in the library."
+    timeout: 20000
+
+- tapOn:
+    id: "Close pages"
+- extendedWaitUntil:
+    visible: ".*· saved"
+    timeout: 15000
+- assertVisible: "Form with 4 fields"

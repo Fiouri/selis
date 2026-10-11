@@ -20,6 +20,7 @@ export {
 } from "./geometry";
 export { DEFAULT_RENDER_LIMITS, memoryTier, type MemoryTier, renderLimitsFor, type RenderLimits } from "./limits";
 export { LruCache } from "./lru";
+export type { PageOp } from "./pages";
 export { annotationAt, glyphAt, selectionRects, simplifyStroke, strokesBounds, unionRect } from "./editing";
 export {
   type Annotation,
