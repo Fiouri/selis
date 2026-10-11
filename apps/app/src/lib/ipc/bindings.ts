@@ -194,7 +194,7 @@ export type Settings = {
 	localOnly: boolean,
 	/**  Versions kept per document, the current one included. */
 	versionsPerDocument: number,
-	/**  Older versions kept across the library, in MB. */
+	/**  History kept per document (versions other than v1 and the current one), in MB. */
 	historyLimitMb: number,
 	/**  App lock (biometric gate lands later; the choice is stored now). */
 	appLock: boolean,

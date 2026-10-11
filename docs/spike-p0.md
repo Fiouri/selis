@@ -146,7 +146,21 @@ between boots (the same pre-P1 build peaked at 346–350 MB in one run of this s
   software canvas and released at once, and the text layer is built only after the page bitmap
   is drawn (it delayed the first paint by ~250 ms when it ran first).
 - First page stays below 1 s in every run; the AVD's spread is as wide as before.
-- Not re-measured on the S23 or a real mid-range phone (see "Still open").
+
+**S23 (2026-10-11, P1c build).** The first P1 measurement found a real regression: peak
+**628–640 MB, over the 600 MB gate** (renderer +77 MB against 2.12). Every page that flew by
+during the fast scroll built its text layer: PDFium text pages were loaded in the worker (the
+WASM heap grows and never shrinks) and their spans laid out. The text layer is now built only
+for pages that stay on screen for 600 ms.
+
+| S23, debug | 2.12 (table above) | P1, text layer per page | P1, text layer on settled pages |
+| --- | --- | --- | --- |
+| First page right after import | 131–135 ms | 99–101 ms | 96–104 ms |
+| Peak during scroll, app + renderer | 527–532 MB | 628–640 MB | **528–534 MB** |
+| After closing the document | 369–373 MB | 460–470 MB | 410–434 MB |
+
+AVD with the same build: peak 388–398 MB, first page 658–857 ms. Not measured on a real
+mid-range phone (see "Still open").
 
 ## Result: PASS on every target that can run the app — real mid-range device still open
 

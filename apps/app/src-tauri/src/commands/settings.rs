@@ -35,7 +35,8 @@ pub enum LibraryView {
 }
 
 /// Allowed values (the pickers offer a subset).
-pub const VERSIONS_PER_DOCUMENT: std::ops::RangeInclusive<u32> = 1..=100;
+/// At least 2: v1 (the original) and the current version are always kept.
+pub const VERSIONS_PER_DOCUMENT: std::ops::RangeInclusive<u32> = 2..=100;
 pub const HISTORY_LIMIT_MB: std::ops::RangeInclusive<u32> = 10..=10_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -51,7 +52,7 @@ pub struct Settings {
     pub local_only: bool,
     /// Versions kept per document, the current one included.
     pub versions_per_document: u32,
-    /// Older versions kept across the library, in MB.
+    /// History kept per document (versions other than v1 and the current one), in MB.
     pub history_limit_mb: u32,
     /// App lock (biometric gate lands later; the choice is stored now).
     pub app_lock: bool,

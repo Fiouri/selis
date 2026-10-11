@@ -1,0 +1,35 @@
+# Settings on Android: the theme applies at once and survives an app restart;
+# the language picker switches the UI. Run with ./run.sh (ANR check).
+appId: com.anywecon.selis
+# Read the WebView through DevTools: the UiAutomator accessibility snapshot of the
+# WebView can lag behind the DOM (e.g. a bottom sheet that just opened).
+androidWebViewHierarchy: devtools
+name: Settings theme and language
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Settings"
+- tapOn: "Dark"
+# The theme radiogroup exposes its current value as its test id.
+- assertVisible:
+    id: "theme-choice-dark"
+
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Settings"
+- assertVisible:
+    id: "theme-choice-dark"
+
+- tapOn:
+    id: "setting-language"
+- tapOn: "Ελληνικά"
+- assertVisible: "Ρυθμίσεις"
+- tapOn: "Σέπια"
+- assertVisible:
+    id: "theme-choice-sepia"

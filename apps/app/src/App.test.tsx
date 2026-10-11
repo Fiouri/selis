@@ -28,6 +28,8 @@ describe("PhoneShell (jsdom, mock IPC)", () => {
     window.innerWidth = 390;
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    // Language is a row that opens a picker sheet.
+    fireEvent.click(await screen.findByTestId("setting-language"));
     fireEvent.click(await screen.findByRole("radio", { name: "Ελληνικά" }));
     await waitFor(() => {
       expect(i18n.language).toBe("el");
