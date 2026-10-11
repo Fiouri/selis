@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use selis_core::{
-    CancelToken, CancellableReader, Document, DocumentFile, ImportOutcome, Library, LibraryQuery,
-    title_from_file_name,
+    CancelToken, CancellableReader, DeleteReport, Document, DocumentFile, ImportOutcome, Library,
+    LibraryQuery, title_from_file_name,
 };
 use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
@@ -126,6 +126,33 @@ pub async fn set_favorite(
     favorite: bool,
 ) -> CommandResult<Document> {
     Ok(library.set_favorite(&id, favorite)?)
+}
+
+/// Changes the library title only; the stored file keeps its name. Idempotent.
+#[tauri::command]
+#[specta::specta]
+pub async fn rename_document(
+    library: State<'_, Arc<Library>>,
+    id: String,
+    title: String,
+) -> CommandResult<Document> {
+    Ok(library.rename_document(&id, &title)?)
+}
+
+/// Removes a document from the library: rows in one transaction, then the
+/// library's own files (copy, versions, thumbnail). A linked document's
+/// external file is never touched.
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_document(
+    library: State<'_, Arc<Library>>,
+    id: String,
+) -> CommandResult<DeleteReport> {
+    let library = Arc::clone(&library);
+    tauri::async_runtime::spawn_blocking(move || library.delete_document(&id))
+        .await
+        .map_err(|e| CommandError::new(ErrorCode::Internal, format!("delete task failed: {e}")))?
+        .map_err(CommandError::from)
 }
 
 /// Resolves the stored copy without marking the document as opened

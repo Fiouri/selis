@@ -85,7 +85,8 @@ Tier 2 — end of every feature:
   `import-scroll-back.yaml`, `import-background-resume.yaml`, `library-search-favorites.yaml`,
   `viewer-search.yaml`, `settings-theme.yaml`,
   and `import-from-intent.yaml` twice: with `PRE_RUN="…/open-with.sh cold"` and `…/open-with.sh warm`,
-  both with `POST_RUN="…/open-with.sh check"` (original untouched). run.sh fails a run on
+  both with `POST_RUN="…/open-with.sh check"` (original untouched), and `delete-rename.yaml` with
+  `POST_RUN="…/delete-rename.sh check"` (deleted copy gone from app data, originals untouched). run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM).
 - Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC) + 390×844 visual snapshots in

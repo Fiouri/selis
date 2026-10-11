@@ -52,6 +52,11 @@ export const api = {
   // Sets (never toggles) the flag, so a retry is harmless.
   setFavorite: (id: string, favorite: boolean) =>
     unwrap(ipc().short("set_favorite", () => commands.setFavorite(id, favorite), READ)),
+  // Sets the title (never appends): safe to repeat.
+  renameDocument: (id: string, title: string) =>
+    unwrap(ipc().short("rename_document", () => commands.renameDocument(id, title), READ)),
+  // A repeat after a lost reply answers notFound, which callers treat as done.
+  deleteDocument: (id: string) => unwrap(ipc().short("delete_document", () => commands.deleteDocument(id), READ)),
   // Sets the position (never increments): safe to repeat.
   setLastPage: (id: string, page: number) =>
     unwrap(ipc().short("set_last_page", () => commands.setLastPage(id, page), READ)),
@@ -111,6 +116,7 @@ export function errorMessageKey(err: unknown): string {
 
 export { IpcTimeoutError, LostResponseError } from "./ipc";
 export type {
+  DeleteReport,
   Document,
   DocumentFile,
   ImportOutcome,

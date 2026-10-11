@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
@@ -23,6 +24,9 @@ import androidx.core.view.WindowInsetsCompat
  * - System bar / cutout insets are exposed to the UI as CSS px through the tiny
  *   `SelisAndroid` bridge (read on startup, pushed as a `selis:insets` event on change),
  *   because not every Android WebView reports env(safe-area-inset-*).
+ * - The keyboard shrinks the WebView (bottom margin = IME inset). Edge-to-edge windows
+ *   are not resized for it, so without this the keyboard would cover bottom sheets
+ *   with a text field (rename, new tag).
  * - Back asks the UI first (`window.__selisBack()`, state/navigation.ts): it closes
  *   sheets, leaves the viewer or the tab, and says whether it did. Only at the root
  *   does the system back run (Tauri's handler: finish the activity). WebView history
@@ -123,9 +127,19 @@ class MainActivity : TauriActivity() {
       val bars = insets.getInsets(
         WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
       )
+      // The IME inset includes the navigation bar it covers.
+      val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+      (view.layoutParams as? ViewGroup.MarginLayoutParams)?.let { params ->
+        if (params.bottomMargin != imeBottom) {
+          params.bottomMargin = imeBottom
+          view.layoutParams = params
+        }
+      }
+      // Above the keyboard there is no bottom bar to keep clear of.
+      val bottom = if (imeBottom > 0) 0 else bars.bottom
       val density = view.resources.displayMetrics.density
       val json = "{\"top\":${bars.top / density},\"right\":${bars.right / density}," +
-        "\"bottom\":${bars.bottom / density},\"left\":${bars.left / density}}"
+        "\"bottom\":${bottom / density},\"left\":${bars.left / density}}"
       if (json != insetsJson) {
         insetsJson = json
         view.post {

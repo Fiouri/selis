@@ -377,6 +377,22 @@ impl Library {
         self.get_locked(&conn, id)
     }
 
+    /// Changes the title shown in the library. The stored file keeps its
+    /// content-addressed name, and an original outside the library is never
+    /// renamed. An empty title means "untitled" (undoing a rename of an
+    /// untitled document restores it). Idempotent.
+    pub fn rename_document(&self, id: &str, title: &str) -> Result<Document> {
+        let conn = self.conn();
+        let changed = conn.execute(
+            "UPDATE documents SET title = ?2 WHERE id = ?1",
+            params![id, sanitize_title(title)],
+        )?;
+        if changed == 0 {
+            return Err(Error::NotFound(id.to_owned()));
+        }
+        self.get_locked(&conn, id)
+    }
+
     /// Remembers the page the reader is on (zero-based). Idempotent.
     pub fn set_last_page(&self, id: &str, page: u32) -> Result<Document> {
         let conn = self.conn();
@@ -936,6 +952,38 @@ mod tests {
         assert_eq!(lib.get_document(&id)?.last_page, Some(4));
         assert!(matches!(
             lib.set_last_page("nope", 1),
+            Err(Error::NotFound(_))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn rename_changes_the_title_only() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let (id, stored) = {
+            let lib = Library::open(dir.path())?;
+            let doc = lib
+                .import_reader(pdf_bytes("r").as_slice(), "Παλιό")?
+                .document;
+            let stored = lib.document_file(&doc.id)?.path;
+            let renamed = lib.rename_document(&doc.id, "  Νέο\u{7} όνομα ")?;
+            assert_eq!(renamed.title, "Νέο όνομα", "trimmed, control chars dropped");
+            assert_eq!(renamed.blake3, doc.blake3);
+            assert_eq!(renamed.modified_at, doc.modified_at);
+            // The stored copy keeps its content-addressed name.
+            assert_eq!(lib.document_file(&doc.id)?.path, stored);
+            assert_eq!(
+                ids(&lib.list_documents(&query("ονομα", LibraryFilter::All, LibrarySort::Name))?),
+                [doc.id.as_str()]
+            );
+            (doc.id, stored)
+        };
+        let lib = Library::open(dir.path())?;
+        assert_eq!(lib.get_document(&id)?.title, "Νέο όνομα");
+        assert!(Path::new(&stored).is_file());
+        assert_eq!(lib.rename_document(&id, "")?.title, "", "back to untitled");
+        assert!(matches!(
+            lib.rename_document("nope", "x"),
             Err(Error::NotFound(_))
         ));
         Ok(())

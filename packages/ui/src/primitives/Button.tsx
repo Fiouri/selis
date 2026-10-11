@@ -1,8 +1,9 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { cx } from "./cx";
 
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost";
+/** `ref` is a plain prop in React 19 and reaches the <button>. */
+export type ButtonProps = ComponentProps<"button"> & {
+  variant?: "primary" | "secondary" | "ghost" | "danger";
   icon?: ReactNode;
 };
 
@@ -10,6 +11,7 @@ const VARIANTS: Record<NonNullable<ButtonProps["variant"]>, string> = {
   primary: "bg-accent-9 text-accent-contrast hover:bg-accent-10 active:bg-accent-10 shadow-1",
   secondary: "bg-neutral-3 text-neutral-12 hover:bg-neutral-4 active:bg-neutral-5 border border-neutral-6",
   ghost: "bg-transparent text-accent-11 hover:bg-neutral-3 active:bg-neutral-4",
+  danger: "bg-danger-3 text-danger-11 font-semibold hover:opacity-90 active:opacity-80",
 };
 
 export function Button({ variant = "primary", icon, className, children, type = "button", ...rest }: ButtonProps) {

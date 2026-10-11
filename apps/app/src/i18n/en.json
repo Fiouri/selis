@@ -54,7 +54,20 @@
     "emptyTagTitle": "Nothing tagged “{tag}”",
     "emptyTagBody": "Long-press a document to tag it.",
     "showAll": "Show all",
-    "importedMany": "{count, plural, one {Imported # document} other {Imported # documents}}"
+    "importedMany": "{count, plural, one {Imported # document} other {Imported # documents}}",
+    "rename": "Rename",
+    "renameLabel": "New title",
+    "renameSave": "Save",
+    "renameCancel": "Cancel",
+    "renamed": "Renamed to “{title}”",
+    "undo": "Undo",
+    "delete": "Delete",
+    "deleteTitle": "Delete “{title}”?",
+    "deleteImported": "The copy in Selis, all its versions and its thumbnail will be deleted. The original file on your device stays as it is.",
+    "deleteLinked": "The document will be removed from the library. The file itself is not touched.",
+    "deleteConfirm": "Delete",
+    "deleteCancel": "Cancel",
+    "deleted": "Deleted “{title}”"
   },
   "recent": {
     "title": "Recent",

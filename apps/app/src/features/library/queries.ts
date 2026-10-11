@@ -1,5 +1,5 @@
 import { keepPreviousData, type QueryClient, useQuery } from "@tanstack/react-query";
-import { api, type Document, type ImportOutcome, type LibraryQuery, type Tag } from "../../lib/api";
+import { ApiError, api, type Document, type ImportOutcome, type LibraryQuery, type Tag } from "../../lib/api";
 import { ALL_DOCUMENTS } from "./libraryStore";
 
 /** Every library listing is cached under ["documents", query]. */
@@ -55,6 +55,40 @@ export async function setFavorite(queryClient: QueryClient, doc: Document, favor
   } finally {
     // Filtered views (Favorites) must gain or lose the document.
     refreshLibrary(queryClient);
+  }
+}
+
+/** Sets a document's title, optimistically. Resolves to false on failure. */
+export async function renameDocument(queryClient: QueryClient, doc: Document, title: string): Promise<boolean> {
+  patchCachedDocument(queryClient, { ...doc, title });
+  try {
+    patchCachedDocument(queryClient, await api.renameDocument(doc.id, title));
+    return true;
+  } catch {
+    patchCachedDocument(queryClient, doc);
+    return false;
+  } finally {
+    // Name sort and title search depend on it.
+    refreshLibrary(queryClient);
+  }
+}
+
+/**
+ * Deletes a document: it leaves every listing at once and comes back if the
+ * backend refuses. "Not found" counts as done (e.g. the reply to a first try
+ * was lost and the retry found nothing left). Resolves to false on failure.
+ */
+export async function deleteDocument(queryClient: QueryClient, doc: Document): Promise<boolean> {
+  queryClient.setQueriesData<Document[]>({ queryKey: documentsKey }, (old) => old?.filter((d) => d.id !== doc.id));
+  try {
+    await api.deleteDocument(doc.id);
+    return true;
+  } catch (err) {
+    return err instanceof ApiError && err.code === "notFound";
+  } finally {
+    refreshLibrary(queryClient);
+    // Tag counts change.
+    void queryClient.invalidateQueries({ queryKey: tagsKey });
   }
 }
 
