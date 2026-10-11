@@ -190,6 +190,14 @@ export type Settings = {
 	libraryView: LibraryView,
 	/**  Reader night mode for pages (lightness inverted, images kept). */
 	nightMode: boolean,
+	/**  Transfer without the relay, same Wi-Fi only (used from P3). */
+	localOnly: boolean,
+	/**  Versions kept per document, the current one included. */
+	versionsPerDocument: number,
+	/**  Older versions kept across the library, in MB. */
+	historyLimitMb: number,
+	/**  App lock (biometric gate lands later; the choice is stored now). */
+	appLock: boolean,
 };
 
 /**  Partial update; `None` fields are left unchanged. */
@@ -199,6 +207,10 @@ export type SettingsPatch = {
 	librarySort: LibrarySort | null,
 	libraryView: LibraryView | null,
 	nightMode: boolean | null,
+	localOnly: boolean | null,
+	versionsPerDocument: number | null,
+	historyLimitMb: number | null,
+	appLock: boolean | null,
 };
 
 /**

@@ -18,6 +18,11 @@ type SettingsState = Settings & {
   setLibrarySort: (sort: LibrarySort) => Promise<void>;
   setLibraryView: (view: LibraryView) => Promise<void>;
   setNightMode: (on: boolean) => Promise<void>;
+  /** Any other stored preference (Settings screen rows). */
+  setPreference: <K extends "localOnly" | "appLock" | "versionsPerDocument" | "historyLimitMb">(
+    key: K,
+    value: Settings[K],
+  ) => Promise<void>;
 };
 
 const DEFAULTS: Settings = {
@@ -26,6 +31,10 @@ const DEFAULTS: Settings = {
   librarySort: "recent",
   libraryView: "grid",
   nightMode: false,
+  localOnly: false,
+  versionsPerDocument: 10,
+  historyLimitMb: 200,
+  appLock: false,
 };
 
 const SORTS: readonly LibrarySort[] = ["recent", "name", "size", "lastOpened"];
@@ -42,6 +51,10 @@ function snapshot(s: Settings): Settings {
     librarySort: s.librarySort,
     libraryView: s.libraryView,
     nightMode: s.nightMode,
+    localOnly: s.localOnly,
+    versionsPerDocument: s.versionsPerDocument,
+    historyLimitMb: s.historyLimitMb,
+    appLock: s.appLock,
   };
 }
 
@@ -56,6 +69,11 @@ function readBootSettings(): Settings {
       librarySort: pick(parsed.librarySort, SORTS, DEFAULTS.librarySort),
       libraryView: pick(parsed.libraryView, ["grid", "list"], DEFAULTS.libraryView),
       nightMode: parsed.nightMode === true,
+      localOnly: parsed.localOnly === true,
+      versionsPerDocument:
+        typeof parsed.versionsPerDocument === "number" ? parsed.versionsPerDocument : DEFAULTS.versionsPerDocument,
+      historyLimitMb: typeof parsed.historyLimitMb === "number" ? parsed.historyLimitMb : DEFAULTS.historyLimitMb,
+      appLock: parsed.appLock === true,
     };
   } catch {
     return DEFAULTS;
@@ -106,6 +124,10 @@ export const useSettings = create<SettingsState>()((set, get) => {
         librarySort: patch.librarySort ?? null,
         libraryView: patch.libraryView ?? null,
         nightMode: patch.nightMode ?? null,
+        localOnly: patch.localOnly ?? null,
+        versionsPerDocument: patch.versionsPerDocument ?? null,
+        historyLimitMb: patch.historyLimitMb ?? null,
+        appLock: patch.appLock ?? null,
       });
       set(saved);
       writeBootSettings(saved);
@@ -136,6 +158,9 @@ export const useSettings = create<SettingsState>()((set, get) => {
     },
     setNightMode: async (nightMode) => {
       await persist({ nightMode });
+    },
+    setPreference: async (key, value) => {
+      await persist({ [key]: value });
     },
   };
 });

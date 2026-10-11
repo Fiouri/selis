@@ -27,6 +27,10 @@ const DEFAULT_SETTINGS: Settings = {
   librarySort: "recent",
   libraryView: "grid",
   nightMode: false,
+  localOnly: false,
+  versionsPerDocument: 10,
+  historyLimitMb: 200,
+  appLock: false,
 };
 
 const files = new Map<string, File>();
@@ -300,6 +304,10 @@ function updateSettings(patch: SettingsPatch): Settings {
   if (patch.librarySort) next.librarySort = patch.librarySort;
   if (patch.libraryView) next.libraryView = patch.libraryView;
   if (patch.nightMode !== null) next.nightMode = patch.nightMode;
+  if (patch.localOnly !== null) next.localOnly = patch.localOnly;
+  if (patch.appLock !== null) next.appLock = patch.appLock;
+  if (patch.versionsPerDocument !== null) next.versionsPerDocument = patch.versionsPerDocument;
+  if (patch.historyLimitMb !== null) next.historyLimitMb = patch.historyLimitMb;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
   return next;
 }

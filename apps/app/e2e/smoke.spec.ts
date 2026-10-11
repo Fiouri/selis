@@ -131,12 +131,13 @@ test("pinch zoom scales only the document", async ({ page, browserName }, info) 
 test("language and theme switches apply and persist", async ({ page }, info) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("radio", { name: "Ελληνικά" }).click();
+  await page.getByTestId("setting-language").click();
+  await page.getByTestId("language-sheet").getByRole("radio", { name: "Ελληνικά" }).click();
   await expect(page.getByRole("heading", { name: "Ρυθμίσεις" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "el");
 
   for (const [label, theme] of [
-    ["Σκοτεινό", "dark"],
+    ["Σκούρο", "dark"],
     ["Σέπια", "sepia"],
     ["Φωτεινό", "light"],
   ] as const) {
