@@ -45,6 +45,10 @@ const PICK: LongCallOptions = { checkAfterMs: null, pollMs: 2_000 };
 const UPLOAD: ShortCallOptions = { timeoutMs: 20_000, retry: true };
 /** Hashing a large working copy takes a moment; check for a lost reply after 5 s. */
 const SAVE: LongCallOptions = { checkAfterMs: 5_000, pollMs: 2_000 };
+/** Binding the endpoint and finding a relay take a few seconds at most. */
+const NETWORK: ShortCallOptions = { timeoutMs: 20_000, retry: true };
+/** Importing large files by reference and waiting for a relay address. */
+const OFFER: LongCallOptions = { checkAfterMs: 8_000, pollMs: 2_000 };
 
 const ipc = reliableIpc;
 
@@ -123,6 +127,54 @@ export const api = {
     unwrap(ipc().short("save_signature", () => commands.saveSignature(id, kind, pngBase64), READ)),
   deleteSignature: (id: string) => unwrap(ipc().short("delete_signature", () => commands.deleteSignature(id), READ)),
   pickImage: () => unwrap(ipc().long("pick_image", (requestId) => commands.pickImage(requestId), PICK)),
+
+  // Transfer (commands/transfer.rs). Opening is idempotent (the open endpoint is returned).
+  transferOpen: () => unwrap(ipc().short("transfer_open", () => commands.transferOpen(), NETWORK)),
+  // Closing twice is harmless; `false`: something still runs, it closes when that ends.
+  transferClose: (force = false) => unwrap(ipc().short("transfer_close", () => commands.transferClose(force), READ)),
+  transferOffer: (documentIds: string[], includeHistory: boolean) =>
+    unwrap(
+      ipc().long(
+        "transfer_offer",
+        (requestId) => commands.transferOffer(requestId, documentIds, includeHistory),
+        OFFER,
+      ),
+    ),
+  transferSendStatus: (sessionId: string) =>
+    unwrap(ipc().short("transfer_send_status", () => commands.transferSendStatus(sessionId), READ)),
+  // The answer is taken once; a repeat finds nothing to confirm (invalidArgument).
+  transferDecide: (sessionId: string, confirm: boolean) =>
+    unwrap(ipc().short("transfer_decide", () => commands.transferDecide(sessionId, confirm), WRITE)),
+  transferCancelSend: (sessionId: string) =>
+    unwrap(ipc().short("transfer_cancel_send", () => commands.transferCancelSend(sessionId), READ)),
+  // The same link again joins the same receive.
+  transferReceive: (link: string) =>
+    unwrap(ipc().long("transfer_receive", (requestId) => commands.transferReceive(requestId, link), IMPORT)),
+  transferReceiveStatus: (id: string) =>
+    unwrap(ipc().short("transfer_receive_status", () => commands.transferReceiveStatus(id), READ)),
+  transferCancelReceive: (id: string) =>
+    unwrap(ipc().short("transfer_cancel_receive", () => commands.transferCancelReceive(id), READ)),
+  transferResumable: () => unwrap(ipc().short("transfer_resumable", () => commands.transferResumable(), READ)),
+  // A running receive is left alone: safe to repeat.
+  transferResume: (id: string) => unwrap(ipc().short("transfer_resume", () => commands.transferResume(id), READ)),
+  transferPause: () => unwrap(ipc().short("transfer_pause", () => commands.transferPause(), READ)),
+  transferForeground: (channel: string, title: string, text: string, progress: number, max: number) =>
+    unwrap(
+      ipc().short(
+        "transfer_foreground",
+        () => commands.transferForeground(channel, title, text, progress, max),
+        READ,
+      ),
+    ),
+  transferForegroundStop: () =>
+    unwrap(ipc().short("transfer_foreground_stop", () => commands.transferForegroundStop(), READ)),
+  transferNotifications: () =>
+    unwrap(ipc().short("transfer_notifications", () => commands.transferNotifications(), { timeoutMs: 120_000, retry: false })),
+  transferDebugForceRelay: (on: boolean) =>
+    unwrap(ipc().short("transfer_debug_force_relay", () => commands.transferDebugForceRelay(on), READ)),
+  pendingTransferLink: () => unwrap(ipc().short("pending_transfer_link", () => commands.pendingTransferLink(), READ)),
+  dismissTransferLink: (link: string) =>
+    unwrap(ipc().short("dismiss_transfer_link", () => commands.dismissTransferLink(link), READ)),
 };
 
 /** i18n key for a user-facing error message. */
@@ -162,7 +214,14 @@ export type {
   LibrarySort,
   LibraryView,
   LocalePref,
+  OfferView,
   PendingOpen,
+  ReceiveView,
+  ResumableView,
+  RouteView,
+  SendView,
+  TransferErrorCode,
+  TransferInfo,
   PickedImage,
   SavedVersion,
   Settings,

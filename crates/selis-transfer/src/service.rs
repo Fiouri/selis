@@ -99,9 +99,24 @@ impl ServiceConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Route {
+    /// Direct, to a private address: the same Wi-Fi / LAN.
+    Lan,
+    /// Direct across networks (hole punching).
     Direct,
+    /// Through the relay (still end-to-end encrypted).
     Relay,
     Unknown,
+}
+
+/// Private, link-local or unique-local: the other device is on this network.
+fn is_local(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => v4.is_private() || v4.is_link_local() || v4.is_loopback(),
+        std::net::IpAddr::V6(v6) => {
+            let first = v6.segments()[0];
+            v6.is_loopback() || (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80
+        }
+    }
 }
 
 /// Why a transfer stopped, in terms the UI can explain.
@@ -728,7 +743,10 @@ enum Start {
 fn route_of(conn: &Connection) -> Route {
     match conn.paths().iter().find(|p| p.is_selected()) {
         Some(p) if p.is_relay() => Route::Relay,
-        Some(_) => Route::Direct,
+        Some(p) => match p.remote_addr() {
+            iroh::TransportAddr::Ip(sock) if is_local(sock.ip()) => Route::Lan,
+            _ => Route::Direct,
+        },
         None => Route::Unknown,
     }
 }

@@ -339,7 +339,7 @@ export type ResumableView = {
 	updatedAt: number,
 };
 
-export type RouteView = "direct" | "relay" | "unknown";
+export type RouteView = "lan" | "direct" | "relay" | "unknown";
 
 export type SavedVersion = {
 	document: Document,

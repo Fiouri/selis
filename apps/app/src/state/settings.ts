@@ -23,6 +23,8 @@ type SettingsState = Settings & {
     key: K,
     value: Settings[K],
   ) => Promise<void>;
+  /** A custom relay (`""` = the public relays). Rejects when Rust refuses the address. */
+  setRelayUrl: (url: string) => Promise<void>;
 };
 
 const DEFAULTS: Settings = {
@@ -33,6 +35,7 @@ const DEFAULTS: Settings = {
   libraryView: "grid",
   nightMode: false,
   localOnly: false,
+  relayUrl: null,
   versionsPerDocument: 10,
   historyLimitMb: 200,
   appLock: false,
@@ -53,6 +56,7 @@ function snapshot(s: Settings): Settings {
     libraryView: s.libraryView,
     nightMode: s.nightMode,
     localOnly: s.localOnly,
+    relayUrl: s.relayUrl,
     versionsPerDocument: s.versionsPerDocument,
     historyLimitMb: s.historyLimitMb,
     appLock: s.appLock,
@@ -71,6 +75,7 @@ function readBootSettings(): Settings {
       libraryView: pick(parsed.libraryView, ["grid", "list"], DEFAULTS.libraryView),
       nightMode: parsed.nightMode === true,
       localOnly: parsed.localOnly === true,
+      relayUrl: typeof parsed.relayUrl === "string" ? parsed.relayUrl : null,
       versionsPerDocument:
         typeof parsed.versionsPerDocument === "number" ? parsed.versionsPerDocument : DEFAULTS.versionsPerDocument,
       historyLimitMb: typeof parsed.historyLimitMb === "number" ? parsed.historyLimitMb : DEFAULTS.historyLimitMb,
@@ -126,6 +131,8 @@ export const useSettings = create<SettingsState>()((set, get) => {
         libraryView: patch.libraryView ?? null,
         nightMode: patch.nightMode ?? null,
         localOnly: patch.localOnly ?? null,
+        // null = unchanged (the relay is set through setRelayUrl).
+        relayUrl: null,
         versionsPerDocument: patch.versionsPerDocument ?? null,
         historyLimitMb: patch.historyLimitMb ?? null,
         appLock: patch.appLock ?? null,
@@ -159,6 +166,22 @@ export const useSettings = create<SettingsState>()((set, get) => {
     },
     setNightMode: async (nightMode) => {
       await persist({ nightMode });
+    },
+    setRelayUrl: async (url) => {
+      const saved = await api.updateSettings({
+        locale: null,
+        theme: null,
+        librarySort: null,
+        libraryView: null,
+        nightMode: null,
+        localOnly: null,
+        relayUrl: url.trim(),
+        versionsPerDocument: null,
+        historyLimitMb: null,
+        appLock: null,
+      });
+      set(saved);
+      writeBootSettings(saved);
     },
     setPreference: async (key, value) => {
       await persist({ [key]: value });

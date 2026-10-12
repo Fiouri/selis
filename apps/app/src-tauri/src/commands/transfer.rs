@@ -77,6 +77,7 @@ impl From<TransferError> for TransferErrorCode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum RouteView {
+    Lan,
     Direct,
     Relay,
     Unknown,
@@ -85,6 +86,7 @@ pub enum RouteView {
 impl From<Route> for RouteView {
     fn from(r: Route) -> Self {
         match r {
+            Route::Lan => Self::Lan,
             Route::Direct => Self::Direct,
             Route::Relay => Self::Relay,
             Route::Unknown => Self::Unknown,
@@ -632,10 +634,7 @@ fn send_view(s: SendState) -> SendView {
             total,
             route: route.into(),
         },
-        SendState::Interrupted { bytes, total } => SendView::Interrupted {
-            bytes,
-            total,
-        },
+        SendState::Interrupted { bytes, total } => SendView::Interrupted { bytes, total },
         SendState::Done => SendView::Done,
         SendState::Failed { error } => SendView::Failed {
             error: error.into(),
