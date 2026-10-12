@@ -113,6 +113,11 @@ for (const lang of LANGS) {
         await page.getByRole("searchbox").fill("κείμενο");
         await expect(page.getByTestId("search-status")).toHaveText(/^1 \//);
         await page.locator("input").blur();
+        // The hit is drawn (its page settles) before the scroll indicators fade: on a slow
+        // runner a late layout scroll would otherwise bring the page chip back.
+        await expect(page.getByTestId("search-hit-active")).toBeVisible();
+        await expect(page.getByTestId("page-chip")).toHaveCSS("opacity", "0", { timeout: 4_000 });
+        await page.waitForTimeout(600);
         await expect(page.getByTestId("page-chip")).toHaveCSS("opacity", "0", { timeout: 4_000 });
         await settle(page);
         await expect(page).toHaveScreenshot(shot("viewer-search"));
