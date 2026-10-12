@@ -369,7 +369,7 @@ for (const lang of LANGS) {
             { id: "1".repeat(64), name: names[0], online: true, ready: true },
             { id: "2".repeat(64), name: names[1], online: false, ready: false },
           ]);
-        }, (lang === "en" ? ["Maria's laptop", "Office tablet"] : ["Λάπτοπ της Μαρίας", "Tablet γραφείου"]) as [string, string]);
+        }, lang === "en" ? ["Maria's laptop", "Office tablet"] : ["Λάπτοπ της Μαρίας", "Tablet γραφείου"]);
         await page.getByRole("navigation").getByRole("button", { name: ui(lang, "tabs.transfer") }).click();
         await page.getByTestId("transfer-doc").first().click();
         await expect(page.locator('[data-testid="trusted-device"][data-status="offline"]')).toHaveCount(1);
