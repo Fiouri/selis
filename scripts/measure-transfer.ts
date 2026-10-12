@@ -46,6 +46,8 @@ type Options = {
   scenario: string;
   relay: boolean;
   clear: boolean;
+  /** Wipe --serial2 first (move: an empty receiving library). */
+  clear2: boolean;
   file: string;
   dir: string | null;
 };
@@ -64,6 +66,7 @@ function parseArgs(argv: readonly string[]): Options {
     scenario,
     relay: argv.includes("--relay"),
     clear: argv.includes("--clear"),
+    clear2: argv.includes("--clear2"),
     dir: get("--dir"),
     file: resolve(get("--file") ?? join(root, ".tmp", "p3", "big-200mb.pdf")),
   };
@@ -163,15 +166,27 @@ async function waitFor<T>(what: string, probe: () => Promise<T | undefined | nul
   }
 }
 
+/** One local port per device (two devices are driven at once in move / trusted). */
+const ports = new Map<string, number>();
+function portOf(serial: string): number {
+  let port = ports.get(serial);
+  if (port === undefined) {
+    port = CDP_PORT + ports.size;
+    ports.set(serial, port);
+  }
+  return port;
+}
+
 async function connect(serial: string, timeoutMs = 30_000): Promise<Cdp> {
   const deadline = Date.now() + timeoutMs;
+  const port = portOf(serial);
   for (;;) {
     try {
       const pid = adb(serial, ["shell", "pidof", PKG]).trim();
       const socket = new RegExp(`@(webview_devtools_remote_${pid})`).exec(adb(serial, ["shell", "cat", "/proc/net/unix"]))?.[1];
       if (pid && socket) {
-        adb(serial, ["forward", `tcp:${CDP_PORT}`, `localabstract:${socket}`]);
-        const response = await fetch(`http://127.0.0.1:${CDP_PORT}/json`);
+        adb(serial, ["forward", `tcp:${port}`, `localabstract:${socket}`]);
+        const response = await fetch(`http://127.0.0.1:${port}/json`);
         const targets = (await response.json()) as Array<{ type: string; webSocketDebuggerUrl: string }>;
         const page = targets.find((t) => t.type === "page");
         if (page) {
@@ -626,7 +641,7 @@ async function main(): Promise<number> {
         break;
       case "move": {
         if (!o.serial2) throw new Error("--serial2 needed");
-        if (o.clear) {
+        if (o.clear2) {
           adb(o.serial2, ["shell", "pm", "clear", PKG]);
           adb(o.serial2, ["shell", "pm", "grant", PKG, "android.permission.POST_NOTIFICATIONS"]);
         }

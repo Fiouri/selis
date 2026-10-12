@@ -204,32 +204,25 @@ async fn an_expired_ticket_is_refused_on_both_sides() -> Result {
         }])
         .await?;
     tokio::time::sleep(Duration::from_millis(2100)).await;
-    // The receiver refuses it locally…
-    assert!(
-        receiver
-            .receive(ticket.clone(), dir.path().join("in"))
-            .is_err()
-    );
+    // The sender's clock decides: an expired ticket is refused there, whatever
+    // the receiver's clock says (it allows some skew).
     assert_eq!(
         sender.send_state(&sid),
         Some(SendState::Failed {
             error: TransferError::Expired
         })
     );
-    // …and a receiver whose clock is behind (the ticket still looks valid to it)
-    // gets "expired" from the sender.
-    let mut stale = ticket;
-    stale.expires_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_secs()
-        + 300;
-    let rid = receiver.receive(stale, dir.path().join("in"))?;
+    let rid = receiver.receive(ticket.clone(), dir.path().join("in"))?;
     assert_eq!(
         receive_end(&receiver, &rid).await?,
         ReceiveState::Failed {
             error: TransferError::Expired
         }
     );
+    // Clearly expired by the receiver's clock too: refused locally, nothing sent.
+    let mut stale = ticket;
+    stale.expires_at = 1;
+    assert!(receiver.receive(stale, dir.path().join("in")).is_err());
     sender.close(true).await;
     receiver.close(true).await;
     Ok(())
