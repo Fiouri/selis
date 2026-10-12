@@ -73,6 +73,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::transfer::transfer_pause,
         commands::transfer::transfer_foreground::<tauri::Wry>,
         commands::transfer::transfer_foreground_stop::<tauri::Wry>,
+        commands::transfer::transfer_notifications::<tauri::Wry>,
         commands::transfer::transfer_debug_force_relay,
         commands::requests::take_result,
     ])

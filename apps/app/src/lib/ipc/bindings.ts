@@ -174,6 +174,11 @@ export const commands = {
 	 */
 	transferForeground: (channel: string, title: string, text: string, progress: number, max: number) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_foreground", { channel, title, text, progress, max })),
 	transferForegroundStop: () => typedError<null, CommandError>(__TAURI_INVOKE("transfer_foreground_stop")),
+	/**
+	 *  Asks for the notification permission (Android 13+) before the first
+	 *  transfer notification; `true` when notifications can be shown.
+	 */
+	transferNotifications: () => typedError<boolean, CommandError>(__TAURI_INVOKE("transfer_notifications")),
 	/**  Debug builds only: all traffic through the relay (applies at the next open). */
 	transferDebugForceRelay: (on: boolean) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_debug_force_relay", { on })),
 	/**
@@ -298,9 +303,9 @@ export type OfferView = {
 	/**  The QR code, black on white (any theme). */
 	qrSvg: string,
 	docCount: number,
-	totalBytes: number | null,
+	totalBytes: number,
 	/**  Unix seconds after which the code is refused. */
-	expiresAt: number | null,
+	expiresAt: number,
 };
 
 export type PendingOpen = {
@@ -317,21 +322,21 @@ export type PickedImage = { status: "picked"; mime: string;
 /**  Base64 of the file (the Android IPC carries JSON only). */
 data: string } | { status: "cancelled" };
 
-export type ReceiveView = { kind: "connecting" } | { kind: "confirm"; code: string } | { kind: "receiving"; bytes: number | null; total: number | null; route: RouteView } | { kind: "verifying" } | 
+export type ReceiveView = { kind: "connecting" } | { kind: "confirm"; code: string } | { kind: "receiving"; bytes: number; total: number; route: RouteView } | { kind: "verifying" } | 
 /**  Adding the documents to the library. */
 { kind: "saving" } | { kind: "done"; documentIds: string[]; duplicates: number } | 
 /**
  *  Stopped mid-way (connection lost, app stopped, Android's daily limit):
  *  `transfer_resume` continues without fetching again what arrived.
  */
-{ kind: "paused"; bytes: number | null; total: number | null } | { kind: "failed"; error: TransferErrorCode };
+{ kind: "paused"; bytes: number; total: number } | { kind: "failed"; error: TransferErrorCode };
 
 export type ResumableView = {
 	id: string,
 	docCount: number,
-	totalBytes: number | null,
-	doneBytes: number | null,
-	updatedAt: number | null,
+	totalBytes: number,
+	doneBytes: number,
+	updatedAt: number,
 };
 
 export type RouteView = "direct" | "relay" | "unknown";
@@ -344,9 +349,9 @@ export type SavedVersion = {
 	created: boolean,
 };
 
-export type SendView = { kind: "waitingForReceiver" } | { kind: "confirm"; code: string } | { kind: "sending"; bytes: number | null; total: number | null; route: RouteView } | 
+export type SendView = { kind: "waitingForReceiver" } | { kind: "confirm"; code: string } | { kind: "sending"; bytes: number; total: number; route: RouteView } | 
 /**  The receiver dropped; it can come back while this screen stays open. */
-{ kind: "interrupted"; bytes: number | null; total: number | null } | { kind: "done" } | { kind: "failed"; error: TransferErrorCode };
+{ kind: "interrupted"; bytes: number; total: number } | { kind: "done" } | { kind: "failed"; error: TransferErrorCode };
 
 export type Settings = {
 	locale: LocalePref,
@@ -428,6 +433,8 @@ export type TransferInfo = {
 	/**  This device's id as other devices see it (hex). */
 	deviceId: string,
 	network: NetworkView,
+	/**  A debug build (the "force relay" testing aid is available). */
+	debug: boolean,
 };
 
 /**  How a version came to be. */

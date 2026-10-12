@@ -61,6 +61,7 @@
     "allow-transfer-pause",
     "allow-transfer-foreground",
     "allow-transfer-foreground-stop",
+    "allow-transfer-notifications",
     "allow-transfer-debug-force-relay",
     "allow-set-last-page",
     "allow-share-document"

@@ -102,15 +102,19 @@ pub enum SendView {
     },
     #[serde(rename_all = "camelCase")]
     Sending {
-        bytes: f64,
-        total: f64,
+        #[specta(type = specta_typescript::Number)]
+        bytes: u64,
+        #[specta(type = specta_typescript::Number)]
+        total: u64,
         route: RouteView,
     },
     /// The receiver dropped; it can come back while this screen stays open.
     #[serde(rename_all = "camelCase")]
     Interrupted {
-        bytes: f64,
-        total: f64,
+        #[specta(type = specta_typescript::Number)]
+        bytes: u64,
+        #[specta(type = specta_typescript::Number)]
+        total: u64,
     },
     Done,
     #[serde(rename_all = "camelCase")]
@@ -129,8 +133,10 @@ pub enum ReceiveView {
     },
     #[serde(rename_all = "camelCase")]
     Receiving {
-        bytes: f64,
-        total: f64,
+        #[specta(type = specta_typescript::Number)]
+        bytes: u64,
+        #[specta(type = specta_typescript::Number)]
+        total: u64,
         route: RouteView,
     },
     Verifying,
@@ -145,8 +151,10 @@ pub enum ReceiveView {
     /// `transfer_resume` continues without fetching again what arrived.
     #[serde(rename_all = "camelCase")]
     Paused {
-        bytes: f64,
-        total: f64,
+        #[specta(type = specta_typescript::Number)]
+        bytes: u64,
+        #[specta(type = specta_typescript::Number)]
+        total: u64,
     },
     #[serde(rename_all = "camelCase")]
     Failed {
@@ -181,6 +189,8 @@ pub struct TransferInfo {
     /// This device's id as other devices see it (hex).
     pub device_id: String,
     pub network: NetworkView,
+    /// A debug build (the "force relay" testing aid is available).
+    pub debug: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -192,9 +202,11 @@ pub struct OfferView {
     /// The QR code, black on white (any theme).
     pub qr_svg: String,
     pub doc_count: u32,
-    pub total_bytes: f64,
+    #[specta(type = specta_typescript::Number)]
+    pub total_bytes: u64,
     /// Unix seconds after which the code is refused.
-    pub expires_at: f64,
+    #[specta(type = specta_typescript::Number)]
+    pub expires_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -202,9 +214,12 @@ pub struct OfferView {
 pub struct ResumableView {
     pub id: String,
     pub doc_count: u32,
-    pub total_bytes: f64,
-    pub done_bytes: f64,
-    pub updated_at: f64,
+    #[specta(type = specta_typescript::Number)]
+    pub total_bytes: u64,
+    #[specta(type = specta_typescript::Number)]
+    pub done_bytes: u64,
+    #[specta(type = specta_typescript::Number)]
+    pub updated_at: i64,
 }
 
 /// Android plugin handles (`DeviceKeyPlugin.kt`, `TransferPlugin.kt`).
@@ -333,6 +348,7 @@ pub async fn transfer_open<R: Runtime>(
         return Ok(TransferInfo {
             device_id: o.service.endpoint_id().to_string(),
             network: o.network,
+            debug: cfg!(debug_assertions),
         });
     }
     let settings = settings::load(&library)?;
@@ -364,6 +380,7 @@ pub async fn transfer_open<R: Runtime>(
     let info = TransferInfo {
         device_id: service.endpoint_id().to_string(),
         network: view,
+        debug: cfg!(debug_assertions),
     };
     *open = Some(Open {
         service: Arc::new(service),
@@ -455,7 +472,7 @@ fn pause_row(library: &Library, state: &TransferState, id: &str) {
         .is_some_and(|r| r.resume.is_some());
     let (bytes, total) = match view {
         ReceiveView::Receiving { bytes, total, .. } => (*bytes, *total),
-        _ => (0.0, 0.0),
+        _ => (0, 0),
     };
     *view = if resumable {
         ReceiveView::Paused { bytes, total }
@@ -577,8 +594,8 @@ async fn offer(
         link,
         qr_svg,
         doc_count,
-        total_bytes: total as f64,
-        expires_at: ticket.expires_at as f64,
+        total_bytes: total,
+        expires_at: ticket.expires_at,
     })
 }
 
@@ -611,13 +628,13 @@ fn send_view(s: SendState) -> SendView {
             total,
             route,
         } => SendView::Sending {
-            bytes: bytes as f64,
-            total: total as f64,
+            bytes,
+            total,
             route: route.into(),
         },
         SendState::Interrupted { bytes, total } => SendView::Interrupted {
-            bytes: bytes as f64,
-            total: total as f64,
+            bytes,
+            total,
         },
         SendState::Done => SendView::Done,
         SendState::Failed { error } => SendView::Failed {
@@ -664,7 +681,7 @@ async fn track_send(
             let _ = library.transfer_update(
                 &row,
                 &TransferUpdate {
-                    done_bytes: Some(*bytes as u64),
+                    done_bytes: Some(*bytes),
                     ..Default::default()
                 },
             );
@@ -870,9 +887,9 @@ pub async fn transfer_resumable(
         .map(|r| ResumableView {
             id: r.id,
             doc_count: r.doc_count,
-            total_bytes: r.total_bytes as f64,
-            done_bytes: r.done_bytes as f64,
-            updated_at: r.updated_at as f64,
+            total_bytes: r.total_bytes,
+            done_bytes: r.done_bytes,
+            updated_at: r.updated_at,
         })
         .collect())
 }
@@ -898,8 +915,8 @@ pub async fn transfer_receive_status(
         },
         TransferRowState::Active | TransferRowState::Interrupted if row.resume.is_some() => {
             ReceiveView::Paused {
-                bytes: row.done_bytes as f64,
-                total: row.total_bytes as f64,
+                bytes: row.done_bytes,
+                total: row.total_bytes,
             }
         }
         TransferRowState::Cancelled => ReceiveView::Failed {
@@ -959,8 +976,8 @@ fn receive_view(s: &ReceiveState) -> ReceiveView {
             total,
             route,
         } => ReceiveView::Receiving {
-            bytes: *bytes as f64,
-            total: *total as f64,
+            bytes: *bytes,
+            total: *total,
             route: (*route).into(),
         },
         ReceiveState::Verifying => ReceiveView::Verifying,
@@ -1078,8 +1095,8 @@ async fn track_receive<R: Runtime>(
                 let (view, st) = if resumable {
                     let (bytes, total) = row
                         .as_ref()
-                        .map(|r| (r.done_bytes as f64, r.total_bytes as f64))
-                        .unwrap_or((0.0, 0.0));
+                        .map(|r| (r.done_bytes, r.total_bytes))
+                        .unwrap_or((0, 0));
                     (
                         ReceiveView::Paused { bytes, total },
                         TransferRowState::Interrupted,
@@ -1115,8 +1132,8 @@ async fn track_receive<R: Runtime>(
                     let _ = library.transfer_update(
                         &id,
                         &TransferUpdate {
-                            done_bytes: Some(*bytes as u64),
-                            total_bytes: Some(*total as u64),
+                            done_bytes: Some(*bytes),
+                            total_bytes: Some(*total),
                             ..Default::default()
                         },
                     );
@@ -1167,6 +1184,33 @@ pub async fn transfer_foreground_stop<R: Runtime>(app: AppHandle<R>) -> CommandR
     #[cfg(not(target_os = "android"))]
     let _ = app;
     Ok(())
+}
+
+/// Asks for the notification permission (Android 13+) before the first
+/// transfer notification; `true` when notifications can be shown.
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_notifications<R: Runtime>(app: AppHandle<R>) -> CommandResult<bool> {
+    #[cfg(target_os = "android")]
+    {
+        let Some(p) = app.try_state::<TransferPlugins<R>>() else {
+            return Ok(false);
+        };
+        let out: serde_json::Value = p
+            .transfer
+            .run_mobile_plugin_async(
+                "requestPermissions",
+                serde_json::json!({ "permissions": ["notifications"] }),
+            )
+            .await
+            .map_err(|e| err(ErrorCode::Internal, e.to_string()))?;
+        Ok(out.get("notifications").and_then(|v| v.as_str()) == Some("granted"))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Ok(true)
+    }
 }
 
 /// Debug builds only: all traffic through the relay (applies at the next open).

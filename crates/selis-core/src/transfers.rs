@@ -84,16 +84,16 @@ pub struct TransferRow {
     pub state: TransferRowState,
     pub peer: Option<String>,
     pub doc_count: u32,
-    #[cfg_attr(feature = "specta", specta(type = f64))]
+    #[cfg_attr(feature = "specta", specta(type = specta_typescript::Number))]
     pub total_bytes: u64,
-    #[cfg_attr(feature = "specta", specta(type = f64))]
+    #[cfg_attr(feature = "specta", specta(type = specta_typescript::Number))]
     pub done_bytes: u64,
     /// Opaque resume token (receive only, while resumable).
     pub resume: Option<String>,
     pub error: Option<String>,
-    #[cfg_attr(feature = "specta", specta(type = f64))]
+    #[cfg_attr(feature = "specta", specta(type = specta_typescript::Number))]
     pub created_at: i64,
-    #[cfg_attr(feature = "specta", specta(type = f64))]
+    #[cfg_attr(feature = "specta", specta(type = specta_typescript::Number))]
     pub updated_at: i64,
 }
 

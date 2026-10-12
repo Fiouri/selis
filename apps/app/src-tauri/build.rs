@@ -51,6 +51,7 @@ const APP_COMMANDS: &[&str] = &[
     "transfer_pause",
     "transfer_foreground",
     "transfer_foreground_stop",
+    "transfer_notifications",
     "transfer_debug_force_relay",
     "take_result",
 ];

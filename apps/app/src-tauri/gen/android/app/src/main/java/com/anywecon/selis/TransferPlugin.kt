@@ -20,7 +20,6 @@ import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.Permission
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
-import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 
 @InvokeArg
@@ -41,16 +40,19 @@ class ForegroundArgs {
  * - `foreground` / `stopForeground`: a dataSync foreground service while a
  *   transfer runs, so leaving the app does not stop it. Android 15+ limits
  *   dataSync services to 6 h a day; on that timeout the service stops at once
- *   and a `timeout` event tells the UI to pause (receives resume later).
+ *   and a `selis:transfer-timeout` window event tells the UI to pause
+ *   (receives resume later).
  * - `notifications` permission (Android 13+) for the progress notification;
  *   without it the service still runs, the notification is just not shown.
  */
 @TauriPlugin(permissions = [Permission(strings = [Manifest.permission.POST_NOTIFICATIONS], alias = "notifications")])
 class TransferPlugin(private val activity: Activity) : Plugin(activity) {
   private var multicast: WifiManager.MulticastLock? = null
+  private var webView: android.webkit.WebView? = null
 
   override fun load(webView: android.webkit.WebView) {
     super.load(webView)
+    this.webView = webView
     instance = this
   }
 
@@ -93,8 +95,11 @@ class TransferPlugin(private val activity: Activity) : Plugin(activity) {
     invoke.resolve()
   }
 
+  /** The UI pauses running receives (`selis:transfer-timeout`, features/transfer). */
   internal fun onServiceTimeout() {
-    trigger("timeout", JSObject())
+    activity.runOnUiThread {
+      webView?.evaluateJavascript("window.dispatchEvent(new Event('selis:transfer-timeout'))", null)
+    }
   }
 
   companion object {
