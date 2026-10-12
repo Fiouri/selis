@@ -14,8 +14,9 @@ pub mod wire;
 
 pub use iroh::{EndpointId, RelayUrl, SecretKey};
 pub use service::{
-    Network, OfferItem, OfferVersion, ReceiveState, ReceivedItem, ReceivedVersion, ResumeInfo,
-    Route, SendState, ServiceConfig, ServiceError, SessionId, TransferError, TransferService,
+    Have, Network, OfferItem, OfferLibrary, OfferSignature, OfferVersion, PUSH_ALPN, ReceiveState,
+    ReceivedItem, ReceivedLibrary, ReceivedSignature, ReceivedVersion, ResumeInfo, Route,
+    SendState, ServiceConfig, ServiceError, SessionId, TransferError, TransferService,
 };
 pub use ticket::{TicketError, TransferTicket};
 
