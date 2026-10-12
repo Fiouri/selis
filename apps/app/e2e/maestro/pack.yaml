@@ -37,12 +37,18 @@ name: Selis pack open with, passphrase, tamper
 - extendedWaitUntil:
     visible: "protected.selispack"
     timeout: 15000
-# A tap while the keyboard is still closing only closes it (hideKeyboard would leave search).
-- waitForAnimationToEnd:
-    timeout: 3000
-- tapOn:
-    text: "protected.selispack"
-    retryTapIfNoChange: true
+# A tap while the keyboard is still closing only closes it (hideKeyboard would leave
+# search): tap again while the file is still listed.
+- repeat:
+    while:
+      notVisible: "This file is protected"
+    times: 3
+    commands:
+      - tapOn:
+          text: "protected.selispack"
+          optional: true
+      - waitForAnimationToEnd:
+          timeout: 3000
 - extendedWaitUntil:
     visible: "This file is protected"
     timeout: 15000
@@ -72,12 +78,18 @@ name: Selis pack open with, passphrase, tamper
 - extendedWaitUntil:
     visible: "tampered.selispack"
     timeout: 15000
-# A tap while the keyboard is still closing only closes it (hideKeyboard would leave search).
-- waitForAnimationToEnd:
-    timeout: 3000
-- tapOn:
-    text: "tampered.selispack"
-    retryTapIfNoChange: true
+# A tap while the keyboard is still closing only closes it (hideKeyboard would leave
+# search): tap again while the file is still listed.
+- repeat:
+    while:
+      notVisible: "This file is protected"
+    times: 3
+    commands:
+      - tapOn:
+          text: "tampered.selispack"
+          optional: true
+      - waitForAnimationToEnd:
+          timeout: 3000
 - extendedWaitUntil:
     visible: "This file is protected"
     timeout: 15000
