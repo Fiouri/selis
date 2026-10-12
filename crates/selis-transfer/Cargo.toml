@@ -23,6 +23,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 blake3.workspace = true
 getrandom = "0.4"
+data-encoding = "2"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 
 [lints]
@@ -31,3 +32,4 @@ workspace = true
 [dev-dependencies]
 anyhow = "1"
 tempfile.workspace = true
+postcard = { version = "1", default-features = false, features = ["use-std"] }

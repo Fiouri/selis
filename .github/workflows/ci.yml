@@ -156,3 +156,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
       - run: npm run tauri -- build --no-bundle
+
+  fuzz:
+    # cargo-fuzz on the parsers that read another device's bytes (tickets, manifests,
+    # control messages). libFuzzer needs nightly and does not link on Windows MSVC,
+    # so it runs here; `cargo test` covers the same entry points on stable.
+    name: Fuzz transfer parsers (60 s each)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Nightly toolchain + cargo-fuzz
+        run: |
+          rustup toolchain install nightly --profile minimal
+          cargo install cargo-fuzz --locked
+      - name: Fuzz
+        working-directory: crates/selis-transfer/fuzz
+        run: |
+          for t in ticket manifest wire; do
+            cargo +nightly fuzz run "$t" -- -max_total_time=60
+          done

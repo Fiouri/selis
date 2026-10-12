@@ -33,6 +33,7 @@ pub struct ManifestItem {
     /// File name for the user ("Report.pdf"); never used as a path.
     pub name: String,
     pub size: u64,
+    #[serde(with = "hex_hash")]
     pub blake3: Hash,
     /// Earlier versions, oldest first (empty unless history was chosen).
     #[serde(default)]
@@ -43,9 +44,31 @@ pub struct ManifestItem {
 #[serde(deny_unknown_fields)]
 pub struct ManifestVersion {
     pub size: u64,
+    #[serde(with = "hex_hash")]
     pub blake3: Hash,
     /// Unix ms when that version was saved.
     pub created_at: i64,
+}
+
+/// BLAKE3 as 64 lowercase hex characters. iroh-blobs' own `Hash` deserializer
+/// panics on some malformed strings (found by the parser smoke test), and these
+/// strings come from another device: parse them strictly here.
+mod hex_hash {
+    use iroh_blobs::Hash;
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    pub fn serialize<S: Serializer>(h: &Hash, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&h.to_hex())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Hash, D::Error> {
+        let s = String::deserialize(d)?;
+        if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err(D::Error::custom("bad blake3"));
+        }
+        let h = blake3::Hash::from_hex(&s).map_err(|_| D::Error::custom("bad blake3"))?;
+        Ok(Hash::from(*h.as_bytes()))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

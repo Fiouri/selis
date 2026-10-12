@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/selis-core", "crates/selis-transfer", "apps/app/src-tauri"]
+exclude = ["crates/selis-transfer/fuzz"]
 
 [workspace.package]
 version = "0.1.0"

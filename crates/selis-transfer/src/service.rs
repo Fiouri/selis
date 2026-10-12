@@ -206,12 +206,30 @@ pub struct ReceivedVersion {
     pub created_at: i64,
 }
 
-/// What the receiver keeps to continue after an interruption (the app stores it).
+/// What the receiver keeps to continue after an interruption (the app stores
+/// it, as [`ResumeInfo::to_string`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResumeInfo {
     pub addr: EndpointAddr,
     pub collection: Hash,
     pub session: Token,
+}
+
+impl ResumeInfo {
+    /// Compact text form (postcard, base32) for the app's database.
+    pub fn encode(&self) -> String {
+        let bytes = postcard::to_stdvec(self).unwrap_or_default();
+        data_encoding::BASE32_NOPAD.encode(&bytes).to_ascii_lowercase()
+    }
+
+    /// Reads [`encode`](Self::encode)'s output; anything else is refused (never panics).
+    pub fn decode(s: &str) -> Option<Self> {
+        if s.len() > 4096 {
+            return None;
+        }
+        let bytes = data_encoding::BASE32_NOPAD.decode(s.to_ascii_uppercase().as_bytes()).ok()?;
+        postcard::from_bytes(&bytes).ok()
+    }
 }
 
 /// A document on offer: its file and, optionally, its earlier versions.

@@ -4854,6 +4854,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "blake3",
+ "data-encoding",
  "getrandom 0.4.3",
  "iroh",
  "iroh-blobs",
