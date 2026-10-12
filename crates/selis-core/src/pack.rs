@@ -1107,6 +1107,36 @@ mod tests {
     }
 
     #[test]
+    fn refuses_compressed_entries() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let ok = crafted(dir.path(), "ok.selispack", "")?;
+        let mut bytes = std::fs::read(&ok).map_err(|e| Error::io(&ok, e))?;
+        // Mark every entry as deflated (method 8) in the local and central headers.
+        let mut i = HEADER_PLAIN;
+        while i + 12 < bytes.len() {
+            let sig = &bytes[i..i + 4];
+            if sig == [0x50, 0x4b, 0x03, 0x04] {
+                bytes[i + 8] = 8;
+            } else if sig == [0x50, 0x4b, 0x01, 0x02] {
+                bytes[i + 10] = 8;
+            }
+            i += 1;
+        }
+        let deflated = dir.path().join("deflated.selispack");
+        std::fs::write(&deflated, &bytes).map_err(|e| Error::io(&deflated, e))?;
+        let dst = library(dir.path(), "b")?;
+        assert_eq!(
+            pack_err(dst.import_pack(&deflated, None)),
+            Some(PackError::Damaged)
+        );
+        assert!(
+            dst.list_documents(&crate::LibraryQuery::default())?
+                .is_empty()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn parsers_never_panic_on_garbage() {
         let mut x: u64 = 0x5e115;
         for len in 0..2_000usize {

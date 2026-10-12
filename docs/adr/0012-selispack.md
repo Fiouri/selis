@@ -59,8 +59,13 @@ looks complete. Files are streamed, never held in memory.
 ### Platforms
 
 - Android: share sheet (`SharePlugin`, MIME `application/vnd.anywecon.selispack`, file in the
-  FileProvider share folder); "Open with" intent filters for that MIME; the picker for any file,
-  then the magic bytes decide (other apps often label packs as binary data).
+  FileProvider share folder, swept after a day); "Open with" intent filters for that MIME (VIEW,
+  SEND) and for `application/octet-stream` (VIEW only: file managers label an unknown extension
+  that way); the picker for any file. In every case the magic bytes decide — a non-pack from
+  the octet-stream filter goes to the PDF import and fails there as "not a PDF".
+- Desktop: the save dialog instead of a share sheet; the cache copy is removed after saving.
+- Import reads a private copy in the app cache (a content URI cannot seek), removed afterwards
+  with the staging folder, whatever the outcome.
 - iOS: `UTExportedTypeDeclarations` `com.anywecon.selis.selispack` (extension `selispack`,
   conforms to `public.data`) and a document type, so Files / Mail offer "Open in Selis".
 
@@ -69,5 +74,8 @@ looks complete. Files are streamed, never held in memory.
 - Crates: `zip` (stored only, no default features), `argon2`, `chacha20poly1305`, `aead-stream`
   (MIT / Apache-2.0).
 - Losing the passphrase loses the pack's contents (by design).
-- Fuzzing covers the header, the KDF parameters and the manifest; tests cover round trips,
-  wrong passphrase, truncation, a flipped byte, zip-slip names and compressed entries.
+- Fuzzing (`crates/selis-core/fuzz`, CI) covers the header, the KDF parameters, the manifest
+  and a full plain import; tests cover round trips, wrong passphrase, truncation, a flipped
+  byte in the body and in the header, zip-slip names and compressed entries.
+- An import needs free space for about twice the pack (private copy + staging) on top of what
+  it adds; a failure for lack of space adds nothing.

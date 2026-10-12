@@ -1,0 +1,61 @@
+# .selispack on Android (ADR 0012): "Open with" a plain pack from the Files app,
+# then a protected pack through "Open a .selispack file" (wrong passphrase first),
+# then a tampered one, which must add nothing.
+# PRE_RUN="apps/app/e2e/maestro/pack.sh pre" makes the packs on the host, pushes
+# them to Download/selis-fixtures, clears Selis and opens Files there;
+# POST_RUN="apps/app/e2e/maestro/pack.sh check" verifies app data and the originals.
+# Run with ./run.sh (ANR check).
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis pack open with, passphrase, tamper
+---
+- extendedWaitUntil:
+    visible: "plain.selispack"
+    timeout: 15000
+- longPressOn: "plain.selispack"
+- tapOn: "More options"
+- tapOn: "Open with"
+- tapOn: "Selis"
+- extendedWaitUntil:
+    visible: "Added from the file"
+    timeout: 30000
+- assertVisible: "3 documents were added to your library."
+- tapOn: "Close"
+
+# Protected: the same three documents, so all are already there.
+- tapOn: "Open a .selispack file"
+- tapOn: "protected.selispack"
+- extendedWaitUntil:
+    visible: "This file is protected"
+    timeout: 15000
+- tapOn: "Passphrase"
+- inputText: "wrong horse"
+- tapOn: "Open"
+- extendedWaitUntil:
+    visible: "Wrong passphrase."
+    timeout: 30000
+- tapOn: "Passphrase"
+- inputText: "correct horse"
+- tapOn: "Open"
+- extendedWaitUntil:
+    visible: "Added from the file"
+    timeout: 30000
+- assertVisible: "0 documents were added to your library."
+- assertVisible: "3 were already there."
+- tapOn: "Close"
+
+# Tampered: refused, nothing added.
+- tapOn: "Open a .selispack file"
+- tapOn: "tampered.selispack"
+- extendedWaitUntil:
+    visible: "This file is protected"
+    timeout: 15000
+- tapOn: "Passphrase"
+- inputText: "correct horse"
+- tapOn: "Open"
+- extendedWaitUntil:
+    visible: "The file is damaged or incomplete, so nothing was added."
+    timeout: 30000
+- tapOn: "Close"
+- tapOn: "Library"
+- assertVisible: "Open Ελληνικό δοκιμαστικό"

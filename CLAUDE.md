@@ -102,6 +102,9 @@ Tier 2 — end of every feature:
   `PRE_RUN="…/transfer.sh pre"` and `POST_RUN="…/transfer.sh post"` (cold start opens no socket; the
   host dev peer sends a fixture through a `selis://` link; it lands in the library; leaving the
   Transfer screen leaves no socket; needs `cargo build --release -p selis-transfer --example selis-peer`).
+  And `pack.yaml` with `PRE_RUN="…/pack.sh pre"` and `POST_RUN="…/pack.sh check"` (.selispack: plain
+  pack by "Open with" from Files, protected pack by the picker after a wrong passphrase, tampered
+  pack refused; library holds exactly the three fixtures, no leftovers, packs untouched).
   run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro
@@ -114,8 +117,10 @@ Tier 2 — end of every feature:
 - Visual changes: inspect screenshots (Playwright `test-results/screenshots`, device `adb exec-out screencap`).
 
 Transfer measurements (P3, docs/spike-p3.md): `node scripts/measure-transfer.ts --serial <s>
---scenario recv|send|resume|expired|reuse|cold [--relay] [--clear]` drives the app over the WebView
-DevTools (debug or `measure` build) against the host dev peer and prints route, MB/s, RSS delta, hashes.
+--scenario recv|send|resume|expired|reuse|cold|seed|move|trusted|pack [--serial2 <s>] [--relay]
+[--clear] [--clear2]` drives the app over the WebView DevTools (debug or `measure` build) against the
+host dev peer (or a second device) and prints route, MB/s, RSS delta, hashes; `pack` is the
+.selispack round trip (plain and protected, rerun no-op, tamper refused).
 
 Performance gate (docs/spike-p0.md): 1000-page fixture — first page < 1 s, full scroll without
 crash, WebView memory < 600 MB (`adb shell dumpsys meminfo com.anywecon.selis` + renderer).

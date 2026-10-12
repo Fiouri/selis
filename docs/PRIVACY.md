@@ -35,6 +35,20 @@ you are sending to.
 - Moving your library sends your documents, versions, tags, favorites, signatures and settings
   to your other device, end-to-end encrypted, as any transfer. Your device key is not moved.
 
+## Selis pack files (.selispack)
+
+- **Save as file** (Send tab) writes the chosen documents, or the whole library, into one
+  `.selispack` file and hands it to the app you pick in the share sheet (USB, e-mail, your own
+  cloud). Selis uses no network for this; where the file goes is your choice.
+- Without a passphrase the file is **not encrypted**: anyone who has it can read the documents.
+  With a passphrase it is encrypted (Argon2id + XChaCha20-Poly1305, ADR 0012); the passphrase is
+  never stored, and without it the file cannot be opened — there is no recovery.
+- A whole-library file also carries your tags, favorites, signatures and settings, never your
+  device key or trusted devices.
+- On Android the file stays in the app's private share folder until the receiving app has read
+  it; Selis deletes it there after a day. Opening a pack reads a private copy, which is deleted
+  right after.
+
 ## Device identity
 
 Each device has its own key (Ed25519), made on the device and kept in the system's secure

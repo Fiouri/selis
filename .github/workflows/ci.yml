@@ -161,7 +161,7 @@ jobs:
 
   fuzz:
     # cargo-fuzz on the parsers that read another device's bytes (tickets, manifests,
-    # control messages). libFuzzer needs nightly features and does not link on Windows
+    # control messages) and on .selispack import. libFuzzer needs nightly features and does not link on Windows
     # MSVC, so it runs here; `cargo test` covers the same entry points on stable.
     name: Fuzz transfer parsers (60 s each)
     runs-on: ubuntu-latest
@@ -182,3 +182,8 @@ jobs:
           for t in ticket manifest wire; do
             cargo fuzz run "$t" -- -max_total_time=60
           done
+      - name: Fuzz .selispack
+        working-directory: crates/selis-core/fuzz
+        env:
+          RUSTC_BOOTSTRAP: "1"
+        run: cargo fuzz run pack -- -max_total_time=60

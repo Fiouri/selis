@@ -383,6 +383,35 @@ for (const lang of LANGS) {
         await expect(page).toHaveScreenshot(shot("transfer-move"));
       });
 
+      test(`selispack export and passphrase (${theme})`, async ({ page }) => {
+        await page.goto("/");
+        await addToLibrary(page, "greek.pdf", c.greek);
+        await page.getByRole("navigation").getByRole("button", { name: ui(lang, "tabs.transfer") }).click();
+        await page.getByTestId("transfer-doc").first().click();
+        await page.getByTestId("pack-export-open").click();
+        await page.getByTestId("pack-protect").click();
+        await page.getByTestId("pack-passphrase").fill("correct horse");
+        await page.getByTestId("pack-passphrase-again").fill("correct hors");
+        await expect(page.getByTestId("pack-mismatch")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("pack-export"));
+        await page.getByTestId("pack-passphrase-again").fill("correct horse");
+        await page.getByTestId("pack-export-create").click();
+        await expect(page.getByTestId("pack-export-sheet")).toHaveCount(0);
+        await page.getByRole("tab", { name: ui(lang, "transfer.tabReceive") }).click();
+        await page.evaluate(() => {
+          type Hooks = { lastExport: () => string | null; nextPick: (t: string | null) => void };
+          const hooks = (window as unknown as { __selisTest: { pack: Hooks } }).__selisTest.pack;
+          hooks.nextPick(hooks.lastExport());
+        });
+        await page.getByTestId("pack-import-open").click();
+        await page.getByTestId("pack-unlock-passphrase").fill("wrong passphrase");
+        await page.getByTestId("pack-unlock").click();
+        await expect(page.getByTestId("pack-wrong")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("pack-passphrase"));
+      });
+
       test(`recent (${theme})`, async ({ page }) => {
         await page.goto("/");
         await stockLibrary(page, lang);

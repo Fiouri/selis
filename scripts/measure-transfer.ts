@@ -19,6 +19,9 @@
  *            the second move must add nothing; libraries are compared document by document
  *   trusted  after a move, both devices save each other, then --serial sends a document to
  *            --serial2 with one tap while its Receive tab is open
+ *   pack     --serial exports its whole library as a .selispack (plain, then with a passphrase);
+ *            --serial2 imports each (wrong passphrase first), again (no-op) and a tampered copy
+ *            (refused); libraries are compared as for `move` (`--clear2` empties --serial2 per pack)
  * `--relay`: this computer has no direct paths (relay only), so the traffic goes through the relay.
  * `--clear`: wipe Selis' data on the device first (library, transfer store, device key).
  *
@@ -27,7 +30,7 @@
  */
 import { type ChildProcess, execFile, execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -550,6 +553,102 @@ async function moveOnce(a: Cdp, b: Cdp, serialB: string): Promise<{ seconds: num
   return { seconds, done, rssDeltaMb: peak - baseline };
 }
 
+type PackImportView =
+  | { status: "imported"; documentIds: string[]; duplicates: number; signatures: number; settings: boolean }
+  | { status: "refused"; problem: string };
+
+/** The newest pack in the app's share folder, pulled to the host (debug build: run-as). */
+function pullPack(serial: string, to: string): string {
+  const name = adb(serial, ["shell", "run-as", PKG, "sh", "-c", "'ls -t cache/share/*.selispack | head -1'"]).trim();
+  if (!name.endsWith(".selispack")) throw new Error(`no pack in the share folder: ${name}`);
+  const bytes = execFileSync("adb", ["-s", serial, "exec-out", "run-as", PKG, "cat", name], { env, maxBuffer: 2 ** 31 });
+  writeFileSync(to, bytes);
+  return name;
+}
+
+/** Copies a host file into the app's cache; returns the absolute path the app reads. */
+function pushPrivate(serial: string, from: string, name: string): string {
+  execFileSync("adb", ["-s", serial, "exec-in", "run-as", PKG, "sh", "-c", `'cat > cache/${name}'`], {
+    env,
+    input: readFileSync(from),
+    maxBuffer: 2 ** 31,
+  });
+  return `/data/user/0/${PKG}/cache/${name}`;
+}
+
+/** --serial exports its whole library as a pack (plain, then protected); --serial2 imports each. */
+async function packRoundTrip(o: Options, a: Cdp, b: Cdp): Promise<Record<string, unknown>> {
+  const before = await snapshot(a);
+  const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+  const out: Record<string, unknown> = { sender: before.summary };
+  for (const passphrase of [null, "correct horse battery"] as const) {
+    const label = passphrase ? "protected" : "plain";
+    if (o.clear2) {
+      adb(o.serial2 ?? "", ["shell", "pm", "clear", PKG]);
+      adb(o.serial2 ?? "", ["shell", "pm", "grant", PKG, "android.permission.POST_NOTIFICATIONS"]);
+      launch(o.serial2 ?? "");
+      b.close();
+      b = await connect(o.serial2 ?? "", 60_000);
+    }
+    let t0 = Date.now();
+    const summary = await invoke<{ documents: number; bytes: number; encrypted: boolean }>(a, "pack_export", {
+      requestId: `pack-${label}-${t0}`,
+      documentIds: null,
+      includeHistory: true,
+      passphrase,
+    });
+    const exportSeconds = (Date.now() - t0) / 1000;
+    adb(o.serial, ["shell", "input", "keyevent", "KEYCODE_BACK"]); // the share sheet
+    const local = join(scratch, `${label}.selispack`);
+    const remoteName = pullPack(o.serial, local);
+    const size = statSync(local).size;
+    const source = pushPrivate(o.serial2 ?? "", local, "in.selispack");
+    const baseline = (await rssMb(o.serial2 ?? "")) ?? 0;
+    const sampler = new RssSampler(o.serial2 ?? "");
+    sampler.start();
+    let wrong: PackImportView | null = null;
+    if (passphrase) {
+      wrong = await invoke<PackImportView>(b, "pack_import", { requestId: `w-${t0}`, source, passphrase: "wrong horse battery" });
+    }
+    t0 = Date.now();
+    const first = await invoke<PackImportView>(b, "pack_import", { requestId: `i-${t0}`, source, passphrase });
+    const importSeconds = (Date.now() - t0) / 1000;
+    const peak = await sampler.stop();
+    const afterFirst = await snapshot(b);
+    const second = await invoke<PackImportView>(b, "pack_import", { requestId: `r-${Date.now()}`, source, passphrase });
+    const afterSecond = await snapshot(b);
+    // One flipped byte in the middle: refused, nothing changes.
+    const bytes = readFileSync(local);
+    const mid = Math.floor(bytes.length / 2);
+    bytes.writeUInt8((bytes.readUInt8(mid) ^ 1) & 0xff, mid);
+    const tamperedLocal = join(scratch, `${label}-tampered.selispack`);
+    writeFileSync(tamperedLocal, bytes);
+    const tamperedSource = pushPrivate(o.serial2 ?? "", tamperedLocal, "tampered.selispack");
+    const tampered = await invoke<PackImportView>(b, "pack_import", { requestId: `t-${Date.now()}`, source: tamperedSource, passphrase });
+    const afterTamper = await snapshot(b);
+    const leftovers = adb(o.serial2 ?? "", ["shell", "run-as", PKG, "sh", "-c", "'ls cache/share 2>/dev/null; ls files/pack-in 2>/dev/null; ls pack-in 2>/dev/null'"]).trim();
+    out[label] = {
+      packMb: size / 1e6,
+      remoteName,
+      exportSeconds,
+      exported: summary,
+      importSeconds,
+      rssDeltaMb: peak - baseline,
+      wrongPassphrase: wrong && wrong.status === "refused" ? wrong.problem : wrong,
+      first: first.status === "imported" ? { added: first.documentIds.length - first.duplicates, duplicates: first.duplicates, signatures: first.signatures, settings: first.settings } : first,
+      docsMatch: same(before.docs, afterFirst.docs),
+      signaturesMatch: same(before.signatures, afterFirst.signatures),
+      settingsMatch: before.theme === afterFirst.theme,
+      summariesMatch: same(before.summary, afterFirst.summary),
+      rerunNoOp: same(afterFirst, afterSecond) && second.status === "imported" && second.duplicates === second.documentIds.length,
+      tampered: tampered.status === "refused" ? tampered.problem : "IMPORTED",
+      tamperNoChange: same(afterSecond, afterTamper),
+      leftovers,
+    };
+  }
+  return out;
+}
+
 async function main(): Promise<number> {
   const o = parseArgs(process.argv.slice(2));
   mkdirSync(scratch, { recursive: true });
@@ -691,6 +790,14 @@ async function main(): Promise<number> {
         await waitFor("sender done", () => cdp.evaluate<boolean>(`!!${q("transfer-send-done")}`), 60_000);
         const codeShown = await cdp.evaluate<boolean>(`!!${q("transfer-send-code")}`);
         result = { seconds: (Date.now() - t0) / 1000, from, codeAsked: codeShown };
+        b.close();
+        break;
+      }
+      case "pack": {
+        if (!o.serial2) throw new Error("--serial2 needed");
+        launch(o.serial2);
+        const b = await connect(o.serial2, 60_000);
+        result = await packRoundTrip(o, cdp, b);
         b.close();
         break;
       }

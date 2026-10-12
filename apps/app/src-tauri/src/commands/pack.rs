@@ -132,7 +132,12 @@ pub async fn pack_export<R: Runtime>(
                 tauri::async_runtime::spawn_blocking(move || lib.export_pack(&target, &request))
                     .await
                     .map_err(|e| CommandError::new(ErrorCode::Internal, e.to_string()))??;
-            super::share::share_file(&app, &dest, &name, pack::MIME).await?;
+            let shared = super::share::share_file(&app, &dest, &name, pack::MIME).await;
+            // Desktop/iOS saved a copy through the dialog: no plain copy stays in the cache.
+            // (Android: the receiving app reads it later; the share folder is swept after a day.)
+            #[cfg(not(target_os = "android"))]
+            let _ = std::fs::remove_file(&dest);
+            shared?;
             Ok(summary)
         })
         .await
