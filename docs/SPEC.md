@@ -187,16 +187,18 @@ selis/
 
 Mobile-first. Κάθε phase κλείνει μόνο όταν περάσει το verification gate (ενότητα Testing) σε Android, emulator και πραγματική συσκευή. Το iOS ελέγχεται μέσω CI και TestFlight. Τα desktop targets απλώς χτίζονται στο CI μέχρι το P6.
 
+**Πολιτική συσκευών (2026-10-12):** προς το παρόν δεν υπάρχει πραγματική mid-range συσκευή. Τα phases P0–P4 κλείνουν στο **Galaxy S23** (πραγματική συσκευή) + στο AVD **`selis-midrange-api36`** (3 GB, 1080×2340, το mid-range proxy). Η μέτρηση σε **πραγματική mid-range Android** (π.χ. Snapdragon 6/7-series, 4–6 GB, με `scripts/measure-device.sh`) είναι **υποχρεωτικό gate του P5**: χωρίς αυτήν δεν γίνεται release 1.0.
+
 1. **P0 — Foundation + spike**
    - Tauri 2 scaffold με Windows, macOS, Linux, Android, iOS targets. CI χτίζει όλα τα targets.
    - packages/engine: EmbedPDF v2 σε Web Worker, φορτώνει και κάνει render ένα PDF.
    - Design tokens, πλήρες PhoneShell, βασικό TabletShell, DesktopShell μόνο placeholder, i18n el/en, light/dark.
-   - **Spike (gate):** PDF 1000 σελίδων σε mid-range Android και iPhone simulator — πρώτη σελίδα < 1 s, scroll χωρίς crash, μνήμη WebView < 600 MB. Αν αποτύχει, ενεργοποιείται το fallback της ενότητας Ρίσκα.
+   - **Spike (gate):** PDF 1000 σελίδων σε mid-range Android και iPhone simulator — πρώτη σελίδα < 1 s, scroll χωρίς crash, μνήμη WebView < 600 MB. Αν αποτύχει, ενεργοποιείται το fallback της ενότητας Ρίσκα. (Μέχρι το P5: Galaxy S23 + AVD `selis-midrange-api36` ως proxy· η πραγματική mid-range μέτρηση είναι gate του P5.)
 2. **P1 — Reader + Library**
    - Library: grid/list, sort, search τίτλων, favorites, tags, recents.
    - Import: file picker (Android SAF, iOS document picker), «Open with» / share intent (Android, iOS).
    - Viewer: virtualized scroll, pinch zoom, double-tap zoom, thumbnails, outline/bookmarks, full-text search, text selection και copy, rotate view, night mode για σελίδες.
-   - AC: άνοιγμα από «Open with» σε Android και iOS, ομαλό scroll σε mid-range Android, versions table γεμίζει σωστά.
+   - AC: άνοιγμα από «Open with» σε Android και iOS, ομαλό scroll σε mid-range Android (μέχρι το P5: στο AVD `selis-midrange-api36`· σε πραγματική mid-range συσκευή στο P5), versions table γεμίζει σωστά.
 3. **P2 — Editing core**
    - Annotations: highlight, underline, strike, ink/pen (stylus + Apple Pencil, palm rejection), shapes, free text, sticky notes, eraser.
    - Υπογραφές: draw, type (3 γραμματοσειρές), image. Αποθηκεύονται τοπικά, επαναχρησιμοποιούνται.
@@ -213,6 +215,7 @@ Mobile-first. Κάθε phase κλείνει μόνο όταν περάσει τ�
    - qpdf: password protect/remove, compress, linearize, repair.
    - Images → PDF, export σελίδας ως PNG/JPEG.
 6. **P5 — Release 1.0**
+   - **Gate (υποχρεωτικό, πριν από κάθε store release):** μέτρηση σε πραγματική mid-range Android με `scripts/measure-device.sh` (1000 σελίδες: πρώτη σελίδα < 1 s, πλήρες scroll χωρίς crash, μνήμη WebView < 600 MB) και επανάληψη του Maestro suite σε αυτήν. Αποτελέσματα στο `docs/spike-p0.md`.
    - Mobile 1.0: Google Play, F-Droid, App Store, signed APK στο GitHub. Store listings en (πρωτότυπο) + el (μετάφραση), screenshots πρώτα στα αγγλικά, privacy pages, website με badges.
 
 **P6 — Desktop 1.0:** πλήρες DesktopShell (sidebar, inspector, command palette, keyboard shortcuts, tabs), drag & drop, file associations, signed installers (Windows, macOS, Linux), winget, Microsoft Store, Flathub, opt-in updater.

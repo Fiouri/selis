@@ -18,7 +18,7 @@ WebView memory **< 600 MB**.
 | Mobile viewer (import → virtualized scroll → pinch-zoom), Android back, safe areas, edge-to-edge | done |
 | Fixtures corpus, CI (ubuntu / Android / iOS simulator / Windows) green, repo docs + ADRs | done |
 | Spike gate on emulators (2 GB, 3 GB mid-range proxy) and Galaxy S23 | done (pass) |
-| **Spike gate on a real mid-range Android device** | **open — must be measured before P1 closes** |
+| **Spike gate on a real mid-range Android device** | **deferred: mandatory P5 (release) gate** — phases P0–P4 close on the Galaxy S23 + AVD `selis-midrange-api36` (device policy, docs/SPEC.md, 2026-10-12) |
 
 P1 starts only after the UI mockups exist (docs/SPEC.md, "UI/UX design system → Διαδικασία").
 
@@ -162,7 +162,7 @@ for pages that stay on screen for 600 ms.
 AVD with the same build: peak 388–398 MB, first page 658–857 ms. Not measured on a real
 mid-range phone (see "Still open").
 
-## Result: PASS on every target that can run the app — real mid-range device still open
+## Result: PASS on every target that can run the app — real mid-range device: P5 gate
 
 Final build (adaptive render limits, LRU page cache, engine warm-up):
 
@@ -253,7 +253,8 @@ when the WebView is older than **111** instead of a blank screen (`MainActivity.
 
 ## Still open (owner action)
 
-- **Real mid-range physical device** — not yet measured. The 3 GB emulator approximates the
+- **Real mid-range physical device** — not yet measured; **a mandatory P5 (release) gate**
+  (device policy 2026-10-12: until then phases close on the Galaxy S23 + `selis-midrange-api36`). The 3 GB emulator approximates the
   memory budget but not a slower CPU/GPU or thermal throttling; its cold-open first page
   (771–959 ms) is already close to the 1 s budget. Connect e.g. a Snapdragon 6/7-series phone
   with 4–6 GB and run `scripts/measure-device.sh` (see "Measuring a device" below).
