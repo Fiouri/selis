@@ -162,14 +162,13 @@ export function ExportPack({ selected }: { selected: string[] }) {
   );
 }
 
-/** "Open a .selispack file" (Receive tab), plus the passphrase prompt and the result. */
+/** "Open a .selispack file" (Receive tab) and the passphrase prompt. */
 export function ImportPack() {
   const { t } = useTranslation();
   const importState = usePack((s) => s.importState);
   const pickAndOpen = usePack((s) => s.pickAndOpen);
   const submitPassphrase = usePack((s) => s.submitPassphrase);
   const resetImport = usePack((s) => s.resetImport);
-  const selectTab = useNavigation((s) => s.selectTab);
   const [pass, setPass] = useState("");
   const inputId = useId();
 
@@ -184,6 +183,63 @@ export function ImportPack() {
       >
         {t("transfer.pack.importOpen")}
       </Button>
+      <Sheet
+        open={importState.phase === "passphrase"}
+        onClose={() => {
+          setPass("");
+          resetImport();
+        }}
+        title={t("transfer.pack.passphraseTitle")}
+        testId="pack-passphrase-sheet"
+      >
+        <form
+          className="flex flex-col gap-3 px-5 pb-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const value = pass;
+            setPass("");
+            void submitPassphrase(value);
+          }}
+        >
+          <label htmlFor={inputId} className="text-[13px] font-medium text-neutral-11">
+            {t("transfer.pack.passphrase")}
+          </label>
+          <input
+            id={inputId}
+            type="password"
+            autoComplete="current-password"
+            value={pass}
+            onChange={(e) => setPass(e.target.value)}
+            className="selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12"
+            data-testid="pack-unlock-passphrase"
+          />
+          {importState.phase === "passphrase" && importState.wrong ? (
+            <p role="alert" className="text-[13px] text-danger-11" data-testid="pack-wrong">
+              {t("transfer.pack.problem.wrongPassphrase")}
+            </p>
+          ) : null}
+          <Button type="submit" disabled={pass.length === 0} data-testid="pack-unlock">
+            {t("transfer.pack.unlock")}
+          </Button>
+        </form>
+      </Sheet>
+    </>
+  );
+}
+
+/** Whether a pack import is running or has a result to show (it then replaces the Receive tab). */
+export function usePackResultShown(): boolean {
+  return usePack((s) => s.importState.phase !== "idle" && s.importState.phase !== "passphrase");
+}
+
+/** The running pack import, or its result, in place of the scanner (always in view). */
+export function PackResult() {
+  const { t } = useTranslation();
+  const importState = usePack((s) => s.importState);
+  const resetImport = usePack((s) => s.resetImport);
+  const selectTab = useNavigation((s) => s.selectTab);
+  return (
+    <div className="flex flex-col gap-3" data-testid="pack-result">
       {importState.phase === "checking" || importState.phase === "importing" ? (
         <Card testId="pack-importing">
           <Busy label={t("transfer.pack.importing")} testId="pack-importing-busy" />
@@ -229,46 +285,6 @@ export function ImportPack() {
           </Button>
         </Card>
       ) : null}
-      <Sheet
-        open={importState.phase === "passphrase"}
-        onClose={() => {
-          setPass("");
-          resetImport();
-        }}
-        title={t("transfer.pack.passphraseTitle")}
-        testId="pack-passphrase-sheet"
-      >
-        <form
-          className="flex flex-col gap-3 px-5 pb-5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const value = pass;
-            setPass("");
-            void submitPassphrase(value);
-          }}
-        >
-          <label htmlFor={inputId} className="text-[13px] font-medium text-neutral-11">
-            {t("transfer.pack.passphrase")}
-          </label>
-          <input
-            id={inputId}
-            type="password"
-            autoComplete="current-password"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
-            className="selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12"
-            data-testid="pack-unlock-passphrase"
-          />
-          {importState.phase === "passphrase" && importState.wrong ? (
-            <p role="alert" className="text-[13px] text-danger-11" data-testid="pack-wrong">
-              {t("transfer.pack.problem.wrongPassphrase")}
-            </p>
-          ) : null}
-          <Button type="submit" disabled={pass.length === 0} data-testid="pack-unlock">
-            {t("transfer.pack.unlock")}
-          </Button>
-        </form>
-      </Sheet>
-    </>
+    </div>
   );
 }

@@ -206,7 +206,7 @@ pub async fn pack_import<R: Runtime>(
             let _ = std::fs::remove_file(&local);
             match outcome? {
                 Ok(imported) => {
-                    let had_settings = imported.settings.is_some();
+                    let had_settings = imported.settings.as_ref().is_some_and(|m| !m.is_empty());
                     if let Some(map) = imported.settings
                         && let Ok(patch) = serde_json::from_value::<settings::SettingsPatch>(
                             serde_json::Value::Object(map),

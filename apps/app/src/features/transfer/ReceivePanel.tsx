@@ -9,7 +9,7 @@ import { formatBytes } from "./format";
 import { Busy, Card, CodeBlock, Problem, Progress } from "./parts";
 import { type ScanFailure, ScanError, type Scanner, startScanner } from "./qrScanner";
 import { type TransferProblem, useTransfer } from "./transferStore";
-import { ImportPack } from "./PackSheets";
+import { ImportPack, PackResult, usePackResultShown } from "./PackSheets";
 import { SaveDevice } from "./TrustedDevices";
 
 /**
@@ -24,7 +24,9 @@ export function ReceivePanel() {
     void setReceiving(true);
     return () => void setReceiving(false);
   }, [setReceiving]);
+  const packShown = usePackResultShown();
   if (receive) return <ReceiveStatus view={receive} />;
+  if (packShown) return <PackResult />;
   return <ScanOrPaste problem={problem} />;
 }
 

@@ -10,7 +10,12 @@ androidWebViewHierarchy: devtools
 name: Selis pack open with, passphrase, tamper
 ---
 - extendedWaitUntil:
-    visible: "plain.selispack"
+    visible: "greek.pdf"
+    timeout: 15000
+# The packs sort after the PDFs: below the fold on a phone.
+- scrollUntilVisible:
+    element: "plain.selispack"
+    direction: DOWN
     timeout: 15000
 - longPressOn: "plain.selispack"
 - tapOn: "More options"
@@ -24,7 +29,20 @@ name: Selis pack open with, passphrase, tamper
 
 # Protected: the same three documents, so all are already there.
 - tapOn: "Open a .selispack file"
-- tapOn: "protected.selispack"
+# The picker opens on Recent, which lists no .selispack: search by name.
+- tapOn:
+    id: "com.google.android.documentsui:id/option_menu_search"
+- inputText: "protected"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "protected.selispack"
+    timeout: 15000
+# A tap while the keyboard is still closing only closes it (hideKeyboard would leave search).
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn:
+    text: "protected.selispack"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: "This file is protected"
     timeout: 15000
@@ -46,7 +64,20 @@ name: Selis pack open with, passphrase, tamper
 
 # Tampered: refused, nothing added.
 - tapOn: "Open a .selispack file"
-- tapOn: "tampered.selispack"
+# The picker opens on Recent, which lists no .selispack: search by name.
+- tapOn:
+    id: "com.google.android.documentsui:id/option_menu_search"
+- inputText: "tampered"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "tampered.selispack"
+    timeout: 15000
+# A tap while the keyboard is still closing only closes it (hideKeyboard would leave search).
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn:
+    text: "tampered.selispack"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: "This file is protected"
     timeout: 15000
@@ -58,4 +89,5 @@ name: Selis pack open with, passphrase, tamper
     timeout: 30000
 - tapOn: "Close"
 - tapOn: "Library"
-- assertVisible: "Open Ελληνικό δοκιμαστικό"
+# Titles come from the pack (the file names), not from the PDF metadata.
+- assertVisible: "Open greek"

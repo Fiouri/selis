@@ -398,6 +398,8 @@ for (const lang of LANGS) {
         await page.getByTestId("pack-passphrase-again").fill("correct horse");
         await page.getByTestId("pack-export-create").click();
         await expect(page.getByTestId("pack-export-sheet")).toHaveCount(0);
+        // The "file ready" toast must not end up in the next screenshots.
+        await expect(page.getByTestId("toast")).toHaveCount(0, { timeout: 15_000 });
         await page.getByRole("tab", { name: ui(lang, "transfer.tabReceive") }).click();
         await page.evaluate(() => {
           type Hooks = { lastExport: () => string | null; nextPick: (t: string | null) => void };
@@ -410,6 +412,11 @@ for (const lang of LANGS) {
         await expect(page.getByTestId("pack-wrong")).toBeVisible();
         await settle(page);
         await expect(page).toHaveScreenshot(shot("pack-passphrase"));
+        await page.getByTestId("pack-unlock-passphrase").fill("correct horse");
+        await page.getByTestId("pack-unlock").click();
+        await expect(page.getByTestId("pack-import-done")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("pack-imported"));
       });
 
       test(`recent (${theme})`, async ({ page }) => {
