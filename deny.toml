@@ -1,6 +1,20 @@
 # cargo-deny — supply chain policy. See docs/SPEC.md "Security, privacy, permissions".
 [graph]
 all-features = false
+# Only the targets Selis ships (and builds in CI): browser-only (wasm32) crates
+# in iroh's tree are not part of any Selis binary.
+targets = [
+  "x86_64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "aarch64-linux-android",
+  "armv7-linux-androideabi",
+  "i686-linux-android",
+  "x86_64-linux-android",
+  "aarch64-apple-ios",
+  "aarch64-apple-ios-sim",
+]
 
 [advisories]
 version = 2
@@ -30,6 +44,9 @@ allow = [
   # Weak, file-level copyleft; present in Tauri's HTML tooling (cssparser, selectors).
   "MPL-2.0",
   "OFL-1.1",
+  # Permissive data license of the Mozilla root CA bundle (webpki-roots /
+  # webpki-root-certs, via iroh's TLS for relays). No copyleft; ADR 0010.
+  "CDLA-Permissive-2.0",
 ]
 
 [bans]

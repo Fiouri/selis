@@ -36,3 +36,10 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+# Dev-only builds of the selis-transfer examples run as plain Android binaries
+# (no Android context): iroh's DNS resolver reads the system config through JNI
+# there and recovers from the failure with catch_unwind, which needs unwinding.
+[profile.devtool]
+inherits = "release"
+panic = "unwind"
