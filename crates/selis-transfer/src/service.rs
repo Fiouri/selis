@@ -611,6 +611,8 @@ impl TransferService {
     }
 
     fn spawn_receive(&self, start: Start, dest: PathBuf) -> SessionId {
+        // The store exports only to absolute paths.
+        let dest = std::path::absolute(&dest).unwrap_or(dest);
         let id = new_session_id();
         lock(&self.inner.receives).insert(
             id.clone(),
