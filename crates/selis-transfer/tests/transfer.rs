@@ -13,17 +13,19 @@ use selis_transfer::{
 
 type Result<T = ()> = anyhow::Result<T>;
 
-fn key(n: u8) -> SecretKey {
-    SecretKey::from_bytes(&[n; 32])
+/// A fresh identity per service: tests run in parallel and find each other over
+/// mDNS, so a shared key would let a receiver reach another test's sender.
+fn key() -> SecretKey {
+    SecretKey::generate()
 }
 
 async fn service(
     dir: &Path,
     name: &str,
-    key_byte: u8,
+    key: SecretKey,
     lifetime: Duration,
 ) -> Result<TransferService> {
-    let mut cfg = ServiceConfig::new(key(key_byte), dir.join(name), Network::LocalOnly);
+    let mut cfg = ServiceConfig::new(key, dir.join(name), Network::LocalOnly);
     cfg.ticket_lifetime = lifetime;
     Ok(TransferService::start(cfg).await?)
 }
@@ -76,8 +78,8 @@ const LIFETIME: Duration = Duration::from_secs(600);
 #[tokio::test(flavor = "multi_thread")]
 async fn sends_two_documents_with_history_after_the_code_is_confirmed() -> Result {
     let dir = tempfile::tempdir()?;
-    let sender = service(dir.path(), "a", 1, LIFETIME).await?;
-    let receiver = service(dir.path(), "b", 2, LIFETIME).await?;
+    let sender = service(dir.path(), "a", key(), LIFETIME).await?;
+    let receiver = service(dir.path(), "b", key(), LIFETIME).await?;
     let a = write(dir.path(), "a.pdf", 300_000, 1)?;
     let a_v1 = write(dir.path(), "a-v1.pdf", 250_000, 2)?;
     let b = write(dir.path(), "b.pdf", 1_000, 3)?;
@@ -144,8 +146,8 @@ async fn sends_two_documents_with_history_after_the_code_is_confirmed() -> Resul
 #[tokio::test(flavor = "multi_thread")]
 async fn a_declined_code_sends_nothing_and_the_ticket_is_single_use() -> Result {
     let dir = tempfile::tempdir()?;
-    let sender = service(dir.path(), "a", 1, LIFETIME).await?;
-    let receiver = service(dir.path(), "b", 2, LIFETIME).await?;
+    let sender = service(dir.path(), "a", key(), LIFETIME).await?;
+    let receiver = service(dir.path(), "b", key(), LIFETIME).await?;
     let f = write(dir.path(), "f.pdf", 10_000, 9)?;
     let (sid, ticket) = sender
         .offer(vec![OfferItem {
@@ -185,8 +187,8 @@ async fn a_declined_code_sends_nothing_and_the_ticket_is_single_use() -> Result 
 #[tokio::test(flavor = "multi_thread")]
 async fn an_expired_ticket_is_refused_on_both_sides() -> Result {
     let dir = tempfile::tempdir()?;
-    let sender = service(dir.path(), "a", 1, Duration::from_secs(1)).await?;
-    let receiver = service(dir.path(), "b", 2, LIFETIME).await?;
+    let sender = service(dir.path(), "a", key(), Duration::from_secs(1)).await?;
+    let receiver = service(dir.path(), "b", key(), LIFETIME).await?;
     let f = write(dir.path(), "f.pdf", 10_000, 9)?;
     let (sid, ticket) = sender
         .offer(vec![OfferItem {
@@ -231,7 +233,7 @@ async fn an_expired_ticket_is_refused_on_both_sides() -> Result {
 #[tokio::test(flavor = "multi_thread")]
 async fn an_unconfirmed_peer_cannot_fetch_the_blobs() -> Result {
     let dir = tempfile::tempdir()?;
-    let sender = service(dir.path(), "a", 1, LIFETIME).await?;
+    let sender = service(dir.path(), "a", key(), LIFETIME).await?;
     let f = write(dir.path(), "f.pdf", 100_000, 4)?;
     let (_sid, ticket) = sender
         .offer(vec![OfferItem {
@@ -246,7 +248,7 @@ async fn an_unconfirmed_peer_cannot_fetch_the_blobs() -> Result {
     // straight to the blobs protocol, skipping the code.
     let ep = iroh::Endpoint::builder(iroh::endpoint::presets::Minimal)
         .relay_mode(iroh::RelayMode::Disabled)
-        .secret_key(key(3))
+        .secret_key(key())
         .bind()
         .await?;
     let store = MemStore::new();
@@ -273,7 +275,7 @@ async fn an_unconfirmed_peer_cannot_fetch_the_blobs() -> Result {
 #[tokio::test(flavor = "multi_thread")]
 async fn an_interrupted_receive_resumes_without_fetching_again() -> Result {
     let dir = tempfile::tempdir()?;
-    let sender = service(dir.path(), "a", 1, LIFETIME).await?;
+    let sender = service(dir.path(), "a", key(), LIFETIME).await?;
     let big = write(dir.path(), "big.pdf", 192 * 1024 * 1024, 5)?;
     let (sid, ticket) = sender
         .offer(vec![OfferItem {
@@ -284,7 +286,9 @@ async fn an_interrupted_receive_resumes_without_fetching_again() -> Result {
         }])
         .await?;
 
-    let first = service(dir.path(), "b", 2, LIFETIME).await?;
+    // The same device (same key) before and after the interruption.
+    let receiver_key = key();
+    let first = service(dir.path(), "b", receiver_key.clone(), LIFETIME).await?;
     let rid = first.receive(ticket, dir.path().join("in"))?;
     send_code(&sender, &sid).await?;
     sender.decide(&sid, true)?;
@@ -300,7 +304,7 @@ async fn an_interrupted_receive_resumes_without_fetching_again() -> Result {
     first.close(false).await;
 
     // Same device (same key), same store: continues where it stopped.
-    let second = service(dir.path(), "b", 2, LIFETIME).await?;
+    let second = service(dir.path(), "b", receiver_key, LIFETIME).await?;
     let rid2 = second.resume(info, dir.path().join("in"));
     let start = until(|| match second.receive_state(&rid2) {
         Some(ReceiveState::Receiving { bytes, total, .. }) => Some((bytes, total)),
