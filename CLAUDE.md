@@ -24,7 +24,7 @@ compile in CI but get no UI polish until P6.
 
 ## Forbidden
 
-- Dependencies: **pdf-lib**, **MuPDF** (AGPL), **pdf.js** as an engine, anything **GPL/AGPL**
+- Dependencies: **pdf-lib**, **MuPDF** (AGPL), **pdf.js** as an engine (only the test oracle `packages/fixtures/src/oracle.ts` may use it, to check produced files), anything **GPL/AGPL**
   (enforced by `deny.toml` for Rust; check npm licenses by hand), telemetry/analytics/crash SDKs,
   ads, remote fonts or CDNs (fonts are self-hosted; EmbedPDF font fallback stays `null`).
 - Network at startup. Only `crates/selis-transfer` (P3) may open connections, and only while
@@ -96,8 +96,8 @@ Tier 2 — end of every feature:
   (original + version + extracted page, both carrying the inserted form, stage empty, originals
   untouched), then `pages.sh drag <serial>` with the grid open (long-press reorder by adb
   `draganddrop`; inspect `.tmp/p2c/drag-*.png`). And `redact.yaml` with `POST_RUN="…/redact.sh check"`
-  (original + version, redacted lines gone from the PDFium-extracted text, no marks left, original
-  untouched). run.sh fails a run on
+  (original + version; read by pdf.js: redacted lines not extracted and their glyph codes nowhere in
+  the file, each box on its own line, no marks left; original untouched). run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM).
 - Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC) + 390×844 visual snapshots in

@@ -63,6 +63,16 @@ export default defineConfig(
     },
   },
   {
+    // The test oracle reads produced files with pdf.js (an independent reader, never an engine).
+    files: ["packages/fixtures/src/oracle.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [{ group: ["pdf-lib", "pdf-lib/*", "mupdf", "mupdf/*"], message: "Forbidden PDF library (see CLAUDE.md)." }] },
+      ],
+    },
+  },
+  {
     files: ["apps/app/src/**/*.{ts,tsx}", "packages/ui/src/**/*.{ts,tsx}"],
     ...reactHooks.configs.flat.recommended,
   },

@@ -114,6 +114,8 @@ type MockInspect = {
   hasWorkingCopy: (id: string) => boolean;
   /** Current bytes of a document, as latin1 text (PDF structure checks). */
   documentText: (id: string) => Promise<string>;
+  /** Current bytes of a document, exact (for reading it with another PDF reader). */
+  documentBytes: (id: string) => Promise<number[]>;
 };
 
 /**
@@ -133,6 +135,10 @@ function installTestOpenWith(): void {
     documentText: async (id) => {
       const response = await fetch(entryOf(id).url);
       return new TextDecoder("latin1").decode(await response.arrayBuffer());
+    },
+    documentBytes: async (id) => {
+      const response = await fetch(entryOf(id).url);
+      return Array.from(new Uint8Array(await response.arrayBuffer()));
     },
   };
   // One intent: a single "Open with", or several files from one share (SEND_MULTIPLE).
