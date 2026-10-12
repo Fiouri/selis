@@ -102,7 +102,10 @@ pub struct ServiceConfig {
 
 /// Looks up a blob the app already stores: its file, if any.
 #[derive(Clone)]
-pub struct Have(pub Arc<dyn Fn(&Hash) -> Option<PathBuf> + Send + Sync>);
+pub struct Have(pub Arc<HaveFn>);
+
+/// `hash` → the app's file with that content, if it has one.
+pub type HaveFn = dyn Fn(&Hash) -> Option<PathBuf> + Send + Sync;
 
 impl std::fmt::Debug for Have {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
