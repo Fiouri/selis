@@ -2,8 +2,9 @@
 # over the next, apply after the confirm dialog, Done → a new version.
 # Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh and
 #   POST_RUN="apps/app/e2e/maestro/redact.sh check"
-# (original + 1 version; the version has no /Redact marks left and its text no
-# longer contains the two lines; the original in Download/ untouched).
+# (the earlier version is deleted from the sheet: one library file, the version,
+# with no /Redact marks left and without the two lines; the original in
+# Download/ untouched).
 appId: com.anywecon.selis
 androidWebViewHierarchy: devtools
 name: Redact - text and whiteout, apply, version
@@ -68,3 +69,12 @@ name: Redact - text and whiteout, apply, version
 - extendedWaitUntil:
     visible: ".*· saved"
     timeout: 15000
+
+# The imported original still has the removed lines: delete the earlier versions.
+- extendedWaitUntil:
+    visible: "Earlier versions still have it"
+    timeout: 10000
+- tapOn: "Delete earlier versions"
+- extendedWaitUntil:
+    visible: "Deleted 1 earlier version."
+    timeout: 10000

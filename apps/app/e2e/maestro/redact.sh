@@ -4,8 +4,9 @@
 #   POST_RUN="apps/app/e2e/maestro/redact.sh check" \
 #     apps/app/e2e/maestro/run.sh <serial> apps/app/e2e/maestro/redact.yaml
 #
-# check: app data holds two library files (the imported original + the version
-#        written on Done); the version has no pending /Redact marks; read by
+# check: app data holds one library file: the version written on Done (the
+#        imported copy went with "Delete earlier versions"); it has no pending
+#        /Redact marks; read by
 #        pdf.js (redact-check.ts) its text no longer has the two redacted lines
 #        but keeps the rest, their glyph codes are nowhere in the file, and each
 #        box sits on its own line; no working copy is left; the original in
@@ -24,8 +25,8 @@ fixtures="$root/packages/fixtures/out"
 sh_app() { adb -s "$serial" shell run-as "$app" sh -c "'$1'" | tr -d '\r'; }
 
 pdfs="$(sh_app 'ls library/*.pdf 2>/dev/null | wc -l' | tr -d ' ')"
-if [ "$pdfs" != 2 ]; then
-  echo "expected 2 library files (original + version), found $pdfs"
+if [ "$pdfs" != 1 ]; then
+  echo "expected 1 library file (the redacted version; the imported copy deleted with the earlier versions), found $pdfs"
   exit 1
 fi
 working="$(sh_app 'ls work/*.pdf 2>/dev/null | wc -l' | tr -d ' ')"
@@ -51,4 +52,4 @@ if [ "$got" != "$original" ]; then
   echo "original greek.pdf changed: $got != $original"
   exit 1
 fi
-echo "library: original + version; redacted lines gone (pdf.js), boxes on their lines; no marks or working copy left; original untouched"
+echo "library: the redacted version only (earlier versions deleted); redacted lines gone (pdf.js), boxes on their lines; no marks or working copy left; original untouched"

@@ -96,8 +96,9 @@ Tier 2 — end of every feature:
   (original + version + extracted page, both carrying the inserted form, stage empty, originals
   untouched), then `pages.sh drag <serial>` with the grid open (long-press reorder by adb
   `draganddrop`; inspect `.tmp/p2c/drag-*.png`). And `redact.yaml` with `POST_RUN="…/redact.sh check"`
-  (original + version; read by pdf.js: redacted lines not extracted and their glyph codes nowhere in
-  the file, each box on its own line, no marks left; original untouched). run.sh fails a run on
+  (earlier versions deleted from the sheet: only the redacted version left; read by pdf.js: redacted
+  lines not extracted and their glyph codes nowhere in the file, each box on its own line, no marks
+  left; original untouched). `pages.yaml` inserts the form through the "Insert anyway" sheet. run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro
   2.11 sends the DevTools socket name as the WebSocket Host, which WebView 15x (the S23) rejects, so

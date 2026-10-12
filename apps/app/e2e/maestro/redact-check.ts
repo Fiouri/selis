@@ -5,6 +5,7 @@
  * - the two redacted lines are not extracted, and their glyph codes are not
  *   anywhere in the file (raw or inflated); the rest of the text is kept;
  * - no /Redact mark is left; the whiteout's text stamp is the only annotation;
+ * - the file is one fresh revision (no older one behind it);
  * - each box sits on its line: it covers that line's glyphs (as pdf.js reads
  *   the original) and touches neither neighbour. The swipes are in device
  *   pixels, so the exact box is not known here; the line it lands on is.
@@ -74,6 +75,11 @@ for (const w of gone) check(!text.includes(w), `"${w}" is still extracted`);
 for (const w of ["Η Σελίς κρατά", "Αριθμοί", "Δεύτερη σελίδα"]) check(text.includes(w), `"${w}" was lost`);
 const leaks = findInFile(version, gone, gone.flatMap((w) => greekGlyphHex(w)));
 check(leaks.length === 0, `left in the file: ${leaks.join(", ")}`);
+
+// Written anew (ADR 0009): one cross-reference section, no older revision behind it.
+const raw = Buffer.from(version).toString("latin1");
+check(raw.split("startxref").length - 1 === 1, "the file has more than one revision");
+check(!raw.slice(raw.lastIndexOf("trailer")).includes("/Prev"), "the trailer points at an older revision");
 
 const annots = await pdfjsAnnotations(version);
 check(!annots.some((a) => a.subtype === "Redact"), "a /Redact mark is left");

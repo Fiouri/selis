@@ -64,6 +64,11 @@ name: Pages - rotate, duplicate, delete, add PDF, extract
 - tapOn: "Add PDF"
 - tapOn: "PDF from a file…"
 - tapOn: "acroform.pdf"
+# The form's field tooltips do not come along (ADR 0008): listed before the insert.
+- extendedWaitUntil:
+    visible: "4 field tooltips"
+    timeout: 20000
+- tapOn: "Insert anyway"
 - extendedWaitUntil:
     visible: "Added 1 page."
     timeout: 20000
