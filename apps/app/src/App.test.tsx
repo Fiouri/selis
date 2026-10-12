@@ -17,7 +17,8 @@ describe("PhoneShell (jsdom, mock IPC)", () => {
   it("shows the empty library with one clear action and four tabs", async () => {
     window.innerWidth = 390;
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Your library is empty" })).toBeTruthy();
+    // The first render loads the whole app (cold transforms): give it time.
+    expect(await screen.findByRole("heading", { name: "Your library is empty" }, { timeout: 10_000 })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Import PDF" })).toBeTruthy();
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
     expect(nav.querySelectorAll("button")).toHaveLength(4);
@@ -27,7 +28,7 @@ describe("PhoneShell (jsdom, mock IPC)", () => {
   it("switches language and theme from Settings", async () => {
     window.innerWidth = 390;
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }, { timeout: 10_000 }));
     // Language is a row that opens a picker sheet.
     fireEvent.click(await screen.findByTestId("setting-language"));
     fireEvent.click(await screen.findByRole("radio", { name: "Ελληνικά" }));

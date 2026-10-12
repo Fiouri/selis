@@ -9,11 +9,20 @@ import { formatBytes } from "./format";
 import { Busy, Card, CodeBlock, Problem, Progress } from "./parts";
 import { type ScanFailure, ScanError, type Scanner, startScanner } from "./qrScanner";
 import { type TransferProblem, useTransfer } from "./transferStore";
+import { SaveDevice } from "./TrustedDevices";
 
-/** Receive tab: scan (or paste) → the same code on both → progress → library. */
+/**
+ * Receive tab: scan (or paste) → the same code on both → progress → library.
+ * While it is on screen, saved devices may send here without QR code.
+ */
 export function ReceivePanel() {
   const receive = useTransfer((s) => s.receive);
   const problem = useTransfer((s) => s.receiveProblem);
+  const setReceiving = useTransfer((s) => s.setReceiving);
+  useEffect(() => {
+    void setReceiving(true);
+    return () => void setReceiving(false);
+  }, [setReceiving]);
   if (receive) return <ReceiveStatus view={receive} />;
   return <ScanOrPaste problem={problem} />;
 }
@@ -35,6 +44,7 @@ function ScanOrPaste({ problem }: { problem: TransferProblem | null }) {
         {t("transfer.receive.paste")}
       </Button>
       <p className="text-center text-[13px] text-neutral-11">{t("transfer.receive.help")}</p>
+      <TrustedHint />
       {problem ? <Problem problem={problem} testId="transfer-receive-problem" /> : null}
       <PausedList />
       <PasteSheet open={pasting} onClose={() => setPasting(false)} />
@@ -188,6 +198,17 @@ function PasteSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
+function TrustedHint() {
+  const { t } = useTranslation();
+  const count = useTransfer((s) => s.trusted.length);
+  if (count === 0) return null;
+  return (
+    <p className="text-center text-[13px] text-neutral-11" data-testid="transfer-trusted-hint">
+      {t("transfer.trust.receiveHint")}
+    </p>
+  );
+}
+
 function PausedList() {
   const { t, i18n } = useTranslation();
   const resumable = useTransfer((s) => s.resumable);
@@ -226,7 +247,13 @@ function ReceiveStatus({ view }: { view: ReceiveView }) {
   const resetReceive = useTransfer((s) => s.resetReceive);
   const receiveId = useTransfer((s) => s.receiveId);
   const resume = useTransfer((s) => s.resume);
+  const from = useTransfer((s) => s.incomingFrom);
   const selectTab = useNavigation((s) => s.selectTab);
+  const fromLine = from ? (
+    <p className="text-center text-[13px] font-medium text-neutral-11" data-testid="transfer-from">
+      {t("transfer.trust.from", { name: from })}
+    </p>
+  ) : null;
   const cancel = (
     <Button variant="secondary" className="w-full" onClick={() => void cancelReceive()} data-testid="transfer-receive-cancel">
       {t("transfer.cancel")}
@@ -251,6 +278,7 @@ function ReceiveStatus({ view }: { view: ReceiveView }) {
     case "receiving":
       return (
         <Card testId="transfer-receiving">
+          {fromLine}
           <Progress
             label={t("transfer.receive.receiving")}
             bytes={view.bytes}
@@ -280,9 +308,19 @@ function ReceiveStatus({ view }: { view: ReceiveView }) {
           <h2 className="text-[17px] font-semibold text-neutral-12">{t("transfer.receive.doneTitle")}</h2>
           <p className="text-center text-md text-neutral-11" data-testid="transfer-receive-count">
             {t("transfer.receive.doneBody", { count: view.documentIds.length - view.duplicates })}
-            {view.duplicates > 0 ? ` ${t("transfer.receive.duplicates", { count: view.duplicates })}` : null}
           </p>
+          {view.duplicates > 0 ? (
+            <p className="text-center text-[13px] text-neutral-11" data-testid="transfer-receive-duplicates">
+              {t("transfer.receive.duplicates", { count: view.duplicates })}
+            </p>
+          ) : null}
+          {view.moved ? (
+            <p className="text-center text-[13px] text-neutral-11" data-testid="transfer-receive-moved">
+              {t("transfer.move.movedBody")}
+            </p>
+          ) : null}
           <div className="flex w-full flex-col gap-2">
+            {view.peer && !view.trusted ? <SaveDevice peer={view.peer} /> : null}
             <Button
               onClick={() => {
                 resetReceive();

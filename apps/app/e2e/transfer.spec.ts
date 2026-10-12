@@ -174,3 +174,99 @@ test("camera denied falls back to pasting", async ({ page, browserName }) => {
   await expect(page.getByTestId("transfer-camera-problem")).toBeVisible();
   await expect(page.getByTestId("transfer-paste")).toBeVisible();
 });
+
+const LAPTOP = "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809";
+
+async function devices(page: Page, list: Array<{ id: string; name: string; online: boolean; ready: boolean }>): Promise<void> {
+  await page.evaluate((l) => {
+    (window as unknown as { __selisTest: { transfer: Hooks & { devices: (x: typeof l) => void } } }).__selisTest.transfer.devices(l);
+  }, list);
+}
+
+test("saves the device after a QR transfer, then sends to it with one tap", async ({ page }) => {
+  await page.goto("/");
+  await addToLibrary(page, "greek.pdf", "Contract.pdf");
+  await openTransfer(page);
+  await page.getByTestId("transfer-doc").first().click();
+  await page.getByTestId("transfer-send-start").click();
+  await hook(page, "peerScans");
+  await page.getByTestId("transfer-confirm").click();
+  await expect(page.getByTestId("transfer-send-done")).toBeVisible();
+  await page.getByTestId("transfer-save-device").click();
+  await page.getByTestId("save-device-name").fill("Maria's laptop");
+  await page.getByTestId("save-device-confirm").click();
+  await expect(page.getByTestId("transfer-save-device")).toHaveCount(0);
+
+  await page.getByTestId("transfer-send-again").click();
+  const row = page.getByTestId("trusted-device");
+  await expect(row).toHaveText(/Maria's laptop/);
+  await expect(row).toHaveAttribute("data-status", "ready");
+  // Nothing chosen yet: the pill waits.
+  await expect(page.getByTestId("trusted-send")).toBeDisabled();
+  await page.getByTestId("transfer-doc").first().click();
+  await page.getByTestId("trusted-send").click();
+  await expect(page.getByTestId("transfer-send-done")).toBeVisible();
+  // Already trusted: no "Save this device" this time, and no code was asked.
+  await expect(page.getByTestId("transfer-save-device")).toHaveCount(0);
+});
+
+test("a saved device that is not ready cannot be sent to, and can be removed", async ({ page }) => {
+  await page.goto("/");
+  await addToLibrary(page, "greek.pdf", "Contract.pdf");
+  await devices(page, [{ id: LAPTOP, name: "Laptop", online: true, ready: false }]);
+  await openTransfer(page);
+  await page.getByTestId("transfer-doc").first().click();
+  const row = page.getByTestId("trusted-device");
+  await expect(row).toHaveAttribute("data-status", "online");
+  await expect(row).toContainText("Online · open Receive on it");
+  await expect(page.getByTestId("trusted-send")).toBeDisabled();
+  await page.getByTestId("trusted-remove").click();
+  await expect(page.getByTestId("trusted-remove-dialog")).toBeVisible();
+  await page.getByTestId("trusted-remove-dialog").getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByTestId("transfer-trusted")).toHaveCount(0);
+});
+
+test("a saved device sends here while the Receive tab is open", async ({ page }) => {
+  await page.goto("/");
+  await devices(page, [{ id: LAPTOP, name: "Laptop", online: true, ready: true }]);
+  await openTransfer(page);
+  await receiveTab(page);
+  await expect(page.getByTestId("transfer-trusted-hint")).toBeVisible();
+  await page.evaluate(() => {
+    (window as unknown as { __selisTest: { transfer: { incomingPush: (n: string) => void } } }).__selisTest.transfer.incomingPush("Laptop");
+  });
+  await expect(page.getByTestId("transfer-receive-done")).toBeVisible();
+  await expect(page.getByTestId("transfer-receive-count")).toHaveText("1 document was added to your library.");
+  await expect(page.getByTestId("transfer-save-device")).toHaveCount(0);
+});
+
+test("moving the library shows what goes first, then the QR code", async ({ page }) => {
+  await page.goto("/");
+  await addToLibrary(page, "greek.pdf", "Contract.pdf");
+  await addToLibrary(page, "mixed-sizes.pdf", "Invoice.pdf");
+  await openTransfer(page);
+  await page.getByTestId("transfer-move-open").click();
+  const summary = page.getByTestId("transfer-move-summary");
+  await expect(summary).toContainText("2 documents");
+  await expect(summary).toContainText("0 tags");
+  await page.getByTestId("transfer-move-qr").click();
+  await expect(page.getByTestId("transfer-qr")).toBeVisible();
+  await expect(page.getByTestId("transfer-offer-summary")).toContainText("2 documents");
+  await hook(page, "peerScans");
+  await page.getByTestId("transfer-confirm").click();
+  await expect(page.getByTestId("transfer-send-done")).toBeVisible();
+});
+
+test("after receiving from a new device, it can be saved", async ({ page }) => {
+  await page.goto("/");
+  await openTransfer(page);
+  await receiveTab(page);
+  await pasteLink(page, LINK);
+  await hook(page, "senderConfirms");
+  await expect(page.getByTestId("transfer-receive-done")).toBeVisible();
+  await page.getByTestId("transfer-save-device").click();
+  await page.getByTestId("save-device-confirm").click();
+  await expect(page.getByTestId("transfer-save-device")).toHaveCount(0);
+  await page.getByTestId("transfer-receive-again").click();
+  await expect(page.getByTestId("transfer-trusted-hint")).toBeVisible();
+});

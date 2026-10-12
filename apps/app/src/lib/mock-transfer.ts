@@ -9,23 +9,31 @@
  * - `incoming(files)`: what the next receive brings (default: a 1-page PDF);
  * - `failReceive(code)`: the next receive fails with that error after the code;
  * - `link(url)`: a `selis://` deep link arrives (camera app, another app);
- * - `expireOffers()`: offered codes expire now.
+ * - `expireOffers()`: offered codes expire now;
+ * - `devices(list)`: trusted devices and how they answer a ping;
+ * - `incomingPush(name)`: a trusted device sends here (Receive tab open).
  */
 import qrSvg from "@selis/fixtures/transfer/qr.svg?raw";
 import fixtureLink from "@selis/fixtures/transfer/link.txt?raw";
 import type {
   CommandError,
   ImportOutcome,
+  IncomingView,
+  LibrarySummary,
   OfferView,
+  PingView,
   ReceiveView,
   ResumableView,
   SendView,
   TransferErrorCode,
   TransferInfo,
+  TrustedDevice,
 } from "./ipc";
 
 /** The code both screens show in the mock. */
 export const MOCK_CODE = "482913";
+/** The other device of a QR transfer. */
+export const MOCK_PEER = "5e115e115e115e115e115e115e115e115e115e115e115e115e115e115e115e11";
 const TRANSFER_MS = 1_500;
 const CONNECT_MS = 300;
 const HOLD_FRACTION = 0.4;
@@ -36,6 +44,8 @@ type Send = {
   decided: null | boolean;
   startedAt: number;
   cancelled: boolean;
+  /** A push: the trusted device it went to. */
+  to: string | null;
 };
 
 type Receive = {
@@ -50,6 +60,7 @@ type Receive = {
   files: Array<{ name: string; bytes: Uint8Array }>;
   result: ReceiveView | null;
   importing: boolean;
+  from: string;
 };
 
 type Hooks = {
@@ -60,6 +71,8 @@ type Hooks = {
   failReceive: (code: TransferErrorCode | null) => void;
   link: (url: string) => void;
   expireOffers: () => void;
+  devices: (list: Array<{ id: string; name: string; online: boolean; ready: boolean }>) => void;
+  incomingPush: (name: string) => void;
 };
 
 type Deps = {
@@ -68,6 +81,8 @@ type Deps = {
   documentSizes: (ids: string[]) => number[];
   importBytes: (name: string, bytes: Uint8Array) => Promise<ImportOutcome>;
   localOnly: () => boolean;
+  allDocumentIds: () => string[];
+  summary: () => LibrarySummary;
 };
 
 /** A minimal one-page PDF (valid xref) for receives nobody scripted. */
@@ -114,6 +129,11 @@ export function createMockTransfer(deps: Deps) {
   const sends = new Map<string, Send>();
   const receives = new Map<string, Receive>();
   const links = new Map<string, string>();
+  let trusted: TrustedDevice[] = [];
+  const pings = new Map<string, PingView>();
+  let receiving = false;
+  const incoming: IncomingView[] = [];
+  const isTrusted = (id: string) => trusted.some((d) => d.endpointId === id);
 
   const progress = (since: number, total: number, base = 0) => {
     const fraction = Math.min(1, (Date.now() - since) / TRANSFER_MS);
@@ -126,7 +146,10 @@ export function createMockTransfer(deps: Deps) {
     if (s.decided === false) return { kind: "failed", error: "declined" };
     if (s.decided === true) {
       const bytes = progress(s.startedAt, s.offer.totalBytes);
-      return bytes >= s.offer.totalBytes ? { kind: "done" } : { kind: "sending", bytes, total: s.offer.totalBytes, route: "lan" };
+      const peer = s.to ?? MOCK_PEER;
+      return bytes >= s.offer.totalBytes
+        ? { kind: "done", peer, trusted: isTrusted(peer) }
+        : { kind: "sending", bytes, total: s.offer.totalBytes, route: "lan" };
     }
     if (Date.now() / 1000 >= s.offer.expiresAt) return { kind: "failed", error: "expired" };
     return s.scanned ? { kind: "confirm", code: MOCK_CODE } : { kind: "waitingForReceiver" };
@@ -141,7 +164,7 @@ export function createMockTransfer(deps: Deps) {
       ids.push(outcome.document.id);
       if (outcome.duplicate) duplicates += 1;
     }
-    r.result = { kind: "done", documentIds: ids, duplicates };
+    r.result = { kind: "done", documentIds: ids, duplicates, signatures: 0, moved: false, peer: r.from, trusted: isTrusted(r.from) };
   };
 
   const receiveView = (r: Receive): ReceiveView => {
@@ -204,6 +227,54 @@ export function createMockTransfer(deps: Deps) {
     expireOffers: () => {
       for (const s of sends.values()) s.offer = { ...s.offer, expiresAt: Date.now() / 1000 - 1 };
     },
+    devices: (list) => {
+      trusted = list.map((d, i) => ({ endpointId: d.id, name: d.name, addedAt: 1_000 + i, lastSeenAt: null }));
+      pings.clear();
+      for (const d of list) pings.set(d.id, { online: d.online, ready: d.ready });
+    },
+    incomingPush: (name) => {
+      const device = trusted.find((d) => d.name === name);
+      if (!device || !receiving) return;
+      const files = nextFiles ?? [{ name: "Pushed.pdf", bytes: tinyPdf("Sent from a trusted device") }];
+      nextFiles = null;
+      const id = crypto.randomUUID();
+      receives.set(id, {
+        id,
+        link: "",
+        createdAt: Date.now() - CONNECT_MS,
+        confirmedAt: Date.now(),
+        baseBytes: 0,
+        total: files.reduce((sum, f) => sum + f.bytes.byteLength, 0),
+        fail: null,
+        files,
+        result: null,
+        importing: false,
+        from: device.endpointId,
+      });
+      incoming.push({ id, deviceName: device.name });
+    },
+  };
+
+  /** A send to a trusted device: it starts at once when that device is ready. */
+  const push = (endpointId: string, ids: string[]): string => {
+    requireOpen();
+    if (!isTrusted(endpointId)) deps.fail("notFound", "not a trusted device");
+    const total = deps.documentSizes(ids).reduce((a, b) => a + b, 0);
+    const sessionId = crypto.randomUUID();
+    const ready = pings.get(endpointId)?.ready ?? true;
+    sends.set(sessionId, {
+      offer: { sessionId, link: "", qrSvg: "", docCount: ids.length, totalBytes: total, expiresAt: Date.now() / 1000 + 600 },
+      scanned: true,
+      decided: ready ? true : null,
+      startedAt: Date.now(),
+      cancelled: false,
+      to: endpointId,
+    });
+    if (!ready) {
+      const s = sends.get(sessionId);
+      if (s) s.cancelled = true;
+    }
+    return sessionId;
   };
 
   const handle = async (cmd: string, args: Record<string, unknown>): Promise<unknown> => {
@@ -238,11 +309,13 @@ export function createMockTransfer(deps: Deps) {
             totalBytes: total,
             expiresAt: Math.floor(Date.now() / 1000) + 600,
           };
-          sends.set(sessionId, { offer, scanned: false, decided: null, startedAt: 0, cancelled: false });
+          sends.set(sessionId, { offer, scanned: false, decided: null, startedAt: 0, cancelled: false, to: null });
           return offer;
         }));
       case "transfer_send_status": {
         const s = sends.get(String(args.sessionId)) ?? deps.fail("notFound", "no such transfer");
+        // A push its device refused.
+        if (s.to && s.cancelled && s.decided === null) return { kind: "failed", error: "notReady" } satisfies SendView;
         return sendView(s);
       }
       case "transfer_decide": {
@@ -278,6 +351,7 @@ export function createMockTransfer(deps: Deps) {
             files,
             result: null,
             importing: false,
+            from: MOCK_PEER,
           });
           nextFail = null;
           links.set(link, id);
@@ -318,6 +392,59 @@ export function createMockTransfer(deps: Deps) {
         return null;
       case "transfer_notifications":
         return true;
+      case "transfer_receiving":
+        receiving = Boolean(args.on);
+        return null;
+      case "transfer_incoming":
+        return incoming.splice(0);
+      case "transfer_trusted":
+        return trusted;
+      case "transfer_trust": {
+        const endpointId = String(args.endpointId);
+        const name = String(args.name).trim();
+        if (!name) deps.fail("invalidArgument", "device name is empty");
+        const existing = trusted.find((d) => d.endpointId === endpointId);
+        if (existing) existing.name = name;
+        else trusted = [{ endpointId, name, addedAt: Date.now(), lastSeenAt: Date.now() }, ...trusted];
+        pings.set(endpointId, pings.get(endpointId) ?? { online: true, ready: true });
+        return trusted.find((d) => d.endpointId === endpointId);
+      }
+      case "transfer_untrust":
+        trusted = trusted.filter((d) => d.endpointId !== args.endpointId);
+        return null;
+      case "transfer_ping": {
+        requireOpen();
+        return pings.get(String(args.endpointId)) ?? { online: false, ready: false };
+      }
+      case "transfer_push":
+        return deps.runOnce(cmd, String(args.requestId), () =>
+          settle(() => push(String(args.endpointId), args.documentIds as string[])),
+        );
+      case "transfer_move_summary":
+        return deps.summary();
+      case "transfer_move_offer":
+        return deps.runOnce(cmd, String(args.requestId), () =>
+          settle(() => {
+            requireOpen();
+            const ids = deps.allDocumentIds();
+            if (ids.length === 0) deps.fail("invalidArgument", "the library is empty");
+            const sessionId = crypto.randomUUID();
+            const offer: OfferView = {
+              sessionId,
+              link: fixtureLink.trim(),
+              qrSvg,
+              docCount: ids.length,
+              totalBytes: deps.documentSizes(ids).reduce((a, b) => a + b, 0),
+              expiresAt: Math.floor(Date.now() / 1000) + 600,
+            };
+            sends.set(sessionId, { offer, scanned: false, decided: null, startedAt: 0, cancelled: false, to: null });
+            return offer;
+          }),
+        );
+      case "transfer_move_push":
+        return deps.runOnce(cmd, String(args.requestId), () =>
+          settle(() => push(String(args.endpointId), deps.allDocumentIds())),
+        );
       case "pending_transfer_link":
         return pendingLink;
       case "dismiss_transfer_link":
@@ -332,6 +459,16 @@ export function createMockTransfer(deps: Deps) {
 }
 
 export const TRANSFER_COMMANDS = new Set([
+  "transfer_receiving",
+  "transfer_incoming",
+  "transfer_trusted",
+  "transfer_trust",
+  "transfer_untrust",
+  "transfer_ping",
+  "transfer_push",
+  "transfer_move_summary",
+  "transfer_move_offer",
+  "transfer_move_push",
   "transfer_open",
   "transfer_close",
   "transfer_offer",

@@ -11,12 +11,15 @@ import { useStore } from "zustand";
 import {
   ApiError,
   api,
+  type LibrarySummary,
   type OfferView,
+  type PingView,
   type ReceiveView,
   type ResumableView,
   type SendView,
   type TransferErrorCode,
   type TransferInfo,
+  type TrustedDevice,
 } from "../../lib/api";
 import { i18n } from "../../i18n";
 import { cleanLink, percent } from "./format";
@@ -42,7 +45,20 @@ export type TransferApi = Pick<
   | "transferForeground"
   | "transferForegroundStop"
   | "transferNotifications"
+  | "transferReceiving"
+  | "transferIncoming"
+  | "transferTrusted"
+  | "transferTrust"
+  | "transferUntrust"
+  | "transferPing"
+  | "transferPush"
+  | "transferMoveSummary"
+  | "transferMoveOffer"
+  | "transferMovePush"
 >;
+
+/** A send without QR code: to a trusted device. */
+export type Push = { sessionId: string; deviceName: string; docCount: number; move: boolean };
 
 export type TransferDeps = {
   api: TransferApi;
@@ -68,6 +84,17 @@ export type TransferState = {
   resumable: ResumableView[];
   /** A deep link waiting for the endpoint to open. */
   incomingLink: string | null;
+  /** The offer on screen is a library move. */
+  moving: boolean;
+  push: Push | null;
+  trusted: TrustedDevice[];
+  /** Reachability per trusted device; `null` while checking. */
+  pings: Record<string, PingView | null>;
+  moveSummary: LibrarySummary | null;
+  /** The Receive tab is visible: trusted devices may push. */
+  receivingOn: boolean;
+  /** Name of the trusted device the current receive comes from. */
+  incomingFrom: string | null;
 
   open: () => Promise<void>;
   setIncomingLink: (link: string) => void;
@@ -84,10 +111,21 @@ export type TransferState = {
   resetReceive: () => void;
   /** Android's daily foreground-service limit: stop receives, keep them resumable. */
   pauseAll: () => Promise<void>;
+  loadTrusted: () => Promise<void>;
+  pingTrusted: () => Promise<void>;
+  pushTo: (device: TrustedDevice, ids: string[], includeHistory: boolean) => Promise<void>;
+  saveDevice: (endpointId: string, name: string) => Promise<boolean>;
+  removeDevice: (endpointId: string) => Promise<void>;
+  loadMoveSummary: () => Promise<void>;
+  moveOffer: () => Promise<void>;
+  movePush: (device: TrustedDevice) => Promise<void>;
+  setReceiving: (on: boolean) => Promise<void>;
 };
 
 /** How often a running transfer is looked at. */
 export const POLL_MS = 400;
+/** How often the Receive tab asks whether a trusted device started a send. */
+const INCOMING_EVERY = 3;
 /** The notification is updated at most this often. */
 const NOTIFY_MS = 1_000;
 
@@ -130,12 +168,15 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
   let lastNotify = 0;
   let notifying = false;
   let askedNotifications = false;
+  let ticks = 0;
 
   const store = createStore<TransferState>()((set, get) => {
     const schedule = () => {
       if (timer !== null) return;
-      const { offer, send, receiveId, receive } = get();
-      const active = (offer !== null && !sendFinished(send)) || (receiveId !== null && !receiveFinished(receive));
+      const { offer, push, send, receiveId, receive, receivingOn } = get();
+      const sending = (offer !== null || push !== null) && !sendFinished(send);
+      const listening = receivingOn && !receiveRunning(receive);
+      const active = sending || (receiveId !== null && !receiveFinished(receive)) || listening;
       if (!active) return;
       timer = deps.setTimer(() => {
         timer = null;
@@ -175,15 +216,38 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
         .catch(() => undefined);
     };
 
+    const sessionOf = () => get().offer?.sessionId ?? get().push?.sessionId ?? null;
+
     const tick = async () => {
-      const { offer, send, receiveId, receive } = get();
-      if (offer && !sendFinished(send)) {
+      ticks += 1;
+      const { send, receiveId, receive, receivingOn } = get();
+      const session = sessionOf();
+      if (session && !sendFinished(send)) {
         try {
-          const view = await deps.api.transferSendStatus(offer.sessionId);
-          if (get().offer?.sessionId === offer.sessionId) set({ send: view });
+          const view = await deps.api.transferSendStatus(session);
+          if (sessionOf() === session) {
+            set({ send: view });
+            if (view.kind === "done") void get().loadTrusted();
+          }
         } catch {
           // The endpoint went away (screen closed for good): the offer is over.
-          if (get().offer?.sessionId === offer.sessionId) set({ send: { kind: "failed", error: "cancelled" } });
+          if (sessionOf() === session) set({ send: { kind: "failed", error: "cancelled" } });
+        }
+      }
+      if (receivingOn && !receiveRunning(receive) && ticks % INCOMING_EVERY === 0) {
+        try {
+          const [first] = await deps.api.transferIncoming();
+          if (first && !receiveRunning(get().receive)) {
+            set({
+              tab: "receive",
+              receiveId: first.id,
+              receive: { kind: "connecting" },
+              receiveProblem: null,
+              incomingFrom: first.deviceName,
+            });
+          }
+        } catch {
+          // Asked again on the next round.
         }
       }
       if (receiveId && !receiveFinished(receive)) {
@@ -224,6 +288,13 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
       receiveProblem: null,
       resumable: [],
       incomingLink: null,
+      moving: false,
+      push: null,
+      trusted: [],
+      pings: {},
+      moveSummary: null,
+      receivingOn: false,
+      incomingFrom: null,
 
       open: async () => {
         if (get().opening) return;
@@ -232,6 +303,8 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
           const info = await deps.api.transferOpen();
           set({ info, opening: false });
           await loadResumable();
+          await get().loadTrusted();
+          if (get().receivingOn) await deps.api.transferReceiving(true).catch(() => undefined);
         } catch {
           set({ opening: false, openFailed: true });
           return;
@@ -272,7 +345,7 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
         set({ preparing: true, sendProblem: null });
         try {
           const offer = await deps.api.transferOffer(ids, includeHistory);
-          set({ offer, send: { kind: "waitingForReceiver" }, preparing: false });
+          set({ offer, push: null, moving: false, send: { kind: "waitingForReceiver" }, preparing: false });
           schedule();
         } catch (err) {
           set({
@@ -294,13 +367,13 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
       },
 
       cancelSend: async () => {
-        const offer = get().offer;
-        set({ offer: null, send: null, sendProblem: null });
-        if (offer) await deps.api.transferCancelSend(offer.sessionId).catch(() => undefined);
+        const session = sessionOf();
+        set({ offer: null, push: null, moving: false, send: null, sendProblem: null });
+        if (session) await deps.api.transferCancelSend(session).catch(() => undefined);
         await notify();
       },
 
-      resetSend: () => set({ offer: null, send: null, sendProblem: null }),
+      resetSend: () => set({ offer: null, push: null, moving: false, send: null, sendProblem: null }),
 
       receiveLink: async (input) => {
         set({ tab: "receive", receiveProblem: null });
@@ -345,10 +418,115 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
         await loadResumable();
       },
 
-      resetReceive: () => set({ receiveId: null, receive: null, receiveProblem: null }),
+      resetReceive: () => {
+        set({ receiveId: null, receive: null, receiveProblem: null, incomingFrom: null });
+        schedule();
+      },
 
       pauseAll: async () => {
         await deps.api.transferPause().catch(() => undefined);
+        schedule();
+      },
+
+      loadTrusted: async () => {
+        try {
+          set({ trusted: await deps.api.transferTrusted() });
+        } catch {
+          // The list stays as it was.
+        }
+      },
+
+      pingTrusted: async () => {
+        const devices = get().trusted;
+        set({ pings: Object.fromEntries(devices.map((d) => [d.endpointId, null])) });
+        await Promise.all(
+          devices.map(async (d) => {
+            const ping = await deps.api.transferPing(d.endpointId).catch(() => ({ online: false, ready: false }));
+            set({ pings: { ...get().pings, [d.endpointId]: ping } });
+          }),
+        );
+      },
+
+      pushTo: async (device, ids, includeHistory) => {
+        if (get().preparing || ids.length === 0) return;
+        set({ preparing: true, sendProblem: null });
+        try {
+          const sessionId = await deps.api.transferPush(device.endpointId, ids, includeHistory);
+          set({
+            push: { sessionId, deviceName: device.name, docCount: ids.length, move: false },
+            offer: null,
+            moving: false,
+            send: { kind: "waitingForReceiver" },
+            preparing: false,
+          });
+          schedule();
+        } catch {
+          set({ preparing: false, sendProblem: "notReady" });
+        }
+      },
+
+      saveDevice: async (endpointId, name) => {
+        try {
+          await deps.api.transferTrust(endpointId, name);
+          await get().loadTrusted();
+          const { send, receive } = get();
+          // The done cards stop offering to save it.
+          if (send?.kind === "done") set({ send: { ...send, trusted: true } });
+          if (receive?.kind === "done") set({ receive: { ...receive, trusted: true } });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+
+      removeDevice: async (endpointId) => {
+        await deps.api.transferUntrust(endpointId).catch(() => undefined);
+        set({ pings: Object.fromEntries(Object.entries(get().pings).filter(([id]) => id !== endpointId)) });
+        await get().loadTrusted();
+      },
+
+      loadMoveSummary: async () => {
+        try {
+          set({ moveSummary: await deps.api.transferMoveSummary() });
+        } catch {
+          set({ moveSummary: null });
+        }
+      },
+
+      moveOffer: async () => {
+        if (get().preparing) return;
+        set({ preparing: true, sendProblem: null });
+        try {
+          const offer = await deps.api.transferMoveOffer();
+          set({ offer, push: null, moving: true, send: { kind: "waitingForReceiver" }, preparing: false });
+          schedule();
+        } catch {
+          set({ preparing: false, sendProblem: "storage" });
+        }
+      },
+
+      movePush: async (device) => {
+        if (get().preparing) return;
+        set({ preparing: true, sendProblem: null });
+        try {
+          const sessionId = await deps.api.transferMovePush(device.endpointId);
+          set({
+            push: { sessionId, deviceName: device.name, docCount: get().moveSummary?.documents ?? 0, move: true },
+            offer: null,
+            moving: true,
+            send: { kind: "waitingForReceiver" },
+            preparing: false,
+          });
+          schedule();
+        } catch {
+          set({ preparing: false, sendProblem: "notReady" });
+        }
+      },
+
+      setReceiving: async (on) => {
+        if (get().receivingOn === on) return;
+        set({ receivingOn: on });
+        if (get().info) await deps.api.transferReceiving(on).catch(() => undefined);
         schedule();
       },
     };
