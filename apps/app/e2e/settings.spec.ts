@@ -71,3 +71,23 @@ test.describe("on a device set to Greek", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "el");
   });
 });
+
+test("a custom relay must be https and can go back to the public relays", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation").getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByTestId("setting-relay")).toContainText("Public (n0)");
+  await page.getByTestId("setting-relay").click();
+  await page.getByTestId("relay-input").fill("http://relay.example.org");
+  await page.getByTestId("relay-save").click();
+  await expect(page.getByTestId("relay-sheet").getByRole("alert")).toHaveText("Enter an https:// address.");
+  await page.getByTestId("relay-input").fill("https://relay.example.org");
+  await page.getByTestId("relay-save").click();
+  await expect(page.getByTestId("relay-sheet")).toHaveCount(0);
+  await expect(page.getByTestId("setting-relay")).toContainText("relay.example.org");
+  await page.reload();
+  await page.getByRole("navigation").getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByTestId("setting-relay")).toContainText("relay.example.org");
+  await page.getByTestId("setting-relay").click();
+  await page.getByTestId("relay-reset").click();
+  await expect(page.getByTestId("setting-relay")).toContainText("Public (n0)");
+});

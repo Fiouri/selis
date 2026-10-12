@@ -52,6 +52,8 @@ pub struct Settings {
     pub night_mode: bool,
     /// Transfer without the relay, same Wi-Fi only (used from P3).
     pub local_only: bool,
+    /// A self-hosted relay (`https://…`) instead of the public n0 relays.
+    pub relay_url: Option<String>,
     /// Versions kept per document, the current one included.
     pub versions_per_document: u32,
     /// History kept per document (versions other than v1 and the current one), in MB.
@@ -70,6 +72,7 @@ impl Default for Settings {
             library_view: LibraryView::default(),
             night_mode: false,
             local_only: false,
+            relay_url: None,
             versions_per_document: retention.versions_per_document,
             history_limit_mb: u32::try_from(retention.history_limit_bytes / (1024 * 1024))
                 .unwrap_or(200),
@@ -97,6 +100,8 @@ pub struct SettingsPatch {
     pub library_view: Option<LibraryView>,
     pub night_mode: Option<bool>,
     pub local_only: Option<bool>,
+    /// `""` goes back to the public relays.
+    pub relay_url: Option<String>,
     pub versions_per_document: Option<u32>,
     pub history_limit_mb: Option<u32>,
     pub app_lock: Option<bool>,
@@ -108,6 +113,7 @@ const KEY_LIBRARY_SORT: &str = "librarySort";
 const KEY_LIBRARY_VIEW: &str = "libraryView";
 const KEY_NIGHT_MODE: &str = "nightMode";
 const KEY_LOCAL_ONLY: &str = "localOnly";
+const KEY_RELAY_URL: &str = "relayUrl";
 const KEY_VERSIONS_PER_DOCUMENT: &str = "versionsPerDocument";
 const KEY_HISTORY_LIMIT_MB: &str = "historyLimitMb";
 const KEY_APP_LOCK: &str = "appLock";
@@ -127,6 +133,12 @@ pub(crate) fn load(library: &Library) -> CommandResult<Settings> {
             }
             KEY_NIGHT_MODE => settings.night_mode = value.as_bool().unwrap_or_default(),
             KEY_LOCAL_ONLY => settings.local_only = value.as_bool().unwrap_or_default(),
+            KEY_RELAY_URL => {
+                settings.relay_url = value
+                    .as_str()
+                    .and_then(selis_transfer::parse_relay_url)
+                    .map(|u| u.to_string());
+            }
             KEY_APP_LOCK => settings.app_lock = value.as_bool().unwrap_or_default(),
             KEY_VERSIONS_PER_DOCUMENT => {
                 if let Some(v) = in_range(&value, &VERSIONS_PER_DOCUMENT) {
@@ -173,6 +185,20 @@ fn apply_patch(library: &Library, patch: SettingsPatch) -> CommandResult<Setting
     store(library, KEY_LIBRARY_VIEW, patch.library_view)?;
     store(library, KEY_NIGHT_MODE, patch.night_mode)?;
     store(library, KEY_LOCAL_ONLY, patch.local_only)?;
+    if let Some(url) = patch.relay_url.as_deref() {
+        let url = url.trim();
+        if url.is_empty() {
+            library.set_setting(KEY_RELAY_URL, &serde_json::Value::Null)?;
+        } else {
+            let parsed = selis_transfer::parse_relay_url(url).ok_or_else(|| {
+                CommandError::new(
+                    ErrorCode::InvalidArgument,
+                    "relayUrl must be an https:// URL",
+                )
+            })?;
+            store(library, KEY_RELAY_URL, Some(parsed.to_string()))?;
+        }
+    }
     store(library, KEY_APP_LOCK, patch.app_lock)?;
     let retention_changed =
         patch.versions_per_document.is_some() || patch.history_limit_mb.is_some();
@@ -237,6 +263,40 @@ mod tests {
         assert_eq!(s.theme, ThemePref::System);
         // English first, whatever the device language; Greek is a choice in Settings.
         assert_eq!(s.locale, LocalePref::En);
+    }
+
+    #[test]
+    fn stores_validates_and_clears_a_custom_relay() {
+        let (_dir, lib) = library();
+        let bad = apply_patch(
+            &lib,
+            SettingsPatch {
+                relay_url: Some("http://relay.example.org".into()),
+                ..SettingsPatch::default()
+            },
+        );
+        assert!(bad.is_err());
+        let saved = apply_patch(
+            &lib,
+            SettingsPatch {
+                relay_url: Some("https://relay.example.org".into()),
+                ..SettingsPatch::default()
+            },
+        )
+        .expect("patch");
+        assert_eq!(
+            saved.relay_url.as_deref(),
+            Some("https://relay.example.org/")
+        );
+        let cleared = apply_patch(
+            &lib,
+            SettingsPatch {
+                relay_url: Some(String::new()),
+                ..SettingsPatch::default()
+            },
+        )
+        .expect("patch");
+        assert_eq!(cleared.relay_url, None);
     }
 
     #[test]

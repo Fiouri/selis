@@ -24,13 +24,34 @@ Available now (P0):
 - Fast viewer for large documents (1000+ pages): virtualized scrolling and pinch-zoom.
 - English and Greek (English by default; Greek in Settings → Language), light / dark / sepia themes.
 
-Planned (see [docs/SPEC.md](docs/SPEC.md)): annotations, signatures, forms, page tools,
-redaction, OCR, scanning, and device-to-device transfer without an account.
+Planned (see [docs/SPEC.md](docs/SPEC.md)): OCR, scanning, trusted devices, library move and
+`.selispack` export.
+
+## Transfer (device to device, no account)
+
+Send documents straight to your other device:
+
+1. **Send** tab: choose documents (optionally with their version history) → a QR code and a
+   `selis://transfer/…` link appear (valid once, for 10 minutes).
+2. On the other device, **Receive** tab: scan the code (or paste the link; the system camera app
+   can open the link too).
+3. Both screens show the same 6-digit code. The sender confirms only if it matches.
+4. The documents arrive verified (BLAKE3) in the other library, labelled "received". An
+   interrupted transfer resumes where it stopped, even after the app was closed.
+
+Devices connect directly when they can (same Wi‑Fi, or across networks), otherwise through an
+encrypted relay. Settings › Transfer: **Local network only** (no relay, no address lookup) or your
+own **relay**. Nothing touches the network until you open the Transfer screen. Details:
+[docs/PRIVACY.md](docs/PRIVACY.md), protocol: [ADR 0010](docs/adr/0010-transfer-protocol.md).
+
+Developers: `cargo run -p selis-transfer --example selis-peer -- send <file.pdf>` (or
+`receive <link>`) is a terminal peer for testing against the app.
 
 ## Privacy
 
 Selis collects nothing. There is no account, no analytics, no crash reporting and no network
-access at startup. Your library lives in the app's private storage on your device.
+access at startup. Your library lives in the app's private storage on your device. The network is
+used only by Transfer, while you use it: see [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Build from source
 
@@ -60,7 +81,7 @@ Checks: `npm run verify:tier1` (TypeScript, ESLint, Vitest, rustfmt, Clippy, car
 | --- | --- |
 | `apps/app` | The Tauri app: React UI (`src/`) and Rust shell (`src-tauri/`) |
 | `crates/selis-core` | Library index (SQLite), versions, atomic file store, BLAKE3 |
-| `crates/selis-transfer` | Peer-to-peer transfer (planned, P3) |
+| `crates/selis-transfer` | Peer-to-peer transfer (iroh): tickets, handshake, gated blobs, resume; `selis-peer` dev CLI |
 | `packages/engine` | PDF engine wrapper (EmbedPDF / PDFium WASM in a Web Worker) |
 | `packages/ui` | Design tokens and UI primitives |
 | `packages/fixtures` | Synthetic PDF test corpus generator |

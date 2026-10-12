@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-transfer-resume"
+description = "Enables the transfer_resume command without any pre-configured scope."
+commands.allow = ["transfer_resume"]
+
+[[permission]]
+identifier = "deny-transfer-resume"
+description = "Denies the transfer_resume command without any pre-configured scope."
+commands.deny = ["transfer_resume"]

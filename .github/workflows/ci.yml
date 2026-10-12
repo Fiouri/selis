@@ -98,6 +98,8 @@ jobs:
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
+      - name: Local-network permission before targetSdk 37 (ADR 0010)
+        run: scripts/check-android-local-network.sh
       - name: Build debug APK
         # ANDROID_HOME comes from the runner image, so it is only visible to the shell.
         run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --debug --apk
@@ -156,3 +158,27 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
       - run: npm run tauri -- build --no-bundle
+
+  fuzz:
+    # cargo-fuzz on the parsers that read another device's bytes (tickets, manifests,
+    # control messages). libFuzzer needs nightly features and does not link on Windows
+    # MSVC, so it runs here; `cargo test` covers the same entry points on stable.
+    name: Fuzz transfer parsers (60 s each)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # The pinned stable toolchain (rust-toolchain.toml) with nightly features unlocked:
+      # reproducible, unlike a floating nightly (one hit an ICE on iroh-blobs).
+      - name: cargo-fuzz
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          cargo install cargo-fuzz --locked
+      - name: Fuzz
+        working-directory: crates/selis-transfer/fuzz
+        env:
+          RUSTC_BOOTSTRAP: "1"
+        run: |
+          for t in ticket manifest wire; do
+            cargo fuzz run "$t" -- -max_total_time=60
+          done

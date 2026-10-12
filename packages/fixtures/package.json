@@ -7,7 +7,8 @@
   "description": "Generated PDF test corpus. No third-party documents: every file is synthesized by scripts/generate.ts.",
   "exports": {
     ".": "./src/index.ts",
-    "./oracle": "./src/oracle.ts"
+    "./oracle": "./src/oracle.ts",
+    "./transfer/*": "./transfer/*"
   },
   "scripts": {
     "generate": "node scripts/generate.ts",

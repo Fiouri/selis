@@ -1,4 +1,4 @@
-import { Switch } from "@selis/ui";
+import { Button, Switch } from "@selis/ui";
 import { Check, ChevronRight } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -208,13 +208,85 @@ function ChoiceSheet<T extends string | number>({
   );
 }
 
-type Picker = "language" | "versions" | "history" | null;
+/** Custom relay (Settings › Transfer): an https:// address, or empty for the public relays. */
+function RelaySheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  const relayUrl = useSettings((s) => s.relayUrl);
+  const setRelayUrl = useSettings((s) => s.setRelayUrl);
+  const [value, setValue] = useState(relayUrl ?? "");
+  const [invalid, setInvalid] = useState(false);
+  const inputId = useId();
+  const errorId = useId();
+  const save = async (url: string) => {
+    try {
+      await setRelayUrl(url);
+      setInvalid(false);
+      onClose();
+    } catch {
+      setInvalid(true);
+    }
+  };
+  return (
+    <Sheet open={open} onClose={onClose} title={t("settings.relayTitle")} testId="relay-sheet">
+      <form
+        className="flex flex-col gap-3 px-5 pb-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save(value);
+        }}
+      >
+        <p className="text-[13px] text-neutral-11">{t("settings.relayHelp")}</p>
+        <label htmlFor={inputId} className="text-[13px] font-medium text-neutral-11">
+          {t("settings.relayLabel")}
+        </label>
+        <input
+          id={inputId}
+          type="url"
+          inputMode="url"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            setInvalid(false);
+          }}
+          aria-invalid={invalid}
+          aria-describedby={invalid ? errorId : undefined}
+          className="selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12"
+          data-testid="relay-input"
+        />
+        {invalid ? (
+          <p id={errorId} role="alert" className="text-[13px] text-danger-11">
+            {t("settings.relayInvalid")}
+          </p>
+        ) : null}
+        <Button type="submit" data-testid="relay-save">
+          {t("settings.relaySave")}
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setValue("");
+            void save("");
+          }}
+          data-testid="relay-reset"
+        >
+          {t("settings.relayReset")}
+        </Button>
+      </form>
+    </Sheet>
+  );
+}
+
+type Picker = "language" | "versions" | "history" | "relay" | null;
 
 /** Settings per docs/design/p1-ui-brief.md §6. Every change applies at once and persists. */
 export function SettingsScreen() {
   const { t } = useTranslation();
   const locale = useSettings((s) => s.locale);
   const localOnly = useSettings((s) => s.localOnly);
+  const relayUrl = useSettings((s) => s.relayUrl);
   const versions = useSettings((s) => s.versionsPerDocument);
   const historyMb = useSettings((s) => s.historyLimitMb);
   const appLock = useSettings((s) => s.appLock);
@@ -242,6 +314,13 @@ export function SettingsScreen() {
             checked={localOnly}
             onChange={(on) => void setPreference("localOnly", on)}
             testId="setting-local-only"
+          />
+          <Divider />
+          <ValueRow
+            label={t("settings.relay")}
+            value={relayUrl ? new URL(relayUrl).host : t("settings.relayPublic")}
+            onClick={() => setPicker("relay")}
+            testId="setting-relay"
           />
         </Section>
 
@@ -276,6 +355,7 @@ export function SettingsScreen() {
         <p className="mt-8 text-center text-xs text-neutral-11">{t("settings.footer", { version: __APP_VERSION__ })}</p>
       </div>
 
+      {picker === "relay" ? <RelaySheet open onClose={close} /> : null}
       <ChoiceSheet
         open={picker === "language"}
         title={t("settings.language")}

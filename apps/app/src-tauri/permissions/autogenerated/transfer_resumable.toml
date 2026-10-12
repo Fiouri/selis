@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-transfer-resumable"
+description = "Enables the transfer_resumable command without any pre-configured scope."
+commands.allow = ["transfer_resumable"]
+
+[[permission]]
+identifier = "deny-transfer-resumable"
+description = "Denies the transfer_resumable command without any pre-configured scope."
+commands.deny = ["transfer_resumable"]

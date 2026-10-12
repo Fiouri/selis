@@ -320,6 +320,44 @@ for (const lang of LANGS) {
         await expect(page).toHaveScreenshot(shot("transfer"));
       });
 
+      test(`transfer flow (${theme})`, async ({ page }) => {
+        await page.goto("/");
+        await addToLibrary(page, "greek.pdf", c.greek);
+        await addToLibrary(page, "mixed-sizes.pdf", c.lease);
+        await page.getByRole("navigation").getByRole("button", { name: ui(lang, "tabs.transfer") }).click();
+        await page.getByTestId("transfer-doc").first().click();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("transfer-choose"));
+
+        await page.getByTestId("transfer-send-start").click();
+        await expect(page.getByTestId("transfer-qr")).toBeVisible();
+        await page.evaluate(() => document.querySelector<HTMLImageElement>('[data-testid="transfer-qr"]')?.decode());
+        await settle(page);
+        // The countdown ticks every second.
+        await expect(page).toHaveScreenshot(shot("transfer-offer"), { mask: [page.getByTestId("transfer-expires")] });
+
+        await page.evaluate(() => {
+          const hooks = (window as unknown as { __selisTest: { transfer: { peerScans: () => void; hold: (on: boolean) => void } } })
+            .__selisTest.transfer;
+          hooks.hold(true);
+          hooks.peerScans();
+        });
+        await expect(page.getByTestId("transfer-send-code")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("transfer-code"));
+
+        await page.getByTestId("transfer-confirm").click();
+        await expect(page.getByTestId("transfer-send-progress").getByRole("progressbar")).toHaveAttribute("aria-valuenow", "40");
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("transfer-sending"));
+
+        await page.getByTestId("transfer-send-cancel").click();
+        await page.getByRole("tab", { name: ui(lang, "transfer.tabReceive") }).click();
+        await expect(page.getByTestId("transfer-viewfinder")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("transfer-receive"));
+      });
+
       test(`recent (${theme})`, async ({ page }) => {
         await page.goto("/");
         await stockLibrary(page, lang);

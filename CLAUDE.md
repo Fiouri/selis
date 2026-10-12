@@ -98,7 +98,11 @@ Tier 2 — end of every feature:
   `draganddrop`; inspect `.tmp/p2c/drag-*.png`). And `redact.yaml` with `POST_RUN="…/redact.sh check"`
   (earlier versions deleted from the sheet: only the redacted version left; read by pdf.js: redacted
   lines not extracted and their glyph codes nowhere in the file, each box on its own line, no marks
-  left; original untouched). `pages.yaml` inserts the form through the "Insert anyway" sheet. run.sh fails a run on
+  left; original untouched). `pages.yaml` inserts the form through the "Insert anyway" sheet. And `transfer.yaml` with
+  `PRE_RUN="…/transfer.sh pre"` and `POST_RUN="…/transfer.sh post"` (cold start opens no socket; the
+  host dev peer sends a fixture through a `selis://` link; it lands in the library; leaving the
+  Transfer screen leaves no socket; needs `cargo build --release -p selis-transfer --example selis-peer`).
+  run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro
   2.11 sends the DevTools socket name as the WebSocket Host, which WebView 15x (the S23) rejects, so
@@ -108,6 +112,10 @@ Tier 2 — end of every feature:
   light/dark/sepia (`visual-390`; baselines per OS, see CONTRIBUTING.md): `npm run e2e`
 - Windows compile check: `npm run tauri -- build --no-bundle`
 - Visual changes: inspect screenshots (Playwright `test-results/screenshots`, device `adb exec-out screencap`).
+
+Transfer measurements (P3, docs/spike-p3.md): `node scripts/measure-transfer.ts --serial <s>
+--scenario recv|send|resume|expired|reuse|cold [--relay] [--clear]` drives the app over the WebView
+DevTools (debug or `measure` build) against the host dev peer and prints route, MB/s, RSS delta, hashes.
 
 Performance gate (docs/spike-p0.md): 1000-page fixture — first page < 1 s, full scroll without
 crash, WebView memory < 600 MB (`adb shell dumpsys meminfo com.anywecon.selis` + renderer).

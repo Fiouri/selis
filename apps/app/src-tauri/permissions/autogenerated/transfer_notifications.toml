@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-transfer-notifications"
+description = "Enables the transfer_notifications command without any pre-configured scope."
+commands.allow = ["transfer_notifications"]
+
+[[permission]]
+identifier = "deny-transfer-notifications"
+description = "Denies the transfer_notifications command without any pre-configured scope."
+commands.deny = ["transfer_notifications"]

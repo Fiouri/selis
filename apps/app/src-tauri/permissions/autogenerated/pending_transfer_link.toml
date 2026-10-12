@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pending-transfer-link"
+description = "Enables the pending_transfer_link command without any pre-configured scope."
+commands.allow = ["pending_transfer_link"]
+
+[[permission]]
+identifier = "deny-pending-transfer-link"
+description = "Denies the pending_transfer_link command without any pre-configured scope."
+commands.deny = ["pending_transfer_link"]

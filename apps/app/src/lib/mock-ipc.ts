@@ -6,6 +6,7 @@
  * (chunked uploads → working copy → versions).
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { createMockTransfer, TRANSFER_COMMANDS } from "./mock-transfer";
 import type {
   CommandError,
   DeleteReport,
@@ -35,6 +36,7 @@ const DEFAULT_SETTINGS: Settings = {
   libraryView: "grid",
   nightMode: false,
   localOnly: false,
+  relayUrl: null,
   versionsPerDocument: 10,
   historyLimitMb: 200,
   appLock: false,
@@ -462,6 +464,11 @@ function updateSettings(patch: SettingsPatch): Settings {
   if (patch.libraryView) next.libraryView = patch.libraryView;
   if (patch.nightMode !== null) next.nightMode = patch.nightMode;
   if (patch.localOnly !== null) next.localOnly = patch.localOnly;
+  if (patch.relayUrl !== null) {
+    const url = patch.relayUrl.trim();
+    if (url && !/^https:\/\/[^/\s]+/.test(url)) fail("invalidArgument", "relayUrl must be an https:// URL");
+    next.relayUrl = url ? new URL(url).toString() : null;
+  }
   if (patch.appLock !== null) next.appLock = patch.appLock;
   if (patch.versionsPerDocument !== null) next.versionsPerDocument = patch.versionsPerDocument;
   if (patch.historyLimitMb !== null) next.historyLimitMb = patch.historyLimitMb;
@@ -471,10 +478,20 @@ function updateSettings(patch: SettingsPatch): Settings {
 
 export function installMockIpc(): void {
   installTestOpenWith();
+  const transfer = createMockTransfer({
+    fail,
+    runOnce,
+    documentSizes: (ids) => ids.map((docId) => entryOf(docId).doc.sizeBytes),
+    importBytes: (name, bytes) =>
+      importDocument(registerMockFile(new File([new Uint8Array(bytes)], name, { type: "application/pdf" })), name),
+    localOnly: () => loadSettings().localOnly,
+  });
+  (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.transfer = transfer.hooks;
   mockIPC(async (cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     const id = String(args.id);
     if (knobs().failCommands?.includes(cmd)) fail("io", `${cmd} failed (test knob)`);
+    if (TRANSFER_COMMANDS.has(cmd)) return transfer.handle(cmd, args);
     switch (cmd) {
       case "import_document":
         return runOnce(cmd, String(args.requestId), () =>

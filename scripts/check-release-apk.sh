@@ -11,6 +11,9 @@
 #   2. Native libs: no "setWebContentsDebuggingEnabled". wry compiles that call
 #      only with debug_assertions or tauri's `devtools` feature.
 #   3. Native libs: no "SELIS_MEASURE_BUILD" marker (src-tauri/src/lib.rs).
+#   4. Native libs: no "SELIS_DEBUG_FORCE_RELAY" marker: the transfer testing aid
+#      (all traffic through the relay) exists in debug builds only
+#      (commands/transfer.rs, ADR 0010).
 # Needs unzip and aapt2 ($ANDROID_HOME/build-tools/<newest>).
 set -euo pipefail
 
@@ -54,6 +57,9 @@ while IFS= read -r -d '' so; do
   fi
   if grep -q -a 'SELIS_MEASURE_BUILD' "$so"; then
     fail "$name is a --features measure build"
+  fi
+  if grep -q -a 'SELIS_DEBUG_FORCE_RELAY' "$so"; then
+    fail "$name contains the debug-only transfer \"force relay\" option"
   fi
 done < <(find "$work/lib" -name '*.so' -type f -print0)
 

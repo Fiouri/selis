@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-transfer-debug-force-relay"
+description = "Enables the transfer_debug_force_relay command without any pre-configured scope."
+commands.allow = ["transfer_debug_force_relay"]
+
+[[permission]]
+identifier = "deny-transfer-debug-force-relay"
+description = "Denies the transfer_debug_force_relay command without any pre-configured scope."
+commands.deny = ["transfer_debug_force_relay"]

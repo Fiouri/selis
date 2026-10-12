@@ -22,10 +22,15 @@ import app.tauri.plugin.Plugin
  * Rust then imports a copy into the library through the content resolver in
  * read-only mode; the sender's file is never written. No storage permission is
  * needed: the sender grants read access to these URIs with the intent.
+ *
+ * Also collects `selis://transfer/…` links (a QR code scanned with the camera
+ * app, a link tapped elsewhere): the newest one waits for the Transfer screen,
+ * which parses and validates it before anything connects.
  */
 @TauriPlugin
 class OpenWithPlugin(private val activity: Activity) : Plugin(activity) {
   private val pending = ArrayList<JSObject>()
+  @Volatile private var pendingLink: String? = null
 
   init {
     // Registered during app setup, after onCreate: the launch intent is already set.
@@ -45,6 +50,8 @@ class OpenWithPlugin(private val activity: Activity) : Plugin(activity) {
     }
     val result = JSObject()
     result.put("items", items)
+    pendingLink?.let { result.put("link", it) }
+    pendingLink = null
     invoke.resolve(result)
   }
 
@@ -52,6 +59,15 @@ class OpenWithPlugin(private val activity: Activity) : Plugin(activity) {
     if (intent == null || intent.getBooleanExtra(HANDLED_EXTRA, false)) return
     // Reopening from Recents re-delivers the original intent, whose URI grant is gone.
     if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+    val data = intent.data
+    if (intent.action == Intent.ACTION_VIEW && data?.scheme == "selis") {
+      intent.putExtra(HANDLED_EXTRA, true)
+      val link = data.toString()
+      // A ticket is a few hundred characters; anything far longer is not one.
+      if (data.host == "transfer" && link.length <= MAX_LINK_CHARS) pendingLink = link
+      Log.i(TAG, "received a transfer link")
+      return
+    }
     val uris = when (intent.action) {
       Intent.ACTION_VIEW -> listOfNotNull(intent.data)
       Intent.ACTION_SEND -> listOfNotNull(streamExtra(intent)) + clipUris(intent)
@@ -108,6 +124,7 @@ class OpenWithPlugin(private val activity: Activity) : Plugin(activity) {
 
   private companion object {
     const val TAG = "SelisOpenWith"
+    const val MAX_LINK_CHARS = 4096
     const val HANDLED_EXTRA = "com.anywecon.selis.OPEN_WITH_HANDLED"
   }
 }

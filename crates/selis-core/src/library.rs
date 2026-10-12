@@ -463,7 +463,7 @@ impl Library {
         Ok(())
     }
 
-    fn find_imported_by_hash(&self, hash: &str) -> Result<Option<Document>> {
+    pub(crate) fn find_imported_by_hash(&self, hash: &str) -> Result<Option<Document>> {
         let conn = self.conn();
         let doc = conn
             .query_row(
@@ -560,7 +560,7 @@ pub fn title_from_file_name(name: &str) -> String {
     sanitize_title(stem)
 }
 
-fn sanitize_title(raw: &str) -> String {
+pub(crate) fn sanitize_title(raw: &str) -> String {
     raw.chars()
         .filter(|c| !c.is_control())
         .take(MAX_TITLE_CHARS)
