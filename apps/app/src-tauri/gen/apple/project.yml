@@ -94,6 +94,8 @@ targets:
       - sdk: MetalKit.framework
       - sdk: QuartzCore.framework
       - sdk: Security.framework
+      # iroh (netdev / netwatch) reads network interfaces through SystemConfiguration.
+      - sdk: SystemConfiguration.framework
       - sdk: UIKit.framework
       - sdk: WebKit.framework
     preBuildScripts:
