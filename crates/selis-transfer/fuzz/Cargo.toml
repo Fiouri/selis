@@ -1,6 +1,6 @@
 # cargo-fuzz targets for the parsers that take bytes from another device
-# (docs/SPEC.md "Security"): `cargo +nightly fuzz run <target>` from this folder.
-# Not a workspace member (nightly + libFuzzer only).
+# (docs/SPEC.md "Security"): `RUSTC_BOOTSTRAP=1 cargo fuzz run <target>` from this folder
+# (Linux/macOS; CI job "fuzz"). Not a workspace member (libFuzzer only).
 [package]
 name = "selis-transfer-fuzz"
 version = "0.0.0"

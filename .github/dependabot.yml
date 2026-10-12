@@ -36,6 +36,10 @@ updates:
       - dependency-name: "tauri*"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "jni"
+      # libc 0.2.190 limits in6_ifreq to macOS and breaks netdev (iroh) on iOS; stay on
+      # 0.2.189 until netdev or libc fixes it (PR #34).
+      - dependency-name: "libc"
+        versions: [">= 0.2.190, < 0.3"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
