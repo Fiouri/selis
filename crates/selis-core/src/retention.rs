@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::library::Library;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,10 +100,60 @@ impl Library {
     }
 }
 
+impl Library {
+    /// Deletes every version of a document except the newest (the current
+    /// content), v1 included: the explicit "Delete earlier versions" offered
+    /// after a redaction, so no older version keeps what was removed (ADR 0009).
+    /// Files no version or document uses any more are removed; a linked
+    /// document's external file never is. Idempotent.
+    pub fn delete_earlier_versions(&self, document_id: &str) -> Result<RetentionReport> {
+        let mut removed: Vec<Candidate> = Vec::new();
+        {
+            let mut conn = self.conn();
+            let tx = conn.transaction()?;
+            let exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM documents WHERE id = ?1)",
+                [document_id],
+                |r| r.get(0),
+            )?;
+            if !exists {
+                return Err(Error::NotFound(document_id.to_owned()));
+            }
+            {
+                let mut stmt = tx.prepare(
+                    "SELECT id, document_id, file_path, size_bytes FROM versions
+                      WHERE document_id = ?1
+                        AND seq < (SELECT MAX(seq) FROM versions WHERE document_id = ?1)",
+                )?;
+                for c in stmt.query_map([document_id], |r| {
+                    Ok(Candidate {
+                        id: r.get(0)?,
+                        document_id: r.get(1)?,
+                        file_path: r.get(2)?,
+                        size: r.get(3)?,
+                    })
+                })? {
+                    removed.push(c?);
+                }
+            }
+            for c in &removed {
+                tx.execute("DELETE FROM versions WHERE id = ?1", [&c.id])?;
+            }
+            tx.commit()?;
+        }
+        let mut report = RetentionReport::default();
+        for v in &removed {
+            report.removed_versions += 1;
+            report.freed_bytes += u64::try_from(v.size).unwrap_or(0);
+            self.remove_if_unreferenced(&v.file_path)?;
+        }
+        Ok(report)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Error;
     use rusqlite::params;
 
     /// A document with `count` versions (v1 = the import, then 1 KB files); the
@@ -208,6 +258,35 @@ mod tests {
         })?;
         assert_eq!(report, RetentionReport::default());
         assert!(std::path::Path::new(&lib.document_file(&doc.id)?.path).is_file());
+        Ok(())
+    }
+    #[test]
+    fn deleting_earlier_versions_keeps_only_the_current_one() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let a = doc_with_versions(&lib, "a", 4)?;
+        let b = doc_with_versions(&lib, "b", 3)?;
+        let v1: String = lib.conn().query_row(
+            "SELECT file_path FROM versions WHERE document_id = ?1 AND seq = 1",
+            [&a],
+            |r| r.get(0),
+        )?;
+        let report = lib.delete_earlier_versions(&a)?;
+        assert_eq!(report.removed_versions, 3);
+        assert_eq!(seqs(&lib, &a)?, [4]);
+        assert_eq!(seqs(&lib, &b)?, [1, 2, 3], "other documents are untouched");
+        // The removed versions' files are gone, the original import's copy too.
+        assert!(!lib.resolve_location(&v1)?.exists());
+        assert!(!lib.resolve_location("library/a-v2.pdf")?.exists());
+        assert!(lib.resolve_location("library/a-v4.pdf")?.exists());
+        assert_eq!(
+            lib.delete_earlier_versions(&a)?,
+            RetentionReport::default(),
+            "idempotent"
+        );
+        assert!(matches!(
+            lib.delete_earlier_versions("missing"),
+            Err(Error::NotFound(_))
+        ));
         Ok(())
     }
 }

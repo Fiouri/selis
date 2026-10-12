@@ -8,6 +8,7 @@ import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import type { PdfDocumentObject } from "@embedpdf/models";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { FIXTURES, type FixtureName } from "@selis/fixtures";
+import { checkSample } from "@selis/fixtures/oracle";
 import { beforeAll, describe, expect, it } from "vitest";
 import { documentFields, pageWidgets } from "./forms";
 import { applyPageOp, extractPages } from "./pages";
@@ -123,16 +124,14 @@ describe("merging keeps forms fillable", () => {
   });
 });
 
-/** With SELIS_SAMPLES=<dir>: the P2c samples for other readers (see the P2c PR). */
-describe.runIf(Boolean(process.env.SELIS_SAMPLES))("samples for other readers", () => {
-  it("writes a merged form document, an extracted form page and a reordered, rotated document", async () => {
-    const { writeFileSync } = await import("node:fs");
-    const dir = process.env.SELIS_SAMPLES as string;
+/** The P2c samples, read by qpdf and pdf.js (checkSample; with SELIS_SAMPLES=<dir> also written there). */
+describe("samples for other readers", () => {
+  it("a merged form document, an extracted form page and a reordered, rotated document", async () => {
     const merged = await applyPageOp(engine, pdf, fixture("mixed-sizes"), { op: "insertPdf", at: 1, bytes: fixture("acroform") });
-    writeFileSync(`${dir}/merged-form.pdf`, new Uint8Array(merged));
-    writeFileSync(`${dir}/extracted-form.pdf`, new Uint8Array(await extractPages(engine, merged, [1])));
+    await checkSample("merged-form.pdf", new Uint8Array(merged));
+    await checkSample("extracted-form.pdf", new Uint8Array(await extractPages(engine, merged, [1])));
     const moved = await applyPageOp(engine, pdf, fixture("mixed-sizes"), { op: "move", indices: [6], to: 0 });
     const rotated = await applyPageOp(engine, pdf, moved, { op: "rotate", indices: [0, 1], turns: 1 });
-    writeFileSync(`${dir}/reordered-rotated.pdf`, new Uint8Array(rotated));
+    await checkSample("reordered-rotated.pdf", new Uint8Array(rotated));
   });
 });

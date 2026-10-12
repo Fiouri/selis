@@ -63,6 +63,9 @@ export const api = {
     unwrap(ipc().short("rename_document", () => commands.renameDocument(id, title), READ)),
   // A repeat after a lost reply answers notFound, which callers treat as done.
   deleteDocument: (id: string) => unwrap(ipc().short("delete_document", () => commands.deleteDocument(id), READ)),
+  // Removes what is there to remove: a repeat removes nothing.
+  deleteEarlierVersions: (id: string) =>
+    unwrap(ipc().short("delete_earlier_versions", () => commands.deleteEarlierVersions(id), READ)),
   // Sets the position (never increments): safe to repeat.
   setLastPage: (id: string, page: number) =>
     unwrap(ipc().short("set_last_page", () => commands.setLastPage(id, page), READ)),

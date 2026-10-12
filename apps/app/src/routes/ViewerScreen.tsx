@@ -15,6 +15,7 @@ import { useDocStructure } from "../features/pages/pageCommands";
 import { PagesMode } from "../features/pages/PagesMode";
 import { RedactLayer } from "../features/redact/RedactLayer";
 import { applyCommand, discardCommand, useRedactState } from "../features/redact/redactState";
+import { EarlierVersionsSheet } from "../features/redact/EarlierVersionsSheet";
 import { RedactSheet } from "../features/redact/RedactSheet";
 import { SignatureLayer, useSignState } from "../features/sign/SignatureLayer";
 import { SignSheet } from "../features/sign/SignSheet";
@@ -207,6 +208,10 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     void api.recordDocumentInfo(docId, doc.pageCount, null).catch(() => undefined);
   }, [doc, docId, structure]);
 
+  /** The sheet that offers to delete the versions from before a redaction. */
+  const [earlierVersions, setEarlierVersions] = useState(false);
+  const [deletingEarlier, setDeletingEarlier] = useState(false);
+
   /**
    * Leaves the editing mode; the session's edits become a version. Redaction
    * marks that were not applied are taken away first: a saved version never
@@ -226,7 +231,11 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           await session.run(discardCommand(doc, pending));
           showToast(t("redact.discarded", { count: pending.length }));
         }
-        await session.commit();
+        const saved = await session.commit();
+        // A redacted version: the earlier ones still have the removed content (ADR 0009).
+        const redacted = useRedactState.getState().applied > 0;
+        useRedactState.getState().resetApplied();
+        if (redacted && saved && saved.seq > 1) setEarlierVersions(true);
       } catch (err) {
         console.warn("selis: saving the annotations failed", err);
         showToast(t("annotate.saveFailed"), "error");
@@ -246,6 +255,20 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     setChrome(true);
     setDockHidden(false);
     setMode(next);
+  };
+
+  const deleteEarlierVersions = async () => {
+    setDeletingEarlier(true);
+    try {
+      const removed = await api.deleteEarlierVersions(docId);
+      showToast(t("redact.earlierDeleted", { count: removed }));
+    } catch (err) {
+      console.warn("selis: deleting earlier versions failed", err);
+      showToast(t("redact.earlierFailed"), "error");
+    } finally {
+      setDeletingEarlier(false);
+      setEarlierVersions(false);
+    }
   };
 
   const [confirmRedact, setConfirmRedact] = useState(false);
@@ -546,6 +569,12 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           />
         </>
       ) : null}
+      <EarlierVersionsSheet
+        open={earlierVersions}
+        busy={deletingEarlier}
+        onDelete={() => void deleteEarlierVersions()}
+        onKeep={() => setEarlierVersions(false)}
+      />
       <ConfirmDialog
         open={confirmRedact}
         danger

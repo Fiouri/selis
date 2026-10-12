@@ -5,7 +5,7 @@
  * the document is an EditSession command (undo / redo, autosave, a version on
  * close); extract and split make new library documents instead.
  */
-import type { DocHandle, PageOp } from "@selis/engine";
+import type { DocHandle, ImportLosses, PageOp } from "@selis/engine";
 import { IconButton } from "@selis/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { Copy, FilePlus2, FileOutput, type LucideIcon, Redo2, RotateCw, Scissors, Trash2, Undo2, X } from "lucide-react";
@@ -37,6 +37,14 @@ type Props = {
 type Pending = "add" | "extract" | "delete" | null;
 
 const row = "selis-focus flex min-h-14 w-full items-center gap-4 px-5 text-left text-md text-neutral-12 active:bg-neutral-3 disabled:opacity-45";
+
+const LOSS_KINDS = ["signatures", "buttons", "tooltips", "scripts"] as const;
+const LOSS_LABELS: Record<(typeof LOSS_KINDS)[number], string> = {
+  signatures: "pages.lossSignatures",
+  buttons: "pages.lossButtons",
+  tooltips: "pages.lossTooltips",
+  scripts: "pages.lossScripts",
+};
 
 export function PagesMode({ doc, session, sessionState, structure, title, onClose }: Props) {
   const { t } = useTranslation();
@@ -122,6 +130,19 @@ export function PagesMode({ doc, session, sessionState, structure, title, onClos
     void run({ op: "insertBlank", at: insertAt, ...size }, new Set([insertAt]), t("pages.added", { count: 1 }));
   };
 
+  /** A picked PDF waiting for "Insert anyway": the import would drop part of it. */
+  const [importWarning, setImportWarning] = useState<{ bytes: ArrayBuffer; losses: ImportLosses } | null>(null);
+
+  const insertPdf = async (bytes: ArrayBuffer) => {
+    const before = count;
+    await run({ op: "insertPdf", at: insertAt, bytes }, new Set());
+    const added = doc.pageCount - before;
+    if (added > 0) {
+      setSelected(new Set(Array.from({ length: added }, (_, k) => insertAt + k)));
+      showToast(t("pages.added", { count: added }));
+    }
+  };
+
   const addPdf = async () => {
     setPending(null);
     let staged: string | null = null;
@@ -131,20 +152,32 @@ export function PagesMode({ doc, session, sessionState, structure, title, onClos
       setBusy(true);
       staged = await api.stagePdf(source);
       const bytes = await readDocumentBytes(staged);
-      const before = count;
+      // What the import drops is listed first (ADR 0008), never lost silently.
+      const losses = await doc.importLosses(bytes);
       setBusy(false);
-      await run({ op: "insertPdf", at: insertAt, bytes }, new Set());
-      const added = doc.pageCount - before;
-      if (added > 0) {
-        setSelected(new Set(Array.from({ length: added }, (_, k) => insertAt + k)));
-        showToast(t("pages.added", { count: added }));
+      if (Object.values(losses).some((n) => n > 0)) {
+        setImportWarning({ bytes, losses });
+        return;
       }
+      await insertPdf(bytes);
     } catch (err) {
       console.warn("selis: adding a PDF failed", err);
       showToast(t("pages.failed"), "error");
     } finally {
       setBusy(false);
       if (staged) void api.unstage(staged).catch(() => undefined);
+    }
+  };
+
+  const insertAnyway = async () => {
+    const warning = importWarning;
+    setImportWarning(null);
+    if (!warning) return;
+    try {
+      await insertPdf(warning.bytes);
+    } catch (err) {
+      console.warn("selis: adding a PDF failed", err);
+      showToast(t("pages.failed"), "error");
     }
   };
 
@@ -272,6 +305,33 @@ export function PagesMode({ doc, session, sessionState, structure, title, onClos
             </button>
           </li>
         </ul>
+      </Sheet>
+
+      <Sheet open={importWarning !== null} onClose={() => setImportWarning(null)} title={t("pages.lossTitle")} testId="pages-loss-sheet">
+        <div className="flex flex-col gap-3 px-5 pb-4">
+          <p className="text-sm text-neutral-11">{t("pages.lossBody")}</p>
+          <ul className="flex list-disc flex-col gap-1 pl-5 text-sm" data-testid="pages-loss-list">
+            {LOSS_KINDS.filter((kind) => (importWarning?.losses[kind] ?? 0) > 0).map((kind) => (
+              <li key={kind}>{t(LOSS_LABELS[kind], { count: importWarning?.losses[kind] ?? 0 })}</li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => void insertAnyway()}
+            className="selis-focus h-11 w-full rounded-full bg-accent-9 text-sm font-semibold text-accent-contrast active:opacity-80"
+            data-testid="pages-loss-insert"
+          >
+            {t("pages.lossInsert")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setImportWarning(null)}
+            className="selis-focus h-11 w-full rounded-full text-sm font-medium text-neutral-11 active:bg-neutral-3"
+            data-testid="pages-loss-cancel"
+          >
+            {t("pages.lossCancel")}
+          </button>
+        </div>
       </Sheet>
 
       <Sheet open={pending === "extract"} onClose={() => setPending(null)} title={t("pages.extractTitle")} testId="pages-extract-sheet">

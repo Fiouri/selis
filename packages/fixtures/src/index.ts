@@ -1,7 +1,17 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export { ENCRYPTED_PASSWORD, FIXTURES, GREEK_TEXT, greekGlyphHex, LARGE_PAGE_COUNT, type Fixture, type FixtureName } from "./corpus.ts";
+export {
+  ENCRYPTED_PASSWORD,
+  FIXTURES,
+  type Fixture,
+  type FixtureName,
+  GREEK_TEXT,
+  greekGlyphHex,
+  LARGE_PAGE_COUNT,
+  LEAKY_SECRET_LINE,
+  leakyDocument,
+} from "./corpus.ts";
 
 /** Directory where `npm run fixtures` writes the generated corpus (git-ignored). */
 export const FIXTURES_OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "out");

@@ -8,6 +8,14 @@
  * mark is removed too; form fields there are emptied first (their value lives
  * in the field, not only in the widget).
  *
+ * The words that went (the text under the marks, emptied field values, the
+ * removed annotations' text) are then taken out of the rest of the document as
+ * well (metadata, outline, names, fields, structure: sanitize.ts), and the file
+ * is written anew with no older revision or unused object in it. A document
+ * with a security handler (an owner password; one with a user password does
+ * not open in Selis) is written without it: its strings must be readable to be
+ * checked.
+ *
  * Runs on a scratch copy and returns new bytes, like page operations (the
  * worker swaps the open document for them).
  */
@@ -22,8 +30,9 @@ import {
   type PdfWidgetAnnoObject,
   type Rect,
 } from "@embedpdf/models";
-import { type EmbeddedText, fromPdfAnnotation } from "./annotations";
+import { type EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX } from "./annotations";
 import type { PageRect } from "./geometry";
+import { sanitizeRedacted } from "./sanitize";
 
 /** Replacement text size: fits one line in the whiteout's height, within bounds. */
 const MIN_FONT_PT = 6;
@@ -87,12 +96,37 @@ function covered(annots: readonly PdfAnnotationObject[], areas: readonly PageRec
   );
 }
 
-/** Pass 1: empties the form fields under the marks. Returns how many marks the page has. */
-async function emptyFields(engine: PdfiumNative, doc: PdfDocumentObject, page: PdfPageObject): Promise<number> {
+/** The text a field shows: its value, or the selected options. */
+function fieldText(widget: PdfWidgetAnnoObject): string {
+  const field = widget.field;
+  if (field.type === PDF_FORM_FIELD_TYPE.COMBOBOX || field.type === PDF_FORM_FIELD_TYPE.LISTBOX) {
+    return field.options
+      .filter((o) => o.isSelected)
+      .map((o) => o.label)
+      .join(" ");
+  }
+  return typeof field.value === "string" ? field.value : "";
+}
+
+/**
+ * Pass 1: empties the form fields under the marks and collects what goes: the
+ * page text under each mark, the emptied values, the covered annotations' text.
+ * Returns how many marks the page has.
+ */
+async function emptyFields(
+  engine: PdfiumNative,
+  text: EmbeddedText,
+  doc: PdfDocumentObject,
+  page: PdfPageObject,
+  terms: string[],
+): Promise<number> {
   const annots = await pageAnnotations(engine, doc, page);
   const marks = marksOf(annots);
+  for (const r of marks.areas) terms.push(text.boundedText(doc, page, r));
   for (const a of covered(annots, marks.areas)) {
+    if (a.contents) terms.push(a.contents);
     if (a.type !== PdfAnnotationSubtype.WIDGET) continue;
+    terms.push(fieldText(a));
     const empty = emptyValue(a);
     if (empty) await engine.setFormFieldValue(doc, page, a, empty).toPromise();
   }
@@ -100,7 +134,13 @@ async function emptyFields(engine: PdfiumNative, doc: PdfDocumentObject, page: P
 }
 
 /** Pass 2: removes the covered annotations, applies the marks, writes whiteout text. */
-async function redactPage(engine: PdfiumNative, text: EmbeddedText, doc: PdfDocumentObject, page: PdfPageObject): Promise<void> {
+async function redactPage(
+  engine: PdfiumNative,
+  text: EmbeddedText,
+  doc: PdfDocumentObject,
+  page: PdfPageObject,
+  stamps: Set<string>,
+): Promise<void> {
   const annots = await pageAnnotations(engine, doc, page);
   const marks = marksOf(annots);
   if (marks.count === 0) return;
@@ -108,9 +148,11 @@ async function redactPage(engine: PdfiumNative, text: EmbeddedText, doc: PdfDocu
   if (!(await engine.applyAllRedactions(doc, page).toPromise())) throw new Error(`cannot apply the redactions on page ${page.index + 1}`);
   for (const w of marks.whiteouts) {
     const fontSize = Math.min(MAX_FONT_PT, Math.max(MIN_FONT_PT, (w.rect.height - 4) / LINE_HEIGHT_EM));
+    const id = `${TEXT_STAMP_PREFIX}${crypto.randomUUID()}`;
+    stamps.add(id);
     await text.create(doc, page, {
       kind: "text",
-      id: `selis-text-${crypto.randomUUID()}`,
+      id,
       page: page.index,
       rect: w.rect,
       color: "#000000",
@@ -131,29 +173,34 @@ async function withScratch<T>(engine: PdfiumNative, bytes: ArrayBuffer, use: (do
 }
 
 /**
- * Applies all redaction marks of the document `current`; returns the new bytes.
- * Two passes with a save between them: removing a widget makes PDFium drop a
- * field value set in the same session (measured), so the values are emptied
- * and saved first.
+ * Applies all redaction marks of the document `current`; returns the new bytes
+ * and what was taken out of the rest of the document. Two passes with a save
+ * between them: removing a widget makes PDFium drop a field value set in the
+ * same session (measured), so the values are emptied and saved first.
  */
 export async function applyRedactions(
   engine: PdfiumNative,
   text: EmbeddedText,
   current: ArrayBuffer,
-): Promise<{ bytes: ArrayBuffer; applied: number }> {
+): Promise<{ bytes: ArrayBuffer; applied: number; sanitized: string[] }> {
   let applied = 0;
+  const terms: string[] = [];
   const emptied = await withScratch(engine, current, async (doc) => {
-    for (const page of doc.pages) applied += await emptyFields(engine, doc, page);
+    for (const page of doc.pages) applied += await emptyFields(engine, text, doc, page, terms);
+    if (text.isEncrypted(doc)) text.removeEncryption(doc);
     return (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
   });
   if (applied === 0) throw new Error("no redaction marks to apply");
-  const bytes = await withScratch(engine, emptied, async (doc) => {
+  const stamps = new Set<string>();
+  const redacted = await withScratch(engine, emptied, async (doc) => {
     try {
-      for (const page of doc.pages) await redactPage(engine, text, doc, page);
+      for (const page of doc.pages) await redactPage(engine, text, doc, page, stamps);
       return (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
     } finally {
       text.forget(doc.id);
     }
   });
-  return { bytes, applied };
+  // The whiteouts' new text stamps hold the user's new words: kept as written.
+  const { bytes, report } = await sanitizeRedacted(new Uint8Array(redacted), terms, (nm) => stamps.has(nm));
+  return { bytes: bytes.slice().buffer, applied, sanitized: report.removed };
 }

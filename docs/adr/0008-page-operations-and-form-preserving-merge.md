@@ -53,6 +53,10 @@ P2c adds the Pages screen: rotate, delete, reorder, insert blank, duplicate, ext
   orphans and are not recreated); field actions / JavaScript and calculation order are not
   carried; a widget font PDFium cannot name is written as Helvetica. If a customer needs these,
   qpdf (P4) can take over the import step behind the same `applyPageOp` interface.
+- 2026-10-12: these losses are no longer silent. Before inserting, the worker counts them in the
+  picked file (`import-losses.ts`: signature fields, push buttons, field tooltips, JavaScript —
+  document scripts, open / field actions, calculation order) and the pages UI lists them in a sheet
+  with "Insert anyway" / "Cancel"; a file with none of them is inserted at once.
 - Each operation costs a full save + reopen of the document in the worker, and holds the file
   about three times in worker memory for a moment (snapshot, result, open document). Measured on
   the 1000-page fixture (0.8 MB, PDFium WASM in Node on the dev machine): rotate 49 ms, move 10

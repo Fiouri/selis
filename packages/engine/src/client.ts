@@ -292,6 +292,15 @@ export class WorkerPdfEngine implements PdfEngine {
         restructured(msg.pages);
         return { before: msg.before, applied: msg.applied };
       },
+      importLosses: async (bytes) => {
+        ensureOpen();
+        const copy = bytes.slice(0);
+        const msg = await this.request<Extract<WorkerResponse, { type: "importLosses" }>>(
+          (reqId) => ({ type: "importLosses", reqId, docId, bytes: copy }),
+          [copy],
+        );
+        return msg.losses;
+      },
       extractPages: async (indices) => {
         ensureOpen();
         const msg = await this.request<Extract<WorkerResponse, { type: "extracted" }>>((reqId) => ({

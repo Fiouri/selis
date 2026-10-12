@@ -1,6 +1,18 @@
 import type { QuarterTurns } from "./geometry";
 import type { PageOp } from "./pages";
-import type { Annotation, EngineErrorCode, FieldChange, FormField, Glyph, OutlineItem, PageSize, SearchHit, StampImage, TextRun } from "./types";
+import type {
+  Annotation,
+  EngineErrorCode,
+  FieldChange,
+  FormField,
+  Glyph,
+  ImportLosses,
+  OutlineItem,
+  PageSize,
+  SearchHit,
+  StampImage,
+  TextRun,
+} from "./types";
 
 /** Max pixels per rendered bitmap (≈ 4096²): bounds WebView memory on mobile. */
 export const MAX_BITMAP_PIXELS = 16_777_216;
@@ -35,6 +47,7 @@ export type WorkerRequest =
   | { type: "editPages"; reqId: number; docId: string; op: PageOp }
   | { type: "extract"; reqId: number; docId: string; indices: number[] }
   | { type: "applyRedactions"; reqId: number; docId: string }
+  | { type: "importLosses"; reqId: number; docId: string; bytes: ArrayBuffer }
   | { type: "appearance"; reqId: number; docId: string; index: number; id: string }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
@@ -61,6 +74,7 @@ export type WorkerResponse =
   | { type: "pagesEdited"; reqId: number; pages: PageSize[]; before: ArrayBuffer }
   | { type: "extracted"; reqId: number; bytes: ArrayBuffer }
   | { type: "redacted"; reqId: number; pages: PageSize[]; before: ArrayBuffer; applied: number }
+  | { type: "importLosses"; reqId: number; losses: ImportLosses }
   | { type: "appearance"; reqId: number; image: StampImage }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };

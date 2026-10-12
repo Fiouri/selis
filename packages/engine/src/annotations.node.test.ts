@@ -9,6 +9,7 @@ import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import type { PdfAnnotationObject, PdfDocumentObject, PdfPageObject } from "@embedpdf/models";
 import { init } from "@embedpdf/pdfium";
 import { FIXTURES, type FixtureName } from "@selis/fixtures";
+import { checkSample } from "@selis/fixtures/oracle";
 import { beforeAll, describe, expect, it } from "vitest";
 import { EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX, toPdfAnnotation, toSignatureStamp } from "./annotations";
 import type { Annotation } from "./types";
@@ -224,12 +225,12 @@ describe("typed text (stamp with the embedded Latin + Greek font)", () => {
 });
 
 /**
- * With SELIS_SAMPLES=<dir>, writes the fixtures with every kind of annotation
- * there, for checks in other readers (Chrome's viewer, pypdf; see the P2a PR).
+ * The P2a samples: every kind of annotation on greek + mixed-sizes, and 50 on
+ * large-1000; qpdf and pdf.js read each one (checkSample). With
+ * SELIS_SAMPLES=<dir> they are written there for other readers by hand.
  */
-describe.runIf(Boolean(process.env.SELIS_SAMPLES))("samples for other readers", () => {
-  it("writes greek + mixed-sizes with every annotation kind", async () => {
-    const { writeFileSync } = await import("node:fs");
+describe("samples for other readers", () => {
+  it("greek + mixed-sizes with every annotation kind", async () => {
     for (const name of ["greek", "mixed-sizes"] as const) {
       const doc = await open(fixture(name));
       const page = firstPage(doc);
@@ -247,12 +248,11 @@ describe.runIf(Boolean(process.env.SELIS_SAMPLES))("samples for other readers", 
       for (const a of kinds) await add(doc, a);
       expect(page.index).toBe(0);
       const bytes = (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
-      writeFileSync(`${process.env.SELIS_SAMPLES}/annotated-${name}.pdf`, new Uint8Array(bytes));
+      await checkSample(`annotated-${name}.pdf`, new Uint8Array(bytes));
     }
   });
 
-  it("writes large-1000 with 50 annotations (memory gate, docs/spike-p0.md)", async () => {
-    const { writeFileSync } = await import("node:fs");
+  it("large-1000 with 50 annotations (memory gate, docs/spike-p0.md)", async () => {
     const doc = await open(fixture("large-1000"));
     const kinds = ["highlight", "ink", "square", "text", "note"] as const;
     for (let i = 0; i < 50; i++) {
@@ -274,7 +274,9 @@ describe.runIf(Boolean(process.env.SELIS_SAMPLES))("samples for other readers", 
       await add(doc, a);
     }
     const bytes = (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
-    writeFileSync(`${process.env.SELIS_SAMPLES}/large-1000-annotated.pdf`, new Uint8Array(bytes));
+    // pdf.js renders the annotated pages (1–25, 976–1000); qpdf checks the whole file.
+    const annotated = [...Array.from({ length: 25 }, (_, i) => i), ...Array.from({ length: 25 }, (_, i) => 975 + i)];
+    await checkSample("large-1000-annotated.pdf", new Uint8Array(bytes), annotated);
     const reopened = await open(bytes);
     expect(reopened.pageCount).toBe(1000);
     expect(await read(reopened, 999)).toHaveLength(1);

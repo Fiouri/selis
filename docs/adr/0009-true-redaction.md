@@ -60,9 +60,45 @@ EmbedPDF 2.15.1 ships PDFium's redaction (`/Redact` annotations, `applyAllRedact
   could not catch a mark on the wrong line. Fixed by the geometry-placed marks above; the samples are
   now written by the very tests that check them (`SELIS_SAMPLES=<dir>`).
 - A field met by a mark loses its widget and value but keeps its (empty) entry in `/AcroForm
-  /Fields` with its name and tooltip; names are structure, not content.
-- Content outside the page content and annotations is not touched: bookmarks / outline titles,
-  document metadata, attachments, and named destinations can still mention redacted words. Not in
-  P2 scope; a "sanitize document" step can follow (P4 with qpdf).
+  /Fields`; its name stays (structure), its tooltip goes when it names a redacted word (below).
+
+## Update 2026-10-12 — the rest of the document, and earlier versions
+
+- **Redacted words leave the whole file, not only the page.** While applying, the worker collects
+  what goes: the page text under each mark (PDFium `FPDFText_GetBoundedText`), the emptied field
+  values and the removed annotations' text. After PDFium's pass, `sanitize.ts` takes those words out
+  of everything else: Info entries and XMP metadata (dropped), outline titles ("█████"), named
+  destinations, document JavaScript, embedded files (by name, description or content), page-label
+  prefixes, JavaScript actions (open, page, field and annotation actions), form field values,
+  defaults, tooltips and option labels (with their appearances, `NeedAppearances` set), other
+  annotations whose text or drawn appearance names one (removed; author / subject keys dropped), and
+  structure-tree `/Alt`, `/ActualText`, `/E`, `/T`; any other text string left that names one
+  becomes empty. Identifiers (`/NM`, `/ID`) are not text. The whiteout stamps just written are kept
+  as the user typed them.
+- A string "names" a redacted term when one of the term's words (3+ letters or digits, not a short
+  common word, Greek or English) appears in it as a whole word, ignoring case and accents. This
+  over-matches on purpose (a note elsewhere that shares a redacted word goes too): removing too much
+  from a new version beats leaving a trace.
+- **Full rewrite only.** `pdf-objects.ts` (a small object reader / writer: classic and stream
+  cross-references, object streams, Flate + PNG predictors) writes the result as one fresh file:
+  one body, one cross-reference table, no `/Prev`, only the objects still reachable from the
+  catalog and Info. Older revisions and unused objects (which may hold removed content) do not
+  survive. pdf-lib and qpdf stay out of the app (ADR 0002 / CLAUDE.md); qpdf checks the result in
+  tests.
+- A document with a security handler (an owner password; one with a user password does not open
+  in Selis yet) is written without it when redacted: its strings must be readable to be checked.
+  The new version keeps the content readable to anyone, as before; only the owner's permission
+  flags are gone.
+- **Earlier versions.** The new version is clean, but the history (the imported original
+  included) still holds the removed content. After a redacted version is saved, a sheet says so and
+  offers "Delete earlier versions" (`delete_earlier_versions`: every version but the current one,
+  v1 included, and their files once unreferenced; a linked document's external file never) or
+  "Keep them". The confirm dialog says this is coming.
+- Verified (sanitize.node.test.ts): a document that names the redacted line's words in every one of
+  those places, with an unrelated neighbour next to each, is checked with pdf.js (metadata, XMP,
+  outline, destinations, attachments, scripts, labels, widgets, notes), a raw + inflated byte search
+  (no trace, positive control first) and `qpdf --check`; the neighbours stay. Every P2 sample
+  (annotations, forms, pages, redaction) passes `qpdf --check` and renders in pdf.js in the unit
+  tests; CI installs qpdf.
 - Partial glyph overlap: PDFium removes whole text objects / glyphs that meet the quads, so a mark
   that clips a line removes those glyphs entirely (safer than keeping them).

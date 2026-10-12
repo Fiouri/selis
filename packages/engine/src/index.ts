@@ -32,6 +32,7 @@ export {
   type FormField,
   type FormFieldKind,
   type Glyph,
+  type ImportLosses,
   type OpenOptions,
   type PageSize,
   type PdfEngine,

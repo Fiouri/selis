@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-earlier-versions"
+description = "Enables the delete_earlier_versions command without any pre-configured scope."
+commands.allow = ["delete_earlier_versions"]
+
+[[permission]]
+identifier = "deny-delete-earlier-versions"
+description = "Denies the delete_earlier_versions command without any pre-configured scope."
+commands.deny = ["delete_earlier_versions"]

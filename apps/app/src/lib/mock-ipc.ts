@@ -50,6 +50,9 @@ const uploads = new Map<string, Uint8Array[]>();
 const workingCopies = new Map<string, { copy: WorkingCopy; bytes: Uint8Array }>();
 /** Saved versions per document (v1 = the import), labels in order. */
 const versions = new Map<string, VersionLabel[]>();
+/** Versions removed by "Delete earlier versions", per document. */
+const dropped = new Map<string, number>();
+const versionCount = (id: string) => (versions.get(id) ?? []).length + 1 - (dropped.get(id) ?? 0);
 const signatures = new Map<string, Signature>();
 
 /** Registers a picked browser File and returns a source token for import. */
@@ -129,7 +132,7 @@ function installTestOpenWith(): void {
   target.__selisTest ??= {};
   target.__selisTest.inspect = {
     ids: () => listDocuments({ search: "", filter: "all", tagId: null, sort: "recent" }).map((d) => d.id),
-    versions: (id) => (versions.get(id) ?? []).length + 1,
+    versions: (id) => versionCount(id),
     versionLabels: (id) => [...(versions.get(id) ?? [])],
     hasWorkingCopy: (id) => workingCopies.has(id),
     documentText: async (id) => {
@@ -381,11 +384,20 @@ function saveSignature(id: string, kind: SignatureKind, png: string): Signature 
   return signature;
 }
 
+/** Keeps only the current version (the original import included in what goes). */
+function deleteEarlierVersions(id: string): number {
+  entryOf(id);
+  const removed = versionCount(id) - 1;
+  dropped.set(id, (dropped.get(id) ?? 0) + removed);
+  return removed;
+}
+
 function deleteDocument(id: string): DeleteReport {
   const entry = entryOf(id);
   docs.delete(id);
   workingCopies.delete(id);
   versions.delete(id);
+  dropped.delete(id);
   if (entry.doc.thumbnailPath?.startsWith("blob:")) URL.revokeObjectURL(entry.doc.thumbnailPath);
   return { removedFiles: entry.doc.kind === "imported" ? 1 + (entry.doc.thumbnailPath ? 1 : 0) : 0 };
 }
@@ -487,6 +499,8 @@ export function installMockIpc(): void {
         return renameDocument(id, String(args.title));
       case "delete_document":
         return deleteDocument(id);
+      case "delete_earlier_versions":
+        return deleteEarlierVersions(id);
       case "set_favorite":
         return update(id, { favorite: Boolean(args.favorite) });
       case "save_thumbnail":
