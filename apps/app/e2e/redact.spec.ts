@@ -1,13 +1,16 @@
 /**
  * Redaction (P2d) against the mock backend with the real PDFium worker: mark
  * an area and a whiteout, erase a mark, undo / redo, apply after the confirm,
- * and prove the text is gone (full-text search no longer finds it). Leaving
- * with marks not applied removes them.
+ * and prove the text is gone (full-text search no longer finds it, and pdf.js
+ * reading the saved version finds neither the text nor the boxes anywhere but
+ * where the UI drew them). Leaving with marks not applied removes them.
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { greekGlyphHex } from "@selis/fixtures";
+import { type Box, boxDistance, findInFile, isDark, pdfjsAnnotations, pdfjsRender, pdfjsText, solidBox } from "@selis/fixtures/oracle";
 import { firstPageRendered, importFixture, SCREENSHOTS } from "./helpers";
 
-type Inspect = { ids: () => string[]; versions: (id: string) => number };
+type Inspect = { ids: () => string[]; versions: (id: string) => number; documentBytes: (id: string) => Promise<number[]> };
 type TestWindow = { __selisTest: { inspect: Inspect } };
 
 /** A4 width in points: the layer's CSS px per point. */
@@ -108,7 +111,31 @@ test("redact: area + whiteout, erase, undo/redo, confirm, apply removes the text
   await expectSearch(page, "σύννεφο", "None");
   await expectSearch(page, "ψυχοφθόρα", "None");
   await expectSearch(page, "Αριθμοί", "1 / 1");
+
+  // The saved version itself, read by pdf.js: the boxes sit where the UI drew them (±2 pt).
+  const saved = await savedVersion(page);
+  const gone = ["σύννεφο", "παρακολούθηση", "ψυχοφθόρα", "βδελυγμία"];
+  const text = (await pdfjsText(saved)).pages.join("\n");
+  for (const w of gone) expect(text).not.toContain(w);
+  expect(text).toContain("Αριθμοί");
+  expect(findInFile(saved, gone, gone.flatMap((w) => greekGlyphHex(w)))).toEqual([]);
+  const area: Box = { x: 50, y: 143, width: 495, height: 20 };
+  const whiteout: Box = { x: 50, y: 169, width: 350, height: 20 };
+  const stamps = (await pdfjsAnnotations(saved)).filter((a) => a.subtype === "Stamp");
+  expect(stamps.map((a) => [a.page, a.contents])).toEqual([[0, "Διορθωμένη γραμμή"]]);
+  expect(boxDistance(stamps[0]?.rect ?? area, whiteout)).toBeLessThanOrEqual(2);
+  const painted = solidBox(await pdfjsRender(saved, 0, 2, false), { x: 40, y: 133, width: 515, height: 40 }, isDark);
+  expect(boxDistance(painted ?? whiteout, area)).toBeLessThanOrEqual(2);
 });
+
+/** The document's current bytes in the mock backend (the version written on Done). */
+async function savedVersion(page: Page): Promise<Uint8Array> {
+  const bytes = await page.evaluate(() => {
+    const inspect = (window as unknown as TestWindow).__selisTest.inspect;
+    return inspect.documentBytes(inspect.ids()[0] as string);
+  });
+  return new Uint8Array(bytes);
+}
 
 test("redact: leaving without applying removes the marks, the text stays", async ({ page }) => {
   await open(page);

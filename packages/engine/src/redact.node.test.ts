@@ -3,12 +3,26 @@
  * from the saved file (text no longer extracts, image pixels blank), and so are
  * annotations and form values over it. Whiteouts get their Greek text.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import { type PdfAnnotationObject, PdfAnnotationSubtype, type PdfDocumentObject } from "@embedpdf/models";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
-import { FIXTURES, type FixtureName } from "@selis/fixtures";
+import { FIXTURES, type FixtureName, GREEK_TEXT, greekGlyphHex } from "@selis/fixtures";
+import {
+  type Box,
+  boxDistance,
+  countPixels,
+  findInFile,
+  intersects,
+  isDark,
+  pdfjsAnnotations,
+  pdfjsRender,
+  pdfjsText,
+  type Raster,
+  solidBox,
+  type TextItem,
+} from "@selis/fixtures/oracle";
 import { beforeAll, describe, expect, it } from "vitest";
 import { EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX, toPdfAnnotation } from "./annotations";
 import { documentFields } from "./forms";
@@ -178,11 +192,12 @@ describe("applying redactions", () => {
   });
 
   it("whiteout: white area with the replacement text written in the embedded font", async () => {
-    // Page 1, the second line of body text (y ≈ 132 from the top).
+    // Page 1, body line 1 ("Η Σελίς κρατά …", baseline y ≈ 132 from the top).
     const pending = await withMarks(fixture("greek"), [mark(0, { x: 50, y: 118, width: 480, height: 20 }, "white", "Διορθωμένο κείμενο")]);
     const before = await open(pending);
-    const removed = (await extract(before, [0])).split("\r\n")[1] ?? "";
-    expect(removed.length).toBeGreaterThan(5);
+    // The line under the box is named here, not read back from the result.
+    const removed = GREEK_TEXT[0] as string;
+    expect(await extract(before, [0])).toContain(removed);
 
     const { bytes } = await applyRedactions(engine, text, pending);
     const doc = await open(bytes);
@@ -210,18 +225,140 @@ describe("applying redactions", () => {
   });
 });
 
-/** With SELIS_SAMPLES=<dir>: redacted samples for other readers (see the P2d PR). */
-describe.runIf(Boolean(process.env.SELIS_SAMPLES))("samples for other readers", () => {
-  it("writes a redacted text + image page, a redacted form and a whiteout", async () => {
-    const { writeFileSync } = await import("node:fs");
-    const dir = process.env.SELIS_SAMPLES as string;
-    const greek = await withMarks(fixture("greek"), [
-      mark(1, { x: 50, y: 104, width: 420, height: 24 }),
-      mark(1, { x: 56, y: 212, width: 120, height: 150 }),
-      mark(0, { x: 50, y: 118, width: 480, height: 20 }, "white", "Διορθωμένο κείμενο"),
-    ]);
-    writeFileSync(`${dir}/redacted-greek.pdf`, new Uint8Array((await applyRedactions(engine, text, greek)).bytes));
-    const form = await withMarks(fixture("acroform"), [mark(0, { x: 40, y: 80, width: 460, height: 40 })]);
-    writeFileSync(`${dir}/redacted-form.pdf`, new Uint8Array((await applyRedactions(engine, text, form)).bytes));
+/** With SELIS_SAMPLES=<dir>, the files checked below are written there for other readers (Acrobat, qpdf, …). */
+function writeSample(name: string, bytes: Uint8Array): void {
+  const dir = process.env.SELIS_SAMPLES;
+  if (dir) writeFileSync(`${dir}/${name}`, bytes);
+}
+
+/** The glyph box of the whole line holding `text`: the pdf.js items on its baseline. */
+function lineBox(items: readonly TextItem[], page: number, text: string): Box {
+  const first = items.find((i) => i.page === page && i.str.trim() !== "" && text.startsWith(i.str.trim()));
+  if (!first) throw new Error(`line not found: ${text}`);
+  const row = items.filter((i) => i.page === page && Math.abs(i.y - first.y) < 1);
+  const x0 = Math.min(...row.map((i) => i.x));
+  const x1 = Math.max(...row.map((i) => i.x + i.width));
+  const y0 = Math.min(...row.map((i) => i.y));
+  const y1 = Math.max(...row.map((i) => i.y + i.height));
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+}
+
+const grow = (b: Box, by: number): PageRect => ({ x: b.x - by, y: b.y - by, width: b.width + 2 * by, height: b.height + 2 * by });
+
+/**
+ * The produced file itself, read by pdf.js (not PDFium, which wrote it). The
+ * marks are placed from the fixture's line geometry as pdf.js reports it, on
+ * the lines the e2e and Maestro flows redact; the P2d sample hard-coded a box
+ * that sat on another line than the one it was described as removing.
+ */
+describe("the redacted file, read by pdf.js", () => {
+  // Page 1: body line 2 black, body line 3 whiteout. Page 2: the search line and half of the image.
+  const GONE = ["λογαριασμό", "σύννεφο", "παρακολούθηση", "Ξεσκεπάζω", "ψυχοφθόρα", "βδελυγμία", "Αναζήτηση"];
+  const KEPT = ["Η Σελίς κρατά", "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ", "Αριθμοί", "Δεύτερη σελίδα"];
+  const REPLACEMENT = "Διορθωμένο κείμενο";
+  /** Margin around a line's glyph box: covers accents and descenders, clear of the next line (26 pt pitch). */
+  const PAD = 3;
+  let original: Uint8Array;
+  let lines: Record<"above" | "black" | "white" | "below", Box>;
+  let marks: Record<"black" | "white" | "search" | "image", PageRect>;
+  let pending: Uint8Array;
+  let redacted: Uint8Array;
+
+  beforeAll(async () => {
+    original = new Uint8Array(fixture("greek"));
+    const { items } = await pdfjsText(original);
+    const body = (i: number) => lineBox(items, 0, GREEK_TEXT[i] as string);
+    lines = { above: body(0), black: body(1), white: body(2), below: body(3) };
+    marks = {
+      black: grow(lines.black, PAD),
+      white: grow(lines.white, PAD),
+      search: grow(lineBox(items, 1, "Αναζήτηση: «σελίδα», «έγγραφο»."), PAD),
+      // The left half of the colour image (x 56–296, y 212–362 from the top).
+      image: { x: 56, y: 212, width: 120, height: 150 },
+    };
+    // Each mark covers its own line whole and no neighbour.
+    for (const key of ["black", "white"] as const) {
+      expect(marks[key].y).toBeLessThan(lines[key].y);
+      expect(marks[key].y + marks[key].height).toBeGreaterThan(lines[key].y + lines[key].height);
+    }
+    expect(intersects(marks.black, lines.above)).toBe(false);
+    expect(intersects(marks.black, marks.white)).toBe(false);
+    expect(intersects(marks.white, lines.below)).toBe(false);
+
+    pending = new Uint8Array(
+      await withMarks(original.slice().buffer, [
+        mark(0, marks.black),
+        mark(0, marks.white, "white", REPLACEMENT),
+        mark(1, marks.search),
+        mark(1, marks.image),
+      ]),
+    );
+    redacted = new Uint8Array((await applyRedactions(engine, text, pending.slice().buffer)).bytes);
+    writeSample("redacted-greek.pdf", redacted);
+  });
+
+  it("no longer extracts the redacted lines, and still extracts the rest", async () => {
+    const before = (await pdfjsText(pending)).pages.join("\n");
+    for (const w of GONE) expect(before).toContain(w);
+    const after = (await pdfjsText(redacted)).pages.join("\n");
+    for (const w of GONE) expect(after).not.toContain(w);
+    for (const w of KEPT) expect(after).toContain(w);
+  });
+
+  it("leaves no redacted string in the bytes: raw, inflated, as text or as glyph codes", () => {
+    const glyphs = GONE.flatMap((w) => greekGlyphHex(w));
+    // Control: the same search finds every glyph run while the content is still there.
+    expect(findInFile(pending, [], glyphs)).toEqual(glyphs.map((g) => `glyphs <${g}>`));
+    expect(findInFile(redacted, GONE, glyphs)).toEqual([]);
+    expect(findInFile(redacted, [], greekGlyphHex("Αριθμοί"))).toHaveLength(1);
+  });
+
+  it("leaves no /Redact mark: only the whiteout's text stamp, where the mark was (±2 pt)", async () => {
+    const annots = await pdfjsAnnotations(redacted);
+    expect(annots.map((a) => a.subtype)).toEqual(["Stamp"]);
+    const stamp = annots[0];
+    if (!stamp) throw new Error("no stamp");
+    expect(stamp.page).toBe(0);
+    expect(stamp.contents).toBe(REPLACEMENT);
+    expect(boxDistance(stamp.rect, marks.white)).toBeLessThanOrEqual(2);
+  });
+
+  it("paints each black box where its mark was (±2 pt), on its page", async () => {
+    const at = async (page: number, m: PageRect) => solidBox(await pdfjsRender(redacted, page, 2, false), grow(m, 10), isDark);
+    for (const [page, m] of [
+      [0, marks.black],
+      [1, marks.search],
+      [1, marks.image],
+    ] as const) {
+      const painted = await at(page, m);
+      expect(painted, `black box on page ${page + 1}`).not.toBeNull();
+      if (painted) expect(boxDistance(painted, m), JSON.stringify({ page, painted, m })).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("whiteout: its line is blank, the lines around it are untouched, the new text is inside the box", async () => {
+    const before = await pdfjsRender(original, 0, 2, false);
+    const content = await pdfjsRender(redacted, 0, 2, false);
+    expect(countPixels(before, lines.white, isDark)).toBeGreaterThan(200);
+    expect(countPixels(content, marks.white, isDark)).toBe(0);
+    for (const line of [lines.above, lines.below]) expect(countPixels(content, line, isDark)).toBe(countPixels(before, line, isDark));
+    const shown = await pdfjsRender(redacted, 0, 2, true);
+    expect(countPixels(shown, marks.white, isDark)).toBeGreaterThan(150);
+    // Nothing of the stamp is drawn outside its box.
+    const ring = grow(marks.white, 6);
+    const outside = (img: Raster) => countPixels(img, ring, isDark) - countPixels(img, marks.white, isDark);
+    expect(outside(shown)).toBe(outside(content));
+  });
+
+  it("form: no trace of the redacted value or label, no mark left, the other fields kept", async () => {
+    const formPending = new Uint8Array(await withMarks(fixture("acroform"), [mark(0, { x: 40, y: 80, width: 460, height: 40 })]));
+    const out = new Uint8Array((await applyRedactions(engine, text, formPending.slice().buffer)).bytes);
+    expect(findInFile(formPending, ["Ada Lovelace"])).toEqual(["Ada Lovelace"]);
+    expect(findInFile(out, ["Ada Lovelace"])).toEqual([]);
+    expect((await pdfjsText(out)).pages.join("\n")).not.toContain("Full name");
+    const annots = await pdfjsAnnotations(out);
+    expect(annots.some((a) => a.subtype === "Redact")).toBe(false);
+    expect(annots.filter((a) => a.subtype === "Widget").length).toBeGreaterThan(0);
+    writeSample("redacted-form.pdf", out);
   });
 });

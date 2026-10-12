@@ -169,8 +169,10 @@ export const PageView = memo(function PageView({
       </button>
     );
   }
+  // A group, not an image: an image's children are presentational, which would hide
+  // the editors on the page (text box, note, their buttons) from TalkBack.
   return (
-    <div role="img" aria-label={label} data-page={index + 1} className={className} style={style}>
+    <div role="group" aria-label={label} data-page={index + 1} className={className} style={style}>
       {body}
     </div>
   );

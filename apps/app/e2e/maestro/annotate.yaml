@@ -39,9 +39,11 @@ name: Annotate, save a version, recover after a kill
     duration: 1200
 - tapOn: "Undo"
 - tapOn: "Redo"
-# Typed text (ASCII: adb input has no Unicode). The tool row scrolls sideways.
+# Typed text (ASCII: adb input has no Unicode). The tool row scrolls sideways;
+# the swipe starts on "Pen", away from the screen edge, where a swipe is the
+# system back gesture on devices with gesture navigation (S23).
 - swipe:
-    from: "Shapes"
+    from: "Pen"
     direction: LEFT
 - tapOn: "Text"
 - tapOn:

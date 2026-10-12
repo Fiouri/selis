@@ -362,7 +362,7 @@ function loadNotoSans(subset: "greek" | "latin"): TrueTypeFont {
   return parseTrueType(woffToSfnt(new Uint8Array(readFileSync(path))));
 }
 
-const GREEK_TEXT = [
+export const GREEK_TEXT = [
   "Η Σελίς κρατά κάθε έγγραφο στη συσκευή σου.",
   "Χωρίς λογαριασμό, χωρίς σύννεφο, χωρίς παρακολούθηση.",
   "Ξεσκεπάζω την ψυχοφθόρα βδελυγμία.",
@@ -371,34 +371,45 @@ const GREEK_TEXT = [
   "Αριθμοί 0123456789 και σημεία στίξης: « » ; · ,",
 ];
 
+type GreekFonts = { G: EmbeddedFont; L: EmbeddedFont };
+
+function greekFonts(): GreekFonts {
+  return {
+    G: new EmbeddedFont(loadNotoSans("greek"), "AAAAAA+NotoSans-Greek"),
+    L: new EmbeddedFont(loadNotoSans("latin"), "AAAAAB+NotoSans-Latin"),
+  };
+}
+
+/** Splits text into runs per font of the Greek fixture; characters neither font has are dropped. */
+function greekRuns(fonts: GreekFonts, text: string): Array<{ font: keyof GreekFonts; text: string }> {
+  const runs: Array<{ font: keyof GreekFonts; text: string }> = [];
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) as number;
+    const which = fonts.G.has(cp) ? "G" : fonts.L.has(cp) ? "L" : null;
+    if (!which) continue;
+    const last = runs.at(-1);
+    if (last?.font === which) last.text += ch;
+    else runs.push({ font: which, text: ch });
+  }
+  return runs;
+}
+
+/**
+ * The glyph codes the Greek fixture's content streams show `text` with (hex,
+ * one entry per font run): what a redaction test searches the produced file
+ * for, since content streams hold glyph codes, not Unicode.
+ */
+export function greekGlyphHex(text: string): string[] {
+  const fonts = greekFonts();
+  return greekRuns(fonts, text).map((r) => fonts[r.font].encode(r.text).slice(1, -1));
+}
+
 function buildGreek(): Uint8Array {
   const w = new PdfWriter("selis-fixture-greek");
-  const greek = new EmbeddedFont(loadNotoSans("greek"), "AAAAAA+NotoSans-Greek");
-  const latin = new EmbeddedFont(loadNotoSans("latin"), "AAAAAB+NotoSans-Latin");
-
-  /** Splits text into runs per font; characters neither font has are dropped. */
+  const fonts = greekFonts();
   const show = (text: string, size: number, x: number, y: number): string => {
-    let out = `BT ${x} ${y} Td`;
-    let current: "G" | "L" | null = null;
-    let run = "";
-    const flush = () => {
-      if (!current || !run) return;
-      const font = current === "G" ? greek : latin;
-      out += ` /${current} ${size} Tf ${font.encode(run)} Tj`;
-      run = "";
-    };
-    for (const ch of text) {
-      const cp = ch.codePointAt(0) as number;
-      const which = greek.has(cp) ? "G" : latin.has(cp) ? "L" : null;
-      if (!which) continue;
-      if (which !== current) {
-        flush();
-        current = which;
-      }
-      run += ch;
-    }
-    flush();
-    return `${out} ET`;
+    const runs = greekRuns(fonts, text).map((r) => ` /${r.font} ${size} Tf ${fonts[r.font].encode(r.text)} Tj`);
+    return `BT ${x} ${y} Td${runs.join("")} ET`;
   };
 
   const page1 = [show("Ελληνικό κείμενο", 26, 56, 760), ...GREEK_TEXT.map((t, i) => show(t, 13, 56, 710 - i * 26))].join(
@@ -413,7 +424,7 @@ function buildGreek(): Uint8Array {
 
   // Content is generated before the fonts are written so the used-glyph sets are complete.
   const contents = [page1, page2];
-  const resources = { Font: { G: greek.write(w), L: latin.write(w) }, XObject: { Im1: gradientImage(w, 64, 40) } };
+  const resources = { Font: { G: fonts.G.write(w), L: fonts.L.write(w) }, XObject: { Im1: gradientImage(w, 64, 40) } };
   finishDocument(
     w,
     contents.map((content) => ({ size: A4, content })),

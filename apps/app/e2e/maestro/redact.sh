@@ -5,9 +5,11 @@
 #     apps/app/e2e/maestro/run.sh <serial> apps/app/e2e/maestro/redact.yaml
 #
 # check: app data holds two library files (the imported original + the version
-#        written on Done); the version has no pending /Redact marks, its text
-#        (extracted by PDFium) no longer has the two redacted lines but keeps the
-#        rest; no working copy is left; the original in Download/ is untouched.
+#        written on Done); the version has no pending /Redact marks; read by
+#        pdf.js (redact-check.ts) its text no longer has the two redacted lines
+#        but keeps the rest, their glyph codes are nowhere in the file, and each
+#        box sits on its own line; no working copy is left; the original in
+#        Download/ is untouched.
 # Needs a debuggable build (run-as). Prerequisite: ./push-fixtures.sh <serial>.
 set -euo pipefail
 mode="${1:?usage: redact.sh check <serial>}"
@@ -39,23 +41,14 @@ fi
 out="$root/.tmp/redact-check"
 mkdir -p "$out"
 adb -s "$serial" exec-out run-as "$app" cat "$newest" > "$out/version.pdf"
-# node is a Windows program under Git Bash: hand it a Windows path.
-pdf_path="$(cygpath -m "$out/version.pdf" 2>/dev/null || echo "$out/version.pdf")"
-text="$(cd "$here" && node pdf-text.ts "$pdf_path")"
-for gone in "σύννεφο" "ψυχοφθόρα"; do
-  if printf '%s' "$text" | grep -q "$gone"; then
-    echo "the version still contains \"$gone\""
-    exit 1
-  fi
-done
-if ! printf '%s' "$text" | grep -q "Αριθμοί"; then
-  echo "the version lost text that was not redacted"
-  exit 1
-fi
+# node is a Windows program under Git Bash: hand it Windows paths.
+win() { cygpath -m "$1" 2>/dev/null || echo "$1"; }
+# pdf.js (not PDFium, which wrote the file): text, bytes, marks and box positions.
+(cd "$here" && node redact-check.ts "$(win "$out/version.pdf")" "$(win "$fixtures/greek.pdf")")
 original="$(sha256sum "$fixtures/greek.pdf" | cut -d' ' -f1)"
 got="$(adb -s "$serial" shell sha256sum /sdcard/Download/selis-fixtures/greek.pdf | cut -d' ' -f1 | tr -d '\r')"
 if [ "$got" != "$original" ]; then
   echo "original greek.pdf changed: $got != $original"
   exit 1
 fi
-echo "library: original + version; redacted lines gone from the text, the rest kept; no marks or working copy left; original untouched"
+echo "library: original + version; redacted lines gone (pdf.js), boxes on their lines; no marks or working copy left; original untouched"

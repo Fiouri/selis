@@ -42,11 +42,23 @@ EmbedPDF 2.15.1 ships PDFium's redaction (`/Redact` annotations, `applyAllRedact
 
 ## Consequences
 
-- Verified: unit tests extract the text after applying (gone; the rest kept), sample pixels
-  (image blanked under the mark only), and search the file with every Flate stream inflated
-  (no "Ada Lovelace", no note text), with a positive control before applying. pypdf (strict)
-  reads the redacted samples: no redacted text, `full_name` = "". Maestro `redact.yaml` +
-  `redact.sh check` pulls the version off the device and extracts its text with PDFium.
+- Verified on the produced file with an **independent reader** (`@selis/fixtures/oracle`: pdf.js
+  6.4 + its Node canvas, test-only; not an engine, so ADR 0002 stands): pdf.js no longer extracts the
+  redacted lines and still extracts the rest; the redacted strings are nowhere in the bytes, raw or
+  with every Flate stream inflated, neither as text (UTF-8 / UTF-16BE) nor as the glyph codes the
+  content stream drew them with (positive control before applying); only the whiteout's text stamp
+  is left as an annotation, within ±2 pt of its mark; pdf.js renders each black box within ±2 pt of
+  its mark on the right page, the whiteout's line blank and its neighbours untouched. Marks in the
+  tests are placed from the fixture's line geometry (pdf.js), and each is asserted to cover its own
+  line and no other. The same oracle reads the version saved through the UI (Playwright: the boxes
+  drawn on screen land within ±2 pt in the file) and the version pulled off the device (Maestro
+  `redact.sh check` → `redact-check.ts`: each box covers its line and meets neither neighbour).
+- 2026-10-12 — the P2d sample `redacted-greek.pdf` was described as removing the "σύννεφο" /
+  "ψυχοφθόρα" lines but its generator hard-coded a whiteout box on body line 1 (and no black box on
+  page 1); the redaction itself was correct (line 1 left the content stream, 31 → 29 text objects,
+  the stamp exactly over it). The tests then derived the "removed" line from the result, so they
+  could not catch a mark on the wrong line. Fixed by the geometry-placed marks above; the samples are
+  now written by the very tests that check them (`SELIS_SAMPLES=<dir>`).
 - A field met by a mark loses its widget and value but keeps its (empty) entry in `/AcroForm
   /Fields` with its name and tooltip; names are structure, not content.
 - Content outside the page content and annotations is not touched: bookmarks / outline titles,
