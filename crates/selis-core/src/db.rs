@@ -16,6 +16,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0003_editing.sql"),
     include_str!("../migrations/0004_signatures.sql"),
     include_str!("../migrations/0005_transfers.sql"),
+    include_str!("../migrations/0006_trusted_devices.sql"),
 ];
 
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -114,6 +115,7 @@ mod tests {
                 "signatures",
                 "tags",
                 "transfers",
+                "trusted_devices",
                 "versions",
                 "working_copies"
             ]

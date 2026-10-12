@@ -105,6 +105,16 @@ impl Library {
     /// Copies a received file into the library under its hash; returns (location, hash, size).
     fn store_received(&self, file: &ReceivedFile) -> Result<(String, String, i64)> {
         let files = self.files_dir();
+        // Already in the library (the transfer skipped it, or a repeat): the
+        // library's copy was verified when it came in.
+        if let Some(existing) = self.file_with_hash(&file.blake3) {
+            let size = std::fs::metadata(&existing)
+                .map_err(|e| Error::io(&existing, e))?
+                .len();
+            let size = i64::try_from(size).map_err(|_| Error::InvalidArgument("file too large"))?;
+            let hash = file.blake3.to_ascii_lowercase();
+            return Ok((format!("{FILES_DIR}/{hash}.pdf"), hash, size));
+        }
         let reader = File::open(&file.path).map_err(|e| Error::io(&file.path, e))?;
         let tmp = HashedTempFile::from_reader(&files, reader)?;
         if tmp.size_bytes == 0 {
