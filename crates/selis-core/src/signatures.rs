@@ -29,7 +29,7 @@ pub enum SignatureKind {
 }
 
 impl SignatureKind {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Drawn => "drawn",
             Self::Typed => "typed",

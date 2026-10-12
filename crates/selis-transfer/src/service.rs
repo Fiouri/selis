@@ -875,6 +875,11 @@ impl TransferService {
         lock(&self.inner.receives).get(id).map(|r| r.state.clone())
     }
 
+    /// The device a send went to (known once it connected).
+    pub fn send_peer(&self, id: &str) -> Option<EndpointId> {
+        lock(&self.inner.sends).get(id).and_then(|s| s.peer)
+    }
+
     /// The trusted device that pushed this receive, if it was a push.
     pub fn pushed_by(&self, id: &str) -> Option<EndpointId> {
         lock(&self.inner.receives).get(id).and_then(|r| r.pushed_by)
@@ -953,6 +958,12 @@ fn spawn_receive(
     // The store exports only to absolute paths.
     let dest = std::path::absolute(&dest).unwrap_or(dest);
     let id = new_session_id();
+    // Pushes share the Receive screen's folder: each gets its own.
+    let dest = if pushed_by.is_some() {
+        dest.join(&id)
+    } else {
+        dest
+    };
     lock(&inner.receives).insert(
         id.clone(),
         ReceiveSession {

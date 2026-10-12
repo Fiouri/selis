@@ -172,7 +172,7 @@ pub async fn update_settings(
 }
 
 /// Validates and stores a partial update; tightened retention limits apply at once.
-fn apply_patch(library: &Library, patch: SettingsPatch) -> CommandResult<Settings> {
+pub(crate) fn apply_patch(library: &Library, patch: SettingsPatch) -> CommandResult<Settings> {
     if let Some(v) = patch.versions_per_document {
         check_range("versionsPerDocument", v, &VERSIONS_PER_DOCUMENT)?;
     }

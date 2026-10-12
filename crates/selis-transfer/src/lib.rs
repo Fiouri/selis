@@ -13,6 +13,7 @@ pub mod ticket;
 pub mod wire;
 
 pub use iroh::{EndpointId, RelayUrl, SecretKey};
+pub use iroh_blobs::Hash;
 pub use service::{
     Have, Network, OfferItem, OfferLibrary, OfferSignature, OfferVersion, PUSH_ALPN, ReceiveState,
     ReceivedItem, ReceivedLibrary, ReceivedSignature, ReceivedVersion, ResumeInfo, Route,

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-transfer-ping"
+description = "Enables the transfer_ping command without any pre-configured scope."
+commands.allow = ["transfer_ping"]
+
+[[permission]]
+identifier = "deny-transfer-ping"
+description = "Denies the transfer_ping command without any pre-configured scope."
+commands.deny = ["transfer_ping"]
