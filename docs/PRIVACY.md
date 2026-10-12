@@ -27,6 +27,14 @@ The QR code / link contains your device's network addresses (local and public IP
 documents' content hash and a one-time code valid for 10 minutes. Share it only with the device
 you are sending to.
 
+## Trusted devices and library move
+
+- A device you save after a transfer is stored as a name and its public key, on this device
+  only. It can then send here without QR code — but only while your Receive tab is open — and
+  sends to it skip the code. Remove it at any time (× next to it); it takes effect at once.
+- Moving your library sends your documents, versions, tags, favorites, signatures and settings
+  to your other device, end-to-end encrypted, as any transfer. Your device key is not moved.
+
 ## Device identity
 
 Each device has its own key (Ed25519), made on the device and kept in the system's secure
