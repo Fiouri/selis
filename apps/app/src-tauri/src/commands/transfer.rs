@@ -224,10 +224,11 @@ pub struct ResumableView {
     pub updated_at: i64,
 }
 
-/// Android plugin handles (`DeviceKeyPlugin.kt`, `TransferPlugin.kt`).
+/// Android plugin handle (`TransferPlugin.kt`). One Android plugin per Tauri
+/// plugin: a second `register_android_plugin` in the same setup replaces the
+/// first (the device key has its own, `device_key::init`).
 #[cfg(target_os = "android")]
 pub struct TransferPlugins<R: Runtime> {
-    pub device_key: tauri::plugin::PluginHandle<R>,
     pub transfer: tauri::plugin::PluginHandle<R>,
 }
 
@@ -300,14 +301,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .setup(|app, api| {
             #[cfg(target_os = "android")]
             {
-                let device_key =
-                    api.register_android_plugin("com.anywecon.selis", "DeviceKeyPlugin")?;
                 let transfer =
                     api.register_android_plugin("com.anywecon.selis", "TransferPlugin")?;
-                app.manage(TransferPlugins {
-                    device_key,
-                    transfer,
-                });
+                app.manage(TransferPlugins { transfer });
             }
             #[cfg(not(target_os = "android"))]
             let _ = (app, api);
@@ -372,13 +368,18 @@ pub async fn transfer_open<R: Runtime>(
     if library.resumable_transfers()?.is_empty() {
         let _ = std::fs::remove_dir_all(&base);
     }
-    let mut config = ServiceConfig::new(key, base.join("store"), network);
+    // Testing aid, compiled out of release builds (scripts/check-release-apk.sh).
     #[cfg(debug_assertions)]
-    {
-        // Testing aid, compiled out of release builds (scripts/check-release-apk.sh).
+    let force_relay = {
         std::hint::black_box("SELIS_DEBUG_FORCE_RELAY");
-        config.force_relay = *lock(&state.force_relay) && view != NetworkView::LocalOnly;
-    }
+        *lock(&state.force_relay) && view != NetworkView::LocalOnly
+    };
+    #[cfg(not(debug_assertions))]
+    let force_relay = false;
+    let config = ServiceConfig {
+        force_relay,
+        ..ServiceConfig::new(key, base.join("store"), network)
+    };
     #[cfg(target_os = "android")]
     android_call(&app, "open", serde_json::json!({})).await;
     let service = TransferService::start(config)

@@ -202,6 +202,9 @@ function launch(serial: string): void {
   adb(serial, ["shell", "am", "start", "-W", "-n", `${PKG}/.MainActivity`]);
 }
 
+/** Every peer started, stopped when the run ends (also on errors). */
+const peers: Array<{ kill: () => void }> = [];
+
 /** The dev peer on this computer. */
 class Peer {
   readonly lines: Array<{ t: number; line: string }> = [];
@@ -230,6 +233,7 @@ class Peer {
     };
     this.proc.stdout?.on("data", onData);
     this.proc.stderr?.on("data", onData);
+    peers.push(this);
   }
 
   async waitLine(pattern: RegExp, timeoutMs: number): Promise<{ t: number; line: string }> {
@@ -248,13 +252,18 @@ class Peer {
 
 type Result = Record<string, unknown>;
 
-function libraryHasSha(serial: string, want: string): boolean {
-  const files = adb(serial, ["shell", "run-as", PKG, "ls", "library"]).split(/\s+/).filter((f) => f.endsWith(".pdf"));
-  for (const f of files) {
-    const sum = adb(serial, ["shell", "run-as", PKG, "sha256sum", `library/${f}`]).split(/\s+/)[0];
-    if (sum === want) return true;
-  }
-  return false;
+/** BLAKE3 of a file, as the library names it (`selis-peer hash`). */
+function blake3Of(path: string): string {
+  const exe = join(root, "target", "release", "examples", process.platform === "win32" ? "selis-peer.exe" : "selis-peer");
+  return execFileSync(exe, ["hash", path], { encoding: "utf8" }).split(/\s+/)[0] ?? "";
+}
+
+/** Whether the library lists a document with this BLAKE3 (asked through the app's IPC). */
+async function libraryHas(cdp: Cdp, blake3: string): Promise<boolean> {
+  const docs = await cdp.evaluate<Array<{ blake3: string }>>(
+    `window.__TAURI_INTERNALS__.invoke('list_documents', { query: { search: '', filter: 'all', tagId: null, sort: 'recent' } })`,
+  );
+  return (docs ?? []).some((d) => d.blake3 === blake3);
 }
 
 const digits = (code: string) => code.replace(/\s/g, "");
@@ -377,7 +386,7 @@ async function scenarioSend(o: Options, cdp: Cdp): Promise<Result> {
 async function main(): Promise<number> {
   const o = parseArgs(process.argv.slice(2));
   mkdirSync(scratch, { recursive: true });
-  const want = await sha256(o.file);
+  const want = blake3Of(o.file);
   const base = { serial: o.serial, scenario: o.scenario, relay: o.relay, file: basename(o.file), sizeMb: statSync(o.file).size / 1e6 };
   if (o.clear) {
     adb(o.serial, ["shell", "pm", "clear", PKG]);
@@ -394,7 +403,7 @@ async function main(): Promise<number> {
         await sleep(3_000);
         const { result: r, sender } = await receive(o, cdp);
         sender.kill();
-        result = { ...r, sha256InLibrary: libraryHasSha(o.serial, want) };
+        result = { ...r, blake3InLibrary: await libraryHas(cdp, want) };
         break;
       }
       case "send":
@@ -427,7 +436,7 @@ async function main(): Promise<number> {
           ...first,
           resumedAtPct: resumedAt,
           secondsAfterResume: (Date.now() - t0) / 1000,
-          sha256InLibrary: libraryHasSha(o.serial, want),
+          blake3InLibrary: await libraryHas(cdp, want),
         };
         break;
       }
@@ -470,7 +479,7 @@ async function main(): Promise<number> {
         cdp = await connect(o.serial);
         await waitFor("received", () => cdp.evaluate<boolean>(`!!${q("transfer-receive-done")}`), 30 * 60_000);
         sender.kill();
-        result = { seconds: (Date.now() - t0) / 1000, sha256InLibrary: libraryHasSha(o.serial, want) };
+        result = { seconds: (Date.now() - t0) / 1000, blake3InLibrary: await libraryHas(cdp, want) };
         break;
       }
       default:
@@ -479,6 +488,7 @@ async function main(): Promise<number> {
     console.log(JSON.stringify({ ...base, ...result }));
     return 0;
   } finally {
+    for (const peer of peers) peer.kill();
     cdp.close();
     try {
       adb(o.serial, ["forward", "--remove-all"]);

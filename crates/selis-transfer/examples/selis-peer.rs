@@ -3,6 +3,7 @@
 //!
 //!   selis-peer send <file.pdf>... [net] [--yes] [--keep] [--lifetime <secs>] [--key <file>] [--store <dir>]
 //!   selis-peer receive <selis://transfer/…> [net] [--out <dir>] [--key <file>] [--store <dir>]
+//!   selis-peer hash <file>...   (BLAKE3, as the library names files)
 //!   net: --local-only | --relay-only | --relay <url>
 //!
 //! `send` prints the QR code and the link; when the app scans it, both show the
@@ -112,6 +113,15 @@ async fn ask(question: &str) -> bool {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let a = args()?;
+    if a.cmd == "hash" {
+        // BLAKE3 of files (what the library names them by), without any network.
+        for f in &a.rest {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update_reader(std::fs::File::open(f)?)?;
+            println!("{}  {f}", hasher.finalize().to_hex());
+        }
+        return Ok(());
+    }
     let mut cfg = ServiceConfig::new(secret(a.key.as_ref())?, a.store.clone(), a.network.clone());
     cfg.force_relay = a.force_relay;
     if let Some(secs) = a.lifetime {

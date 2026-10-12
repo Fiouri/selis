@@ -14,6 +14,7 @@
 //! device just looks new next time.
 
 use selis_transfer::SecretKey;
+use tauri::plugin::TauriPlugin;
 use tauri::{AppHandle, Runtime};
 
 #[cfg_attr(target_os = "android", allow(dead_code))]
@@ -39,6 +40,24 @@ pub async fn load_or_create<R: Runtime>(app: &AppHandle<R>) -> (SecretKey, KeySo
     }
 }
 
+/// Registers `DeviceKeyPlugin.kt` (Android). Only Rust calls it: no capability.
+pub fn init<R: Runtime>() -> TauriPlugin<R> {
+    tauri::plugin::Builder::new("selis-device-key")
+        .setup(|app, api| {
+            #[cfg(target_os = "android")]
+            {
+                use tauri::Manager;
+                let handle =
+                    api.register_android_plugin("com.anywecon.selis", "DeviceKeyPlugin")?;
+                app.manage(platform::DeviceKeyHandle(handle));
+            }
+            #[cfg(not(target_os = "android"))]
+            let _ = (app, api);
+            Ok(())
+        })
+        .build()
+}
+
 fn key_from(bytes: &[u8]) -> Option<SecretKey> {
     <[u8; 32]>::try_from(bytes)
         .ok()
@@ -52,7 +71,8 @@ mod platform {
     use tauri::{AppHandle, Manager, Runtime};
 
     use super::{SecretKey, key_from};
-    use crate::commands::transfer::TransferPlugins;
+
+    pub struct DeviceKeyHandle<R: Runtime>(pub tauri::plugin::PluginHandle<R>);
 
     #[derive(Deserialize)]
     struct Sealed {
@@ -60,11 +80,11 @@ mod platform {
     }
 
     pub async fn load_or_create<R: Runtime>(app: &AppHandle<R>) -> Result<SecretKey, String> {
-        let plugins = app
-            .try_state::<TransferPlugins<R>>()
+        let handle = app
+            .try_state::<DeviceKeyHandle<R>>()
             .ok_or("device key plugin not loaded")?;
-        let out: Sealed = plugins
-            .device_key
+        let out: Sealed = handle
+            .0
             .run_mobile_plugin_async("deviceKey", ())
             .await
             .map_err(|e| e.to_string())?;

@@ -88,6 +88,7 @@ pub fn run() {
         .plugin(commands::open_with::init())
         .plugin(commands::share::init())
         .plugin(commands::transfer::init())
+        .plugin(device_key::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             // `scripts/check-release-apk.sh` fails a store APK that contains this marker.
