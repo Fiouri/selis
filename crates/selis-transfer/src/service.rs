@@ -695,11 +695,16 @@ impl TransferService {
 
     /// Closes the endpoint (no socket left) and the store. With `wipe`, the
     /// store's files go too (nothing left to resume).
-    pub async fn close(self, wipe: bool) {
+    pub async fn close(&self, wipe: bool) {
         for r in lock(&self.inner.receives).values_mut() {
             if let Some(task) = r.task.take() {
                 task.abort();
             }
+        }
+        // Offers end with the endpoint (their tickets stop working).
+        let ids: Vec<SessionId> = lock(&self.inner.sends).keys().cloned().collect();
+        for id in ids {
+            self.cancel_send(&id);
         }
         let _ = self.router.shutdown().await;
         self.inner.endpoint.close().await;
@@ -709,7 +714,7 @@ impl TransferService {
         }
     }
 
-    /// The route the endpoint's connection to `peer` currently takes (for the UI chip).
+    /// Where the blob store lives (partial downloads until finished).
     pub fn store_dir(&self) -> &Path {
         &self.store_dir
     }

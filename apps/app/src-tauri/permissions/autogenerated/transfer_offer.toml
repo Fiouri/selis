@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-transfer-offer"
+description = "Enables the transfer_offer command without any pre-configured scope."
+commands.allow = ["transfer_offer"]
+
+[[permission]]
+identifier = "deny-transfer-offer"
+description = "Denies the transfer_offer command without any pre-configured scope."
+commands.deny = ["transfer_offer"]

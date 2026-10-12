@@ -12,11 +12,23 @@ pub mod service;
 pub mod ticket;
 pub mod wire;
 
+pub use iroh::{EndpointId, RelayUrl, SecretKey};
 pub use service::{
     Network, OfferItem, OfferVersion, ReceiveState, ReceivedItem, ReceivedVersion, ResumeInfo,
     Route, SendState, ServiceConfig, ServiceError, SessionId, TransferError, TransferService,
 };
 pub use ticket::{TicketError, TransferTicket};
+
+/// A custom relay from Settings: `https://` only, a sane length, a host.
+pub fn parse_relay_url(input: &str) -> Option<RelayUrl> {
+    let s = input.trim();
+    if s.len() > 512 || !s.starts_with("https://") {
+        return None;
+    }
+    let url: RelayUrl = s.parse().ok()?;
+    url.host_str().filter(|h| !h.is_empty())?;
+    Some(url)
+}
 
 /// ALPN of the Selis control protocol (handshake, code, manifest, progress).
 pub const ALPN: &[u8] = b"selis/transfer/1";
@@ -26,5 +38,19 @@ mod tests {
     #[test]
     fn alpn_is_versioned() {
         assert!(super::ALPN.ends_with(b"/1"));
+    }
+
+    #[test]
+    fn relay_urls_are_https_only() {
+        assert!(super::parse_relay_url(" https://relay.example.org ").is_some());
+        for bad in [
+            "http://relay.example.org",
+            "relay.example.org",
+            "https://",
+            "ftp://x",
+            "",
+        ] {
+            assert!(super::parse_relay_url(bad).is_none(), "{bad}");
+        }
     }
 }

@@ -1,6 +1,8 @@
 //! The `transfers` table (P3, ADR 0010): what was sent and received, and the
 //! receives that can still be resumed after the app was stopped mid-way.
 
+use std::path::PathBuf;
+
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -106,6 +108,16 @@ pub struct TransferUpdate {
     /// `Some(None)` clears it.
     pub resume: Option<Option<String>>,
     pub error: Option<String>,
+}
+
+/// A document as offered to another device: its current file and, on request,
+/// the earlier versions kept in the library (oldest first).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Outgoing {
+    pub title: String,
+    pub current: PathBuf,
+    /// (file, created_at unix ms)
+    pub history: Vec<(PathBuf, i64)>,
 }
 
 fn i64_of(n: u64) -> i64 {
@@ -227,6 +239,39 @@ impl Library {
         rows.into_iter().map(finish_row).collect()
     }
 
+    /// What sending document `id` means: its current file and, with `history`,
+    /// its earlier library versions (a linked document's external original is
+    /// not part of the library and is not sent).
+    pub fn outgoing(&self, id: &str, history: bool) -> Result<Outgoing> {
+        let file = self.document_file(id)?;
+        let current = PathBuf::from(&file.path);
+        let mut earlier = Vec::new();
+        if history {
+            let rows: Vec<(String, i64)> = {
+                let conn = self.conn();
+                let mut stmt = conn.prepare(
+                    "SELECT file_path, created_at FROM versions
+                      WHERE document_id = ?1 AND file_path LIKE 'library/%' ORDER BY seq",
+                )?;
+                stmt.query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))?
+                    .collect::<rusqlite::Result<_>>()?
+            };
+            for (location, created_at) in rows {
+                let path = self.resolve_location(&location)?;
+                // The current file is sent as the document itself; a version
+                // file gone missing is skipped rather than failing the send.
+                if path != current && path.is_file() && !earlier.iter().any(|(p, _)| p == &path) {
+                    earlier.push((path, created_at));
+                }
+            }
+        }
+        Ok(Outgoing {
+            title: file.document.title,
+            current,
+            history: earlier,
+        })
+    }
+
     /// Marks transfers a previous run left "active" (the process died) as interrupted.
     pub fn transfers_mark_interrupted(&self) -> Result<usize> {
         Ok(self.conn().execute(
@@ -278,6 +323,47 @@ mod tests {
             .ok_or_else(|| Error::NotFound(id.clone()))?;
         assert_eq!((t.state, t.resume), (TransferRowState::Done, None));
         assert!(lib.transfer("nope")?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn outgoing_sends_the_current_file_and_optionally_its_history() -> Result<()> {
+        use crate::received::{ReceivedDocument, ReceivedFile};
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let lib = Library::open(dir.path().join("lib"))?;
+        let mut files = Vec::new();
+        for (name, created_at) in [("v1", Some(3)), ("v2", None)] {
+            let bytes = format!(
+                "%PDF-1.7
+% {name}
+%%EOF
+"
+            )
+            .into_bytes();
+            let path = dir.path().join(name);
+            std::fs::write(&path, &bytes).map_err(|e| Error::io(&path, e))?;
+            files.push(ReceivedFile {
+                path,
+                blake3: blake3::hash(&bytes).to_hex().to_string(),
+                created_at,
+            });
+        }
+        let current = files.pop().ok_or_else(|| Error::NotFound("v2".into()))?;
+        let doc = lib
+            .import_received(&ReceivedDocument {
+                title: "T".into(),
+                current,
+                history: files,
+            })?
+            .document;
+        let plain = lib.outgoing(&doc.id, false)?;
+        assert!(plain.history.is_empty() && plain.current.is_file());
+        assert_eq!(plain.title, "T");
+        let full = lib.outgoing(&doc.id, true)?;
+        assert_eq!(full.history.len(), 1);
+        assert_eq!(full.history[0].1, 3);
+        assert_ne!(full.history[0].0, full.current);
+        assert!(lib.outgoing("missing", true).is_err());
         Ok(())
     }
 }

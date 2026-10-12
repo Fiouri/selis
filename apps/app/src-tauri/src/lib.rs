@@ -1,7 +1,10 @@
 //! Tauri builder, plugins and state. Commands live in `commands/` and only
-//! delegate to `selis-core`. Nothing here opens a network connection.
+//! delegate to `selis-core`. Nothing here opens a network connection: the
+//! transfer endpoint (`selis-transfer`) exists only while the Transfer screen
+//! is open (`commands/transfer.rs`).
 
 mod commands;
+mod device_key;
 mod requests;
 
 use std::sync::Arc;
@@ -48,12 +51,29 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::tags::set_document_tags,
         commands::open_with::pending_opens::<tauri::Wry>,
         commands::open_with::dismiss_open,
+        commands::open_with::pending_transfer_link::<tauri::Wry>,
+        commands::open_with::dismiss_transfer_link,
         commands::share::share_document::<tauri::Wry>,
         commands::settings::get_settings,
         commands::settings::update_settings,
         commands::device::device_memory::<tauri::Wry>,
         commands::picker::pick_pdf::<tauri::Wry>,
         commands::picker::pick_image::<tauri::Wry>,
+        commands::transfer::transfer_open::<tauri::Wry>,
+        commands::transfer::transfer_close::<tauri::Wry>,
+        commands::transfer::transfer_offer,
+        commands::transfer::transfer_send_status,
+        commands::transfer::transfer_decide,
+        commands::transfer::transfer_cancel_send,
+        commands::transfer::transfer_receive::<tauri::Wry>,
+        commands::transfer::transfer_receive_status,
+        commands::transfer::transfer_cancel_receive::<tauri::Wry>,
+        commands::transfer::transfer_resumable,
+        commands::transfer::transfer_resume::<tauri::Wry>,
+        commands::transfer::transfer_pause,
+        commands::transfer::transfer_foreground::<tauri::Wry>,
+        commands::transfer::transfer_foreground_stop::<tauri::Wry>,
+        commands::transfer::transfer_debug_force_relay,
         commands::requests::take_result,
     ])
 }
@@ -66,6 +86,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(commands::open_with::init())
         .plugin(commands::share::init())
+        .plugin(commands::transfer::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             // `scripts/check-release-apk.sh` fails a store APK that contains this marker.
@@ -74,7 +95,11 @@ pub fn run() {
             builder.mount_events(app);
             let root = app.path().app_data_dir()?;
             let library = Library::open(root)?;
+            // A transfer "active" in the database belonged to a process that died.
+            let _ = library.transfers_mark_interrupted();
             app.manage(Arc::new(library));
+            // Empty: no endpoint, no socket until the Transfer screen opens.
+            app.manage(Arc::new(commands::transfer::TransferState::default()));
             app.manage(Arc::new(requests::RequestResults::default()));
             app.manage(Arc::new(commands::open_with::OpenQueue::default()));
             Ok(())
@@ -99,6 +124,9 @@ fn on_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
     {
         for url in urls.iter().filter(|u| u.scheme() == "file") {
             queue.push(url.to_string(), None);
+        }
+        for url in urls.iter().filter(|u| u.scheme() == "selis") {
+            queue.push_link(url.as_str());
         }
     }
     #[cfg(not(any(target_os = "ios", target_os = "macos")))]

@@ -116,6 +116,12 @@ export const commands = {
 	/**  Called once a pending document has been imported (or failed for good). */
 	dismissOpen: (id: string) => typedError<null, CommandError>(__TAURI_INVOKE("dismiss_open", { id })),
 	/**
+	 *  The transfer link waiting for the Transfer screen, if any. Not consumed:
+	 *  the screen dismisses it once it has it (a lost reply is asked for again).
+	 */
+	pendingTransferLink: () => typedError<string | null, CommandError>(__TAURI_INVOKE("pending_transfer_link")),
+	dismissTransferLink: (link: string) => typedError<null, CommandError>(__TAURI_INVOKE("dismiss_transfer_link", { link })),
+	/**
 	 *  Opens the share sheet for the document's library copy. The path is resolved
 	 *  here, never taken from the UI.
 	 */
@@ -135,6 +141,41 @@ export const commands = {
 	 *  once per `request_id`.
 	 */
 	pickImage: (requestId: string) => typedError<PickedImage, CommandError>(__TAURI_INVOKE("pick_image", { requestId })),
+	/**  Opens the endpoint (idempotent). Called when the Transfer screen opens. */
+	transferOpen: () => typedError<TransferInfo, CommandError>(__TAURI_INVOKE("transfer_open")),
+	/**
+	 *  Closes the endpoint when the Transfer screen closes or the app goes to the
+	 *  background. With something running and no `force`, it stays open until
+	 *  that ends (the foreground service keeps it going) and `false` is returned.
+	 */
+	transferClose: (force: boolean) => typedError<boolean, CommandError>(__TAURI_INVOKE("transfer_close", { force })),
+	/**  Offers documents: returns the QR code and link (valid 10 minutes, once). */
+	transferOffer: (requestId: string, documentIds: string[], includeHistory: boolean) => typedError<OfferView, CommandError>(__TAURI_INVOKE("transfer_offer", { requestId, documentIds, includeHistory })),
+	transferSendStatus: (sessionId: string) => typedError<SendView, CommandError>(__TAURI_INVOKE("transfer_send_status", { sessionId })),
+	/**  The sender's answer to the code both screens show. */
+	transferDecide: (sessionId: string, confirm: boolean) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_decide", { sessionId, confirm })),
+	transferCancelSend: (sessionId: string) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_cancel_send", { sessionId })),
+	/**
+	 *  Starts receiving from a scanned or pasted link; returns the receive id.
+	 *  The same link again returns the same receive (a double scan, a lost reply).
+	 */
+	transferReceive: (requestId: string, link: string) => typedError<string, CommandError>(__TAURI_INVOKE("transfer_receive", { requestId, link })),
+	transferReceiveStatus: (id: string) => typedError<ReceiveView, CommandError>(__TAURI_INVOKE("transfer_receive_status", { id })),
+	/**  Stops a receive for good: nothing is added, partial data is dropped. */
+	transferCancelReceive: (id: string) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_cancel_receive", { id })),
+	transferResumable: () => typedError<ResumableView[], CommandError>(__TAURI_INVOKE("transfer_resumable")),
+	/**  Continues a receive that stopped (see `transfer_resumable`). */
+	transferResume: (id: string) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_resume", { id })),
+	/**  Pauses every receive (Android's daily foreground-service limit, `timeout` event). */
+	transferPause: () => typedError<null, CommandError>(__TAURI_INVOKE("transfer_pause")),
+	/**
+	 *  Shows or updates the transfer notification (Android foreground service;
+	 *  a no-op elsewhere). Texts come translated from the UI.
+	 */
+	transferForeground: (channel: string, title: string, text: string, progress: number, max: number) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_foreground", { channel, title, text, progress, max })),
+	transferForegroundStop: () => typedError<null, CommandError>(__TAURI_INVOKE("transfer_foreground_stop")),
+	/**  Debug builds only: all traffic through the relay (applies at the next open). */
+	transferDebugForceRelay: (on: boolean) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_debug_force_relay", { on })),
 	/**
 	 *  The state of a long-running request: still running, its final result, or
 	 *  unknown (never received, or expired). Read-only; a fresh call the UI makes
@@ -248,6 +289,20 @@ export type MemorySource =
 /**  iOS `NSProcessInfo.physicalMemory`. */
 "processInfo";
 
+export type NetworkView = "default" | "localOnly" | "customRelay";
+
+export type OfferView = {
+	sessionId: string,
+	/**  `selis://transfer/…` (the QR code's content, also for copying). */
+	link: string,
+	/**  The QR code, black on white (any theme). */
+	qrSvg: string,
+	docCount: number,
+	totalBytes: number | null,
+	/**  Unix seconds after which the code is refused. */
+	expiresAt: number | null,
+};
+
 export type PendingOpen = {
 	id: string,
 	/**  `content://` URI (Android) or `file://` URL (iOS), passed to `import_document`. */
@@ -262,6 +317,25 @@ export type PickedImage = { status: "picked"; mime: string;
 /**  Base64 of the file (the Android IPC carries JSON only). */
 data: string } | { status: "cancelled" };
 
+export type ReceiveView = { kind: "connecting" } | { kind: "confirm"; code: string } | { kind: "receiving"; bytes: number | null; total: number | null; route: RouteView } | { kind: "verifying" } | 
+/**  Adding the documents to the library. */
+{ kind: "saving" } | { kind: "done"; documentIds: string[]; duplicates: number } | 
+/**
+ *  Stopped mid-way (connection lost, app stopped, Android's daily limit):
+ *  `transfer_resume` continues without fetching again what arrived.
+ */
+{ kind: "paused"; bytes: number | null; total: number | null } | { kind: "failed"; error: TransferErrorCode };
+
+export type ResumableView = {
+	id: string,
+	docCount: number,
+	totalBytes: number | null,
+	doneBytes: number | null,
+	updatedAt: number | null,
+};
+
+export type RouteView = "direct" | "relay" | "unknown";
+
 export type SavedVersion = {
 	document: Document,
 	/**  Sequence number of the document's current version. */
@@ -269,6 +343,10 @@ export type SavedVersion = {
 	/**  False when the content was identical to the current version (nothing new stored). */
 	created: boolean,
 };
+
+export type SendView = { kind: "waitingForReceiver" } | { kind: "confirm"; code: string } | { kind: "sending"; bytes: number | null; total: number | null; route: RouteView } | 
+/**  The receiver dropped; it can come back while this screen stays open. */
+{ kind: "interrupted"; bytes: number | null; total: number | null } | { kind: "done" } | { kind: "failed"; error: TransferErrorCode };
 
 export type Settings = {
 	locale: LocalePref,
@@ -279,6 +357,8 @@ export type Settings = {
 	nightMode: boolean,
 	/**  Transfer without the relay, same Wi-Fi only (used from P3). */
 	localOnly: boolean,
+	/**  A self-hosted relay (`https://…`) instead of the public n0 relays. */
+	relayUrl: string | null,
 	/**  Versions kept per document, the current one included. */
 	versionsPerDocument: number,
 	/**  History kept per document (versions other than v1 and the current one), in MB. */
@@ -295,6 +375,8 @@ export type SettingsPatch = {
 	libraryView: LibraryView | null,
 	nightMode: boolean | null,
 	localOnly: boolean | null,
+	/**  `""` goes back to the public relays. */
+	relayUrl: string | null,
 	versionsPerDocument: number | null,
 	historyLimitMb: number | null,
 	appLock: boolean | null,
@@ -337,6 +419,16 @@ export type TakeResult =
 { status: "unknown" };
 
 export type ThemePref = "system" | "light" | "dark" | "sepia";
+
+export type TransferErrorCode = "expired" | "alreadyUsed" | "unknown" | "declined" | "unreachable" | "interrupted" | "mismatch" | "protocol" | "storage" | "cancelled" | 
+/**  Not a Selis transfer link. */
+"invalidLink";
+
+export type TransferInfo = {
+	/**  This device's id as other devices see it (hex). */
+	deviceId: string,
+	network: NetworkView,
+};
 
 /**  How a version came to be. */
 export type VersionLabel = 

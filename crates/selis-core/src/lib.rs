@@ -33,4 +33,4 @@ pub use retention::{RetentionPolicy, RetentionReport};
 pub use save::{SavedVersion, VersionLabel, WorkingCopy};
 pub use signatures::{Signature, SignatureKind};
 pub use tags::Tag;
-pub use transfers::{TransferDirection, TransferRow, TransferRowState, TransferUpdate};
+pub use transfers::{Outgoing, TransferDirection, TransferRow, TransferRowState, TransferUpdate};

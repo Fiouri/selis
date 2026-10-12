@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-transfer-decide"
+description = "Enables the transfer_decide command without any pre-configured scope."
+commands.allow = ["transfer_decide"]
+
+[[permission]]
+identifier = "deny-transfer-decide"
+description = "Denies the transfer_decide command without any pre-configured scope."
+commands.deny = ["transfer_decide"]

@@ -8,6 +8,10 @@
 //! - iOS: `CFBundleDocumentTypes` (Info.plist) makes Selis an "Open in" / "Copy
 //!   to" target; the system hands a file URL to `RunEvent::Opened` (lib.rs).
 //!
+//! Transfer links (`selis://transfer/…`, e.g. a QR code scanned with the camera
+//! app) arrive the same ways and wait here, newest only, for the Transfer
+//! screen (`pending_transfer_link`), which validates them.
+//!
 //! The UI asks on startup and whenever the app comes back to the foreground.
 //! Reading the queue does not consume it, so a lost reply is simply asked for
 //! again (docs/adr/0005-ipc-reliability.md).
@@ -52,7 +56,11 @@ pub struct OpenQueue {
 struct QueueState {
     items: Vec<PendingOpen>,
     next_id: u64,
+    link: Option<String>,
 }
+
+/// Longest transfer link kept (a real one is a few hundred characters).
+const MAX_LINK_CHARS: usize = 4096;
 
 impl OpenQueue {
     /// Adds a document unless the same source is already waiting.
@@ -84,6 +92,34 @@ impl OpenQueue {
             .clone()
     }
 
+    /// Keeps the newest transfer link (anything else is ignored).
+    #[cfg_attr(
+        not(any(target_os = "android", target_os = "ios", target_os = "macos")),
+        allow(dead_code)
+    )]
+    pub fn push_link(&self, link: &str) {
+        let link = link.trim();
+        if link.len() <= MAX_LINK_CHARS && link.starts_with("selis://transfer/") {
+            self.inner.lock().unwrap_or_else(|p| p.into_inner()).link = Some(link.to_owned());
+        }
+    }
+
+    pub fn link(&self) -> Option<String> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .link
+            .clone()
+    }
+
+    /// Forgets `link` once the Transfer screen has it (another, newer one stays).
+    pub fn dismiss_link(&self, link: &str) {
+        let mut state = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        if state.link.as_deref() == Some(link) {
+            state.link = None;
+        }
+    }
+
     /// Removes an entry; unknown ids are ignored (dismiss is idempotent).
     pub fn dismiss(&self, id: &str) {
         self.inner
@@ -113,6 +149,31 @@ pub async fn pending_opens<R: Runtime>(
 #[specta::specta]
 pub async fn dismiss_open(queue: State<'_, Arc<OpenQueue>>, id: String) -> CommandResult<()> {
     queue.dismiss(&id);
+    Ok(())
+}
+
+/// The transfer link waiting for the Transfer screen, if any. Not consumed:
+/// the screen dismisses it once it has it (a lost reply is asked for again).
+#[tauri::command]
+#[specta::specta]
+pub async fn pending_transfer_link<R: Runtime>(
+    app: AppHandle<R>,
+    queue: State<'_, Arc<OpenQueue>>,
+) -> CommandResult<Option<String>> {
+    #[cfg(target_os = "android")]
+    android::drain(&app, &queue).await?;
+    #[cfg(not(target_os = "android"))]
+    let _ = app;
+    Ok(queue.link())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn dismiss_transfer_link(
+    queue: State<'_, Arc<OpenQueue>>,
+    link: String,
+) -> CommandResult<()> {
+    queue.dismiss_link(&link);
     Ok(())
 }
 
@@ -148,6 +209,7 @@ mod android {
     #[derive(Deserialize)]
     struct Taken {
         items: Vec<TakenItem>,
+        link: Option<String>,
     }
 
     #[derive(Deserialize)]
@@ -170,6 +232,9 @@ mod android {
         for item in taken.items {
             queue.push(item.uri, item.name);
         }
+        if let Some(link) = taken.link {
+            queue.push_link(&link);
+        }
         Ok(())
     }
 }
@@ -177,6 +242,22 @@ mod android {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keeps_the_newest_transfer_link_only() {
+        let q = OpenQueue::default();
+        q.push_link("https://example.com");
+        q.push_link(&format!("selis://transfer/{}", "a".repeat(5000)));
+        assert_eq!(q.link(), None);
+        q.push_link(" selis://transfer/one ");
+        q.push_link("selis://transfer/two");
+        assert_eq!(q.link().as_deref(), Some("selis://transfer/two"));
+        q.dismiss_link("selis://transfer/one");
+        assert!(q.link().is_some());
+        q.dismiss_link("selis://transfer/two");
+        assert_eq!(q.link(), None);
+        assert!(q.list().is_empty());
+    }
 
     #[test]
     fn dedupes_by_source_and_dismisses() {
