@@ -20,7 +20,7 @@ name: Transfer receive from a link
 - assertVisible: "1 document was added to your library."
 - tapOn:
     id: "transfer-open-library"
-- assertVisible: "greek"
+- assertVisible: "Open greek"
 # Leaving the Transfer screen closes the endpoint (checked by POST_RUN).
 - tapOn: "Settings"
 - assertVisible:

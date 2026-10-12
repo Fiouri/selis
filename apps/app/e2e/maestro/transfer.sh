@@ -19,7 +19,7 @@ cmd="${1:?usage: transfer.sh sockets|sockets-open|check <serial> [sha256]}"
 serial="${2:?serial}"
 pkg=com.anywecon.selis
 root="$(cd "$(dirname "$0")/../../../.." && pwd)"
-state="$root/.tmp/maestro-transfer"
+state="$root/.tmp/maestro-transfer/$serial"
 fixture="$root/packages/fixtures/out/greek.pdf"
 adb_() { MSYS_NO_PATHCONV=1 adb -s "$serial" "$@"; }
 
@@ -81,7 +81,9 @@ case "$cmd" in
     "$0" sockets "$serial"
     adb_ shell am force-stop "$pkg"
     rm -f "$state/peer.log"
-    "$peer" send "$fixture" --yes --store "$state/store" > "$state/peer.log" 2>&1 &
+    # The peer is a native program: on Windows (Git Bash, MSYS_NO_PATHCONV) give it Windows paths.
+    native() { if command -v cygpath > /dev/null; then cygpath -w "$1"; else echo "$1"; fi; }
+    "$peer" send "$(native "$fixture")" --yes --store "$(native "$state/store")" > "$state/peer.log" 2>&1 &
     echo $! > "$state/peer.pid"
     for _ in $(seq 1 60); do grep -q '^LINK ' "$state/peer.log" && break; sleep 1; done
     link="$(sed -n 's/^LINK //p' "$state/peer.log" | tr -d '\r')"
@@ -98,7 +100,7 @@ case "$cmd" in
     sleep 2
     "$0" sockets "$serial" || status=1
     grep -q '^done' "$state/peer.log" || { echo "FAIL: the peer did not finish" >&2; status=1; }
-    [ -f "$state/peer.pid" ] && kill "$(cat "$state/peer.pid")" 2>/dev/null
+    [ -f "$state/peer.pid" ] && kill "$(cat "$state/peer.pid")" 2>/dev/null || true
     rm -rf "$state/store"
     exit "$status"
     ;;
