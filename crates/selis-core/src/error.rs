@@ -33,6 +33,9 @@ pub enum Error {
 
     #[error("conflict: {0}")]
     Conflict(&'static str),
+
+    #[error("pack: {0}")]
+    Pack(crate::pack::PackError),
 }
 
 impl Error {
