@@ -46,15 +46,22 @@ function lineBox(items: readonly TextItem[], text: string): Box {
   return { x: x0, y: y0, width: Math.max(...row.map((i) => i.x + i.width)) - x0, height: Math.max(...row.map((i) => i.y + i.height)) - y0 };
 }
 
-/** The box lands on `line`: covers its glyph rows, and meets neither neighbour. */
+/**
+ * A line's ink, from its item box (pdf.js: one font size up from the baseline):
+ * cap height (≈ 0.7 em above the baseline) down to the descenders (≈ 0.25 em below).
+ */
+const ink = (line: Box): Box => ({ x: line.x, y: line.y + 0.3 * line.height, width: line.width, height: 0.95 * line.height });
+
+/** The box lands on `line`: covers its capitals down to the baseline, and meets neither neighbour's ink. */
 function onLine(name: string, box: Box | null, line: Box, neighbours: readonly Box[]): void {
   if (!box) {
     failures.push(`${name}: no box found`);
     return;
   }
-  const where = `${name} box y ${box.y.toFixed(1)}–${(box.y + box.height).toFixed(1)}, line y ${line.y.toFixed(1)}–${(line.y + line.height).toFixed(1)}`;
-  check(box.y <= line.y + 1 && box.y + box.height >= line.y + line.height - 1, `${where}: does not cover its line`);
-  for (const n of neighbours) check(!intersects(box, n), `${where}: meets the line at y ${n.y.toFixed(1)}`);
+  const baseline = line.y + line.height;
+  const where = `${name} box y ${box.y.toFixed(1)}–${(box.y + box.height).toFixed(1)}, line caps–baseline ${ink(line).y.toFixed(1)}–${baseline.toFixed(1)}`;
+  check(box.y <= ink(line).y && box.y + box.height >= baseline, `${where}: does not cover its line`);
+  for (const n of neighbours) check(!intersects(box, ink(n)), `${where}: meets the line at y ${ink(n).y.toFixed(1)}`);
 }
 
 const { items } = await pdfjsText(original);

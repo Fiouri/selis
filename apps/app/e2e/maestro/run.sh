@@ -56,6 +56,27 @@ check_disk() {
   done
 }
 
+# Animations off for the runs (restored on exit): Chrome WebView then reports
+# prefers-reduced-motion and the app's sheets appear at once. With them on,
+# Maestro can read a sheet's rows mid-slide and tap a row lower (seen on the S23).
+scales="window_animation_scale transition_animation_scale animator_duration_scale"
+declare -A saved_scale
+for key in $scales; do
+  saved_scale[$key]="$(adb -s "$serial" shell settings get global "$key" | tr -d '\r')"
+  adb -s "$serial" shell settings put global "$key" 0
+done
+restore_scales() {
+  for key in $scales; do
+    value="${saved_scale[$key]}"
+    if [ -z "$value" ] || [ "$value" = null ]; then
+      adb -s "$serial" shell settings delete global "$key" > /dev/null
+    else
+      adb -s "$serial" shell settings put global "$key" "$value"
+    fi
+  done
+}
+trap restore_scales EXIT
+
 pass=0
 fail=0
 for i in $(seq 1 "$runs"); do

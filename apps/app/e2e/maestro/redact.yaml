@@ -18,19 +18,20 @@ name: Redact - text and whiteout, apply, version
 - extendedWaitUntil:
     visible: "Page 1 of 2"
     timeout: 20000
-- tapOn:
-    id: "More"
+- tapOn: "More"
 - tapOn: "Redact content"
 - extendedWaitUntil:
     visible: "Drag across the text to remove."
     timeout: 5000
 
-# Pixel coordinates for the reference AVD (selis-midrange-api36, 1080×2340): one
-# percent of the height is about half a line of this text.
+# Pixel coordinates for 1080×2340 screens, valid on both the reference AVD
+# (selis-midrange-api36, 420 dpi: page top 300 px, 1.68 px/pt) and the Galaxy S23
+# (480 dpi: page top 294 px, 1.65 px/pt). Lines are 26 pt (≈ 43 px) apart; each
+# swipe sits mid-line on both. redact.sh check verifies the line each box lands on.
 # Text tool (default) across body line 2 ("Χωρίς λογαριασμό, χωρίς σύννεφο, …").
 - swipe:
-    start: 130, 556
-    end: 760, 556
+    start: 130, 550
+    end: 760, 550
     duration: 1200
 - extendedWaitUntil:
     visible: "Apply (1)"
@@ -40,14 +41,16 @@ name: Redact - text and whiteout, apply, version
 # (ASCII: adb input has no Unicode).
 - tapOn: "Whiteout"
 - swipe:
-    start: 120, 583
-    end: 600, 617
+    start: 120, 575
+    end: 600, 612
     duration: 1000
+# The editor takes the focus as it opens. Type first: with an on-screen keyboard
+# (S23) the hierarchy lists the editor's buttons only once the keyboard is gone.
+- inputText: "Fixed line"
+- hideKeyboard
 - extendedWaitUntil:
     visible: "Add"
     timeout: 5000
-- inputText: "Fixed line"
-- hideKeyboard
 - tapOn: "Add"
 - extendedWaitUntil:
     visible: "Apply (2)"
