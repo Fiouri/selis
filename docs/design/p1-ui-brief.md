@@ -14,7 +14,7 @@ Tokens come from `packages/ui/src/tokens.css` — never hardcode colors in compo
 - Section labels (h2): 13 px / 600 / `--neutral-11`, margin 20 top 8 bottom.
 - Cards/groups: bg `--surface-raised`, 1 px border `--neutral-5`, radius 14.
 - Selection highlight pattern: bg `--accent-3` + text/icon `--accent-9` (light) / `--accent-11` (dark) + weight 600.
-- Every label is an i18n key (el + en). Greek copy below is the `el` value.
+- Every label is an i18n key (en + el). **English copy is primary** (`en`, the default language on first launch whatever the device language); Greek is its translation (`el`). This brief was written with the Greek copy: where it quotes Greek, that is the `el` value of a key whose English text in `en.json` is the reference. Layouts must fit both (the visual snapshots cover English first, Greek as a second set).
 
 ## Bottom tab bar (Library, Recent, Transfer, Settings)
 
@@ -75,7 +75,7 @@ Tokens come from `packages/ui/src/tokens.css` — never hardcode colors in compo
 
 - Εμφάνιση card:
   - "Θέμα" + radiogroup **2×2 grid** (approved; replaces the 4-option segmented control that overflowed): Σύστημα, Φωτεινό, Σκούρο, Σέπια. Tile height 52, radius 12, mini swatch 30×22 (system = half light/half dark) with 8 px accent dot; selected = inset 2 px accent ring + `--accent-3` bg + 600.
-  - Divider, then row "Γλώσσα" → value "Ελληνικά" + chevron (opens el/en picker).
+  - Divider, then row "Γλώσσα" → value "English" by default + chevron (opens the picker: English, Ελληνικά, "Same as the device"; the choice is stored).
 - Μεταφορά card: switch "Μόνο τοπικό δίκτυο" + helper "Χωρίς relay. Η μεταφορά δουλεύει μόνο στο ίδιο Wi‑Fi." (default off; persisted now, used in P3).
 - Αποθήκευση card: rows "Εκδόσεις ανά έγγραφο" = 10, "Όριο ιστορικού" = 200 MB (tap opens picker).
 - Ασφάλεια card: switch "Κλείδωμα εφαρμογής" + helper "Με δακτυλικό αποτύπωμα ή Face ID" (P1: setting persisted, biometric gate may land later — render disabled with "Σύντομα" if not implemented).

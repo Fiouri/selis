@@ -20,9 +20,9 @@ const THEMES: ReadonlyArray<{ value: ThemePref; key: string; swatch: string; acc
 ];
 
 const LANGUAGES: ReadonlyArray<{ value: LocalePref; key: string }> = [
-  { value: "system", key: "settings.languageSystem" },
-  { value: "el", key: "settings.languageEl" },
   { value: "en", key: "settings.languageEn" },
+  { value: "el", key: "settings.languageEl" },
+  { value: "system", key: "settings.languageSystem" },
 ];
 
 /** Picker values (the backend accepts any value in range). */
@@ -223,7 +223,7 @@ export function SettingsScreen() {
   const [picker, setPicker] = useState<Picker>(null);
   const close = () => setPicker(null);
 
-  const languageLabel = t(LANGUAGES.find((l) => l.value === locale)?.key ?? "settings.languageSystem");
+  const languageLabel = t(LANGUAGES.find((l) => l.value === locale)?.key ?? "settings.languageEn");
 
   return (
     <section className="flex flex-col" data-testid="settings-screen">

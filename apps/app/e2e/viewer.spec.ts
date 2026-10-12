@@ -30,10 +30,18 @@ test("top bar, dock (annotate, sign, pages + coming-soon send), page chip while 
   await dock.getByRole("button", { name: "Share" }).click();
   await expect(page.getByTestId("toast")).toContainText("Sharing is not available here.");
 
-  await page.getByTestId("pdf-viewer").evaluate((el) => {
-    el.scrollTop = 20_000;
-  });
-  await expect(page.getByTestId("page-chip")).toHaveCSS("opacity", "1");
+  // The chip shows while scrolling and fades 1.5 s after: keep scrolling until it is seen
+  // (a stalled runner can otherwise miss the whole window between two polls).
+  let top = 20_000;
+  await expect
+    .poll(async () => {
+      top += 400;
+      await page.getByTestId("pdf-viewer").evaluate((el, y) => {
+        el.scrollTop = y;
+      }, top);
+      return page.getByTestId("page-chip").evaluate((el) => getComputedStyle(el).opacity);
+    })
+    .toBe("1");
   await expect(page.getByTestId("page-chip")).toContainText("/ 1000");
   await page.screenshot({ path: `${SCREENSHOTS}/${info.project.name}-viewer-scrolling.png` });
   // Fades out 1.5 s after scrolling stops.
@@ -104,7 +112,8 @@ test("night mode darkens pages, keeps images, and persists", async ({ page }) =>
       const d = c.getContext("2d")?.getImageData(4, 4, 1, 1).data;
       return d ? d[0] : -1;
     });
-  expect(await corner()).toBeGreaterThan(200);
+  // The first render can land after the canvas exists: wait for paper-white.
+  await expect.poll(corner).toBeGreaterThan(200);
   await more(page, "Night mode", "switch");
   await expect(page.getByTestId("viewer-more").getByRole("switch", { name: "Night mode" })).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("Escape");

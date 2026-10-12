@@ -22,7 +22,7 @@ Available now (P0):
 
 - Import PDFs into an on-device library — the original file is never modified.
 - Fast viewer for large documents (1000+ pages): virtualized scrolling and pinch-zoom.
-- Greek and English, light / dark / sepia themes.
+- English and Greek (English by default; Greek in Settings → Language), light / dark / sepia themes.
 
 Planned (see [docs/SPEC.md](docs/SPEC.md)): annotations, signatures, forms, page tools,
 redaction, OCR, scanning, and device-to-device transfer without an account.

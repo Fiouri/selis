@@ -29,7 +29,7 @@ import type {
 const SETTINGS_KEY = "selis.mock.settings";
 
 const DEFAULT_SETTINGS: Settings = {
-  locale: "system",
+  locale: "en",
   theme: "system",
   librarySort: "recent",
   libraryView: "grid",

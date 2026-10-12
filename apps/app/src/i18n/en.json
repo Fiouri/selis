@@ -84,7 +84,7 @@
   "settings": {
     "title": "Settings",
     "language": "Language",
-    "languageSystem": "System",
+    "languageSystem": "Same as the device",
     "languageEl": "Ελληνικά",
     "languageEn": "English",
     "theme": "Theme",

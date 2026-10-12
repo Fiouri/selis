@@ -234,6 +234,10 @@ export type LibrarySort =
 
 export type LibraryView = "grid" | "list";
 
+/**
+ *  UI language. English unless the user picks another one, whatever the device
+ *  language ("English first", docs/SPEC.md); `System` follows the device.
+ */
 export type LocalePref = "system" | "el" | "en";
 
 export type MemorySource = 

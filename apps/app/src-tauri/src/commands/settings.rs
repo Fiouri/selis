@@ -9,10 +9,12 @@ use super::{CommandError, CommandResult, ErrorCode};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
+/// UI language. English unless the user picks another one, whatever the device
+/// language ("English first", docs/SPEC.md); `System` follows the device.
 pub enum LocalePref {
-    #[default]
     System,
     El,
+    #[default]
     En,
 }
 
@@ -233,6 +235,8 @@ mod tests {
         assert_eq!((s.versions_per_document, s.history_limit_mb), (10, 200));
         assert!(!s.local_only && !s.app_lock && !s.night_mode);
         assert_eq!(s.theme, ThemePref::System);
+        // English first, whatever the device language; Greek is a choice in Settings.
+        assert_eq!(s.locale, LocalePref::En);
     }
 
     #[test]

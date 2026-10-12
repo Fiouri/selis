@@ -14,7 +14,7 @@ Exported: 2026-10-09. Αν αλλάξει το live doc, ξανακάνε export
 - No ads, no tracking, no telemetry, no analytics SDKs.
 - Non-destructive: το αρχικό PDF δεν χάνεται ποτέ σιωπηλά. Κάθε save = νέα έκδοση.
 - Mobile-first: Android → iOS → desktop. Ίδιο codebase, layout προσαρμοσμένο σε phone, tablet, desktop.
-- Ελληνικά + Αγγλικά από την πρώτη μέρα.
+- Αγγλικά + Ελληνικά από την πρώτη μέρα. **English first:** η εφαρμογή ανοίγει στα αγγλικά την πρώτη φορά, ό,τι κι αν είναι η γλώσσα της συσκευής· τα ελληνικά επιλέγονται στις Ρυθμίσεις → Γλώσσα και μένουν (αποθηκεύονται). Το αγγλικό κείμενο (copy) είναι το πρωτότυπο, το ελληνικό η μετάφρασή του (2026-10-12).
 
 **Ταυτότητα (προσωρινή — επιβεβαίωσε):**
 
@@ -213,7 +213,7 @@ Mobile-first. Κάθε phase κλείνει μόνο όταν περάσει τ�
    - qpdf: password protect/remove, compress, linearize, repair.
    - Images → PDF, export σελίδας ως PNG/JPEG.
 6. **P5 — Release 1.0**
-   - Mobile 1.0: Google Play, F-Droid, App Store, signed APK στο GitHub. Store listings el/en, screenshots, privacy pages, website με badges.
+   - Mobile 1.0: Google Play, F-Droid, App Store, signed APK στο GitHub. Store listings en (πρωτότυπο) + el (μετάφραση), screenshots πρώτα στα αγγλικά, privacy pages, website με badges.
 
 **P6 — Desktop 1.0:** πλήρες DesktopShell (sidebar, inspector, command palette, keyboard shortcuts, tabs), drag & drop, file associations, signed installers (Windows, macOS, Linux), winget, Microsoft Store, Flathub, opt-in updater.
 
@@ -253,7 +253,7 @@ Mobile-first. Κάθε phase κλείνει μόνο όταν περάσει τ�
 - Onboarding 3 οθονών, παραλείψιμο, εξηγεί «χωρίς λογαριασμό, όλα στη συσκευή σου».
 - Accessibility: WCAG 2.2 AA contrast, focus rings, screen reader labels, πλήρης χρήση με πληκτρολόγιο.
 
-**i18n:** el + en από P0, ICU message format (Lingui ή i18next με ICU), καθόλου hardcoded strings. Για τις typed υπογραφές χρειάζονται script γραμματοσειρές με ελληνικά (OFL) — έλεγχος στο P2.
+**i18n:** en + el από P0 (en = πρωτότυπο copy και default γλώσσα, el = μετάφραση· visual snapshots: αγγλικό κύριο σετ + ελληνικό δεύτερο σετ), ICU message format (Lingui ή i18next με ICU), καθόλου hardcoded strings. Για τις typed υπογραφές χρειάζονται script γραμματοσειρές με ελληνικά (OFL) — έλεγχος στο P2.
 
 **Διαδικασία:** σχεδιάζουμε τις 6 βασικές οθόνες (Library, Viewer, Annotate, Pages, Transfer, Settings) ως design mockups σε phone + desktop πριν το P1. Το Claude Code υλοποιεί από αυτά, όχι από φαντασία.
 
