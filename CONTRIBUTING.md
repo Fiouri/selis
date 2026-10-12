@@ -25,6 +25,9 @@ the same terms.
 
 ## Development
 
+The unit tests check the PDFs the engine writes with [qpdf](https://qpdf.readthedocs.io/)
+(`qpdf --check`): install it first (`apt install qpdf`, `brew install qpdf`, `scoop install qpdf`).
+
 ```sh
 npm ci
 npm run fixtures

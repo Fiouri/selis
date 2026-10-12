@@ -313,6 +313,41 @@ export class EmbeddedText {
     return ctx;
   }
 
+  /** The page text inside `rect` (page view coordinates), as PDFium extracts it. */
+  boundedText(doc: PdfDocumentObject, page: PdfPageObject, rect: PageRect): string {
+    const toPage = (p: Point) => internals(this.engine).convertDevicePointToPagePoint(doc, page, p);
+    const a = toPage({ x: rect.x, y: rect.y });
+    const b = toPage({ x: rect.x + rect.width, y: rect.y + rect.height });
+    const pageCtx = this.context(doc).acquirePage(page.index);
+    const textPage = this.pdf.FPDFText_LoadPage(pageCtx.pagePtr);
+    try {
+      if (!textPage) return "";
+      const args = [Math.min(a.x, b.x), Math.max(a.y, b.y), Math.max(a.x, b.x), Math.min(a.y, b.y)] as const;
+      const units = this.pdf.FPDFText_GetBoundedText(textPage, ...args, 0, 0);
+      if (units <= 0) return "";
+      const buf = this.malloc((units + 1) * 2);
+      try {
+        const got = this.pdf.FPDFText_GetBoundedText(textPage, ...args, buf, units);
+        return String.fromCharCode(...this.heap.HEAPU16.subarray(buf >> 1, (buf >> 1) + got));
+      } finally {
+        this.free(buf);
+      }
+    } finally {
+      if (textPage) this.pdf.FPDFText_ClosePage(textPage);
+      pageCtx.release();
+    }
+  }
+
+  /** Whether the document has a security handler (an owner password at least). */
+  isEncrypted(doc: PdfDocumentObject): boolean {
+    return this.pdf.EPDF_IsEncrypted(this.context(doc).docPtr);
+  }
+
+  /** Saves without the security handler from now on (the document is open, so it is readable). */
+  removeEncryption(doc: PdfDocumentObject): void {
+    if (!this.pdf.EPDF_RemoveEncryption(this.context(doc).docPtr)) throw new Error("cannot remove the encryption");
+  }
+
   private async font(doc: PdfDocumentObject): Promise<number> {
     const cached = this.fonts.get(doc.id);
     if (cached) return cached;

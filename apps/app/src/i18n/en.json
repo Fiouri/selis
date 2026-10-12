@@ -338,7 +338,15 @@
     "partTitle": "{title} — p. {pages}",
     "working": "Working on the pages…",
     "failed": "The pages did not change. Try again.",
-    "moved": "Page order changed."
+    "moved": "Page order changed.",
+    "lossTitle": "Some parts of this PDF will not come along",
+    "lossBody": "The pages and their text, images and form fields are inserted. These are left out:",
+    "lossSignatures": "{count, plural, one {# signature field} other {# signature fields}}",
+    "lossButtons": "{count, plural, one {# button} other {# buttons}}",
+    "lossTooltips": "{count, plural, one {# field tooltip} other {# field tooltips}}",
+    "lossScripts": "{count, plural, one {# script (JavaScript)} other {# scripts (JavaScript)}}",
+    "lossInsert": "Insert anyway",
+    "lossCancel": "Cancel"
   },
   "redact": {
     "title": "Redact",
@@ -357,11 +365,17 @@
     "applying": "Applying…",
     "more": "Redact content",
     "confirmTitle": "{count, plural, one {Remove content under # mark for good?} other {Remove content under # marks for good?}}",
-    "confirmBody": "Whatever is under the marks (text, images, drawings, comments, field values) is removed from the file, not just covered. It does not come back in the new version. You can undo this until you close the document, and earlier versions stay in the history: share the new one.",
+    "confirmBody": "Whatever is under the marks (text, images, drawings, comments, field values) is removed from the file, not just covered. It does not come back in the new version. You can undo this until you close the document. Earlier versions in the history still have it: when you are done, Selis offers to delete them.",
     "confirm": "Remove",
     "cancel": "Cancel",
     "applied": "{count, plural, one {Applied # mark.} other {Applied # marks.}}",
     "discarded": "{count, plural, one {The mark that was not applied was removed.} other {The # marks that were not applied were removed.}}",
-    "failed": "Redaction failed. The document did not change."
+    "failed": "Redaction failed. The document did not change.",
+    "earlierTitle": "Earlier versions still have it",
+    "earlierBody": "The new version no longer contains what you removed. The earlier versions of this document in Selis, the imported original among them, still do.",
+    "earlierDelete": "Delete earlier versions",
+    "earlierKeep": "Keep them",
+    "earlierDeleted": "{count, plural, =0 {No earlier versions to delete.} one {Deleted # earlier version.} other {Deleted # earlier versions.}}",
+    "earlierFailed": "The earlier versions could not be deleted."
   }
 }

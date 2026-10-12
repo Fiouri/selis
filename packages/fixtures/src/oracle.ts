@@ -7,9 +7,11 @@
  *
  * Coordinates are PDF points with a top-left origin (as the editor uses).
  */
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { inflateSync } from "node:zlib";
 import { AnnotationMode, getDocument, type PDFDocumentProxy, type PDFPageProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
 
@@ -215,4 +217,136 @@ export function findInFile(bytes: Uint8Array, needles: readonly string[], glyphH
   }
   for (const hex of glyphHex) if (lower.includes(hex.toLowerCase())) found.push(`glyphs <${hex}>`);
   return found;
+}
+
+/**
+ * `qpdf --check` on the bytes (qpdf must be installed: CI installs it, see
+ * CONTRIBUTING.md). Returns qpdf's report; throws when qpdf finds an error or a
+ * warning, or is missing.
+ */
+export function qpdfCheck(bytes: Uint8Array): string {
+  return withScratchFile(bytes, (file) => qpdf(["--check", file]));
+}
+
+/** The bytes rewritten by qpdf with `args` (e.g. --object-streams=generate). */
+export function qpdfRewrite(bytes: Uint8Array, args: readonly string[]): Uint8Array {
+  return withScratchFile(bytes, (file) => {
+    const out = `${file}.out.pdf`;
+    qpdf([...args, file, out]);
+    return new Uint8Array(readFileSync(out));
+  });
+}
+
+/** Runs `use` on a copy of the bytes in the repository's git-ignored .tmp (not the system temp dir). */
+function withScratchFile<T>(bytes: Uint8Array, use: (file: string) => T): T {
+  const scratch = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", ".tmp");
+  mkdirSync(scratch, { recursive: true });
+  const dir = mkdtempSync(join(scratch, "qpdf-"));
+  try {
+    const file = join(dir, "in.pdf");
+    writeFileSync(file, bytes);
+    return use(file);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function qpdf(args: readonly string[]): string {
+  const run = spawnSync("qpdf", args, { encoding: "utf8" });
+  if (run.error) throw new Error(`qpdf is not available (${run.error.message}); install it (CONTRIBUTING.md)`);
+  const report = `${run.stdout}${run.stderr}`.trim();
+  if (run.status !== 0) throw new Error(`qpdf ${args.join(" ")} exited ${run.status}:\n${report}`);
+  return report;
+}
+
+/** Number of pages pdf.js opens. */
+export async function pdfjsPageCount(bytes: Uint8Array): Promise<number> {
+  return withDocument(bytes, (doc) => Promise.resolve(doc.numPages));
+}
+
+/**
+ * A sample for other readers: qpdf finds nothing wrong, and pdf.js renders the
+ * given pages (all by default) with some ink on each. With SELIS_SAMPLES=<dir>
+ * the file is written there too (for Acrobat and other readers by hand).
+ */
+export async function checkSample(name: string, bytes: Uint8Array, pages?: readonly number[]): Promise<void> {
+  qpdfCheck(bytes);
+  const count = await pdfjsPageCount(bytes);
+  for (const index of pages ?? Array.from({ length: count }, (_, i) => i)) {
+    const img = await pdfjsRender(bytes, index, 0.5);
+    const all: Box = { x: 0, y: 0, width: img.width / img.scale, height: img.height / img.scale };
+    if (countPixels(img, all, (r, g, b) => r < 200 || g < 200 || b < 200) === 0) throw new Error(`${name}: page ${index + 1} renders blank in pdf.js`);
+  }
+  const dir = process.env.SELIS_SAMPLES;
+  if (dir) writeFileSync(join(dir, name), bytes);
+}
+
+/** What pdf.js reads outside the page content: the places a redacted word could leak to. */
+export type DocumentParts = {
+  readonly info: Readonly<Record<string, string>>;
+  readonly xmp: string | null;
+  readonly outline: readonly string[];
+  readonly dests: readonly string[];
+  readonly attachments: ReadonlyArray<{ readonly name: string; readonly content: string }>;
+  readonly javascript: readonly string[];
+  readonly labels: readonly string[] | null;
+  readonly widgets: ReadonlyArray<{ readonly name: string; readonly value: string; readonly tooltip: string }>;
+  readonly notes: readonly string[];
+};
+
+type OutlineNode = { title: string; items: OutlineNode[] };
+
+export async function pdfjsDocumentParts(bytes: Uint8Array): Promise<DocumentParts> {
+  return withDocument(bytes, async (doc) => {
+    const meta = await doc.getMetadata();
+    const info: Record<string, string> = {};
+    for (const [k, v] of Object.entries(meta.info as Record<string, unknown>)) if (typeof v === "string") info[k] = v;
+    const outline: string[] = [];
+    const walk = (items: readonly OutlineNode[] | null) => {
+      for (const o of items ?? []) {
+        outline.push(o.title);
+        walk(o.items);
+      }
+    };
+    walk(await doc.getOutline());
+    const toKeys = (m: unknown) => (m instanceof Map ? [...m.keys()].map(String) : Object.keys((m as object | null) ?? {}));
+    const attachments: Array<{ name: string; content: string }> = [];
+    for (const name of toKeys(await doc.getAttachments())) {
+      const data = (await (doc as unknown as { getAttachmentContent(n: string): Promise<{ content?: Uint8Array } | Uint8Array | null> }).getAttachmentContent(name)) ?? null;
+      const content = data instanceof Uint8Array ? data : (data?.content ?? new Uint8Array());
+      attachments.push({ name, content: new TextDecoder().decode(content) });
+    }
+    const actions = (await doc.getJSActions()) as unknown;
+    const javascript: string[] = [];
+    if (actions instanceof Map) for (const v of actions.values()) javascript.push(...(v as string[]));
+    else for (const v of Object.values((actions as Record<string, string[]> | null) ?? {})) javascript.push(...v);
+    const widgets: Array<{ name: string; value: string; tooltip: string }> = [];
+    const notes: string[] = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const annots = (await (await doc.getPage(n)).getAnnotations()) as Array<{
+        subtype: string;
+        fieldName?: string;
+        fieldValue?: unknown;
+        alternativeText?: string;
+        contentsObj?: { str?: string };
+      }>;
+      for (const a of annots) {
+        const value = typeof a.fieldValue === "string" ? a.fieldValue : Array.isArray(a.fieldValue) ? a.fieldValue.join(", ") : "";
+        if (a.subtype === "Widget") widgets.push({ name: a.fieldName ?? "", value, tooltip: a.alternativeText ?? "" });
+        else notes.push(a.contentsObj?.str ?? "");
+      }
+    }
+    const xmp = (meta.metadata as { getRaw?: () => string } | null)?.getRaw?.() ?? null;
+    return {
+      info,
+      xmp,
+      outline,
+      dests: toKeys(await doc.getDestinations()),
+      attachments,
+      javascript,
+      labels: (await doc.getPageLabels()) ?? null,
+      widgets,
+      notes,
+    };
+  });
 }

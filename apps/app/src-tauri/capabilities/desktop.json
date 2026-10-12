@@ -24,6 +24,7 @@
     "allow-set-favorite",
     "allow-rename-document",
     "allow-delete-document",
+    "allow-delete-earlier-versions",
     "allow-upload-chunk",
     "allow-abort-upload",
     "allow-commit-working-copy",

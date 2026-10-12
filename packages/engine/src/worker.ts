@@ -29,6 +29,7 @@ import fontUrl from "../assets/SelisSans-LatinGreek.ttf?url";
 import { EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX, toPdfAnnotation, toSignatureStamp } from "./annotations";
 import { documentFields, flattenAll, pageWidgets, setField, toFormField } from "./forms";
 import { applyPageOp, extractPages } from "./pages";
+import { importLosses } from "./import-losses";
 import { applyRedactions } from "./redact";
 import { applyNightMode, type PageRect, rotateRect } from "./geometry";
 import { documentPointer, imageRectsOnPage } from "./pdfium-objects";
@@ -556,6 +557,16 @@ async function handleRedact(req: Extract<WorkerRequest, { type: "applyRedactions
   }
 }
 
+async function handleImportLosses(req: Extract<WorkerRequest, { type: "importLosses" }>): Promise<void> {
+  try {
+    const engine = await native();
+    if (!textStamps) throw new Error("engine not ready");
+    post({ type: "importLosses", reqId: req.reqId, losses: await importLosses(engine, textStamps, req.bytes) });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
 async function handleExtract(req: Extract<WorkerRequest, { type: "extract" }>): Promise<void> {
   const t = target(req);
   if (!t) return;
@@ -685,6 +696,9 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "applyRedactions":
       void handleRedact(req);
+      break;
+    case "importLosses":
+      void handleImportLosses(req);
       break;
     case "appearance":
       void handleAppearance(req);

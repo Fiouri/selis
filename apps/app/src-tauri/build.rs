@@ -7,6 +7,7 @@ const APP_COMMANDS: &[&str] = &[
     "set_last_page",
     "rename_document",
     "delete_document",
+    "delete_earlier_versions",
     "document_file",
     "save_thumbnail",
     "upload_chunk",

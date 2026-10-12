@@ -155,6 +155,23 @@ pub async fn delete_document(
         .map_err(CommandError::from)
 }
 
+/// Deletes every version of a document but the current one (v1 included):
+/// the explicit choice offered after a redaction (ADR 0009). Returns how many
+/// versions went. Idempotent (a repeat removes nothing).
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_earlier_versions(
+    library: State<'_, Arc<Library>>,
+    id: String,
+) -> CommandResult<u32> {
+    let library = Arc::clone(&library);
+    tauri::async_runtime::spawn_blocking(move || library.delete_earlier_versions(&id))
+        .await
+        .map_err(|e| CommandError::new(ErrorCode::Internal, format!("delete task failed: {e}")))?
+        .map(|report| report.removed_versions)
+        .map_err(CommandError::from)
+}
+
 /// Resolves the stored copy without marking the document as opened
 /// (used to render its thumbnail in the background).
 #[tauri::command]

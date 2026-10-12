@@ -3,7 +3,7 @@
  * from the saved file (text no longer extracts, image pixels blank), and so are
  * annotations and form values over it. Whiteouts get their Greek text.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import { type PdfAnnotationObject, PdfAnnotationSubtype, type PdfDocumentObject } from "@embedpdf/models";
@@ -12,6 +12,7 @@ import { FIXTURES, type FixtureName, GREEK_TEXT, greekGlyphHex } from "@selis/fi
 import {
   type Box,
   boxDistance,
+  checkSample,
   countPixels,
   findInFile,
   intersects,
@@ -162,7 +163,7 @@ describe("applying redactions", () => {
   it("removes annotations over the area and empties form fields there", async () => {
     const r = (x: number, y: number, w: number, h: number) => ({ origin: { x, y }, size: { width: w, height: h } });
     const note = { type: PdfAnnotationSubtype.TEXT, id: "note-secret", pageIndex: 0, rect: r(470, 90, 20, 20), contents: "secret note" };
-    const elsewhere = { type: PdfAnnotationSubtype.TEXT, id: "note-kept", pageIndex: 0, rect: r(470, 400, 20, 20), contents: "kept note" };
+    const elsewhere = { type: PdfAnnotationSubtype.TEXT, id: "note-kept", pageIndex: 0, rect: r(470, 400, 20, 20), contents: "unrelated comment" };
     // Covers the "Full name" row: its label, the field (value "Ada Lovelace") and the note.
     const pending = await withMarks(
       fixture("acroform"),
@@ -178,7 +179,7 @@ describe("applying redactions", () => {
     if (!page) throw new Error("no page");
     const left = (await engine.getPageAnnotations(doc, page).toPromise()) as PdfAnnotationObject[];
     expect(left.map((a) => a.id)).not.toContain("note-secret");
-    expect(left.map((a) => a.id)).toContain("note-kept");
+    expect(left.map((a) => a.id), JSON.stringify(left.map((a) => [a.id, a.type, a.contents]))).toContain("note-kept");
     const fields = await documentFields(engine, pdf, doc);
     // The field lost its widget (and its value); the others are as they were.
     expect(fields.find((f) => f.name === "full_name")).toBeUndefined();
@@ -224,12 +225,6 @@ describe("applying redactions", () => {
     await expect(applyRedactions(engine, text, fixture("greek"))).rejects.toThrow("no redaction marks");
   });
 });
-
-/** With SELIS_SAMPLES=<dir>, the files checked below are written there for other readers (Acrobat, qpdf, …). */
-function writeSample(name: string, bytes: Uint8Array): void {
-  const dir = process.env.SELIS_SAMPLES;
-  if (dir) writeFileSync(`${dir}/${name}`, bytes);
-}
 
 /** The glyph box of the whole line holding `text`: the pdf.js items on its baseline. */
 function lineBox(items: readonly TextItem[], page: number, text: string): Box {
@@ -294,7 +289,8 @@ describe("the redacted file, read by pdf.js", () => {
       ]),
     );
     redacted = new Uint8Array((await applyRedactions(engine, text, pending.slice().buffer)).bytes);
-    writeSample("redacted-greek.pdf", redacted);
+    // qpdf and pdf.js read it; with SELIS_SAMPLES=<dir> it is written there for other readers.
+    await checkSample("redacted-greek.pdf", redacted);
   });
 
   it("no longer extracts the redacted lines, and still extracts the rest", async () => {
@@ -359,6 +355,6 @@ describe("the redacted file, read by pdf.js", () => {
     const annots = await pdfjsAnnotations(out);
     expect(annots.some((a) => a.subtype === "Redact")).toBe(false);
     expect(annots.filter((a) => a.subtype === "Widget").length).toBeGreaterThan(0);
-    writeSample("redacted-form.pdf", out);
+    await checkSample("redacted-form.pdf", out);
   });
 });

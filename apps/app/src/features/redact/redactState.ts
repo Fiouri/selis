@@ -18,15 +18,22 @@ type RedactState = {
   tool: RedactTool;
   /** Marks placed and not applied, by id. */
   marks: ReadonlyMap<string, Mark>;
+  /** Applies in effect since the last saved version (undo takes one back). */
+  applied: number;
   setTool: (tool: RedactTool) => void;
   setMarks: (marks: ReadonlyMap<string, Mark>) => void;
+  addApplied: (delta: number) => void;
+  resetApplied: () => void;
 };
 
 export const useRedactState = create<RedactState>((set) => ({
   tool: "text",
   marks: new Map(),
+  applied: 0,
   setTool: (tool) => set({ tool }),
   setMarks: (marks) => set({ marks }),
+  addApplied: (delta) => set((s) => ({ applied: Math.max(0, s.applied + delta) })),
+  resetApplied: () => set({ applied: 0 }),
 }));
 
 function withMark(mark: Mark, present: boolean): void {
@@ -104,12 +111,14 @@ export function applyCommand(doc: DocHandle, onApplied?: (count: number) => void
       const result = await doc.applyRedactions();
       before ??= result.before;
       useRedactState.getState().setMarks(new Map());
+      useRedactState.getState().addApplied(1);
       onApplied?.(result.applied);
     },
     revert: async () => {
       if (!before) return;
       await doc.reload(before.slice(0));
       useRedactState.getState().setMarks(applied);
+      useRedactState.getState().addApplied(-1);
     },
   };
 }

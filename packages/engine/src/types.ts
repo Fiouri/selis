@@ -119,6 +119,8 @@ export interface DocHandle {
    * applied. Like a page operation, it rebuilds the document (`onStructureChange`).
    */
   applyRedactions(): Promise<{ before: ArrayBuffer; applied: number }>;
+  /** What inserting the PDF `bytes` into this document would not carry over (ADR 0008). */
+  importLosses(bytes: ArrayBuffer): Promise<ImportLosses>;
   /** The pages `indices` as a new PDF (forms kept fillable). */
   extractPages(indices: readonly number[]): Promise<ArrayBuffer>;
   /** Bumped by every change to the list of pages (count, order, sizes). */
@@ -134,6 +136,14 @@ export interface DocHandle {
   save(): Promise<ArrayBuffer>;
   close(): Promise<void>;
 }
+
+/** Parts of an inserted PDF the page import drops: counts per kind (0 = none). */
+export type ImportLosses = {
+  readonly signatures: number;
+  readonly buttons: number;
+  readonly tooltips: number;
+  readonly scripts: number;
+};
 
 export interface PdfEngine {
   open(bytes: ArrayBuffer, options?: OpenOptions): Promise<DocHandle>;

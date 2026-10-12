@@ -105,7 +105,12 @@ test("redact: area + whiteout, erase, undo/redo, confirm, apply removes the text
   await page.getByTestId("annotate-done").click();
   await expect(page.getByTestId("redact-sheet")).toHaveCount(0);
   await expect(page.getByTestId("save-status")).toHaveText(/saved$/, { timeout: 10_000 });
-  expect(await page.evaluate(() => (window as unknown as TestWindow).__selisTest.inspect.versions((window as unknown as TestWindow).__selisTest.inspect.ids()[0] as string))).toBe(2);
+  // The earlier version (the import) still has the content: the sheet says so; kept here.
+  await expect(page.getByTestId("redact-earlier-sheet")).toContainText("Earlier versions still have it");
+  await page.screenshot({ path: `${SCREENSHOTS}/${info.project.name}-redact-earlier.png` });
+  await page.getByTestId("redact-earlier-keep").click();
+  await expect(page.getByTestId("redact-earlier-sheet")).toHaveCount(0);
+  expect(await versionCount(page)).toBe(2);
 
   // The removed lines are gone from the text; the rest is still there.
   await expectSearch(page, "σύννεφο", "None");
@@ -126,6 +131,47 @@ test("redact: area + whiteout, erase, undo/redo, confirm, apply removes the text
   expect(boxDistance(stamps[0]?.rect ?? area, whiteout)).toBeLessThanOrEqual(2);
   const painted = solidBox(await pdfjsRender(saved, 0, 2, false), { x: 40, y: 133, width: 515, height: 40 }, isDark);
   expect(boxDistance(painted ?? whiteout, area)).toBeLessThanOrEqual(2);
+});
+
+async function versionCount(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const inspect = (window as unknown as TestWindow).__selisTest.inspect;
+    return inspect.versions(inspect.ids()[0] as string);
+  });
+}
+
+test("redact: after the redacted version is saved, the earlier versions can be deleted", async ({ page }) => {
+  await open(page);
+  const layer = await startRedact(page);
+  await page.getByTestId("redact-tool-area").click();
+  await dragBox(page, layer, [50, 143], [545, 163]);
+  await page.getByTestId("redact-apply").click();
+  await page.getByTestId("redact-dialog-confirm").click();
+  await expect(page.getByText("Applied 1 mark.")).toBeVisible();
+  await page.getByTestId("annotate-done").click();
+  await expect(page.getByTestId("redact-earlier-sheet")).toBeVisible({ timeout: 10_000 });
+  expect(await versionCount(page)).toBe(2);
+  await page.getByTestId("redact-earlier-delete").click();
+  await expect(page.getByText("Deleted 1 earlier version.")).toBeVisible();
+  await expect(page.getByTestId("redact-earlier-sheet")).toHaveCount(0);
+  expect(await versionCount(page)).toBe(1);
+  // The current version is the redacted one.
+  await expectSearch(page, "σύννεφο", "None");
+});
+
+test("redact: undoing the redaction before Done offers nothing to delete", async ({ page }) => {
+  await open(page);
+  const layer = await startRedact(page);
+  await page.getByTestId("redact-tool-area").click();
+  await dragBox(page, layer, [50, 143], [545, 163]);
+  await page.getByTestId("redact-apply").click();
+  await page.getByTestId("redact-dialog-confirm").click();
+  await expect(page.getByText("Applied 1 mark.")).toBeVisible();
+  await page.getByTestId("annotate-undo").click();
+  await expect(page.getByTestId("redact-apply")).toHaveText("Apply (1)");
+  await page.getByTestId("annotate-done").click();
+  await expect(page.getByTestId("save-status")).toHaveText(/saved$/, { timeout: 10_000 });
+  await expect(page.getByTestId("redact-earlier-sheet")).toHaveCount(0);
 });
 
 /** The document's current bytes in the mock backend (the version written on Done). */

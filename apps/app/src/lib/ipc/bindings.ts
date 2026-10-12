@@ -43,6 +43,12 @@ export const commands = {
 	 */
 	deleteDocument: (id: string) => typedError<DeleteReport, CommandError>(__TAURI_INVOKE("delete_document", { id })),
 	/**
+	 *  Deletes every version of a document but the current one (v1 included):
+	 *  the explicit choice offered after a redaction (ADR 0009). Returns how many
+	 *  versions went. Idempotent (a repeat removes nothing).
+	 */
+	deleteEarlierVersions: (id: string) => typedError<number, CommandError>(__TAURI_INVOKE("delete_earlier_versions", { id })),
+	/**
 	 *  Resolves the stored copy without marking the document as opened
 	 *  (used to render its thumbnail in the background).
 	 */

@@ -119,6 +119,10 @@ test("pages: select, rotate, duplicate, delete, reorder, undo/redo, add, extract
   const chooser = page.waitForEvent("filechooser");
   await page.getByTestId("pages-add-file").click();
   await (await chooser).setFiles({ name: "form.pdf", mimeType: "application/pdf", buffer: readFileSync(fixturePath("acroform.pdf")) });
+  // The form's field tooltips do not come along (ADR 0008): listed before the insert.
+  await expect(page.getByTestId("pages-loss-list")).toHaveText("4 field tooltips");
+  await page.screenshot({ path: `${SCREENSHOTS}/${info.project.name}-pages-loss.png` });
+  await page.getByTestId("pages-loss-insert").click();
   await expect(page.getByTestId("pages-hint")).toContainText("9 pages");
   await expect(page.getByText("Added 1 page.")).toBeVisible();
   await expect(page.getByTestId("page-thumb-9")).toHaveAttribute("aria-pressed", "true");

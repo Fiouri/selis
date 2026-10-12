@@ -435,6 +435,136 @@ function buildGreek(): Uint8Array {
   return w.toBytes();
 }
 
+/** The words on the line of `leakyDocument()` that a redaction test removes. */
+export const LEAKY_SECRET_LINE = "Secret: Lovelace Babbage Engine";
+
+/**
+ * A one-page document whose secret line ("Secret: Lovelace Babbage Engine",
+ * baseline y = 690 from the bottom of a Letter page) is also named all over the
+ * document's other parts: Info, XMP, outline, named destination, page label,
+ * document JavaScript and an open action, an embedded file, a form field's
+ * value / default / tooltip, two annotations elsewhere on the page and the
+ * structure tree. Next to each, a neighbour that names none of the secret words
+ * and must stay. Also a signature field and a push button with a script (what
+ * a page import drops). For the redaction and import tests; not in the corpus.
+ */
+export function leakyDocument(): Uint8Array {
+  const w = new PdfWriter("selis-fixture-leaky");
+  const resources = helveticaResources(w);
+  const helv = (resources.Font as Record<string, Ref>).F1 as Ref;
+  const pageRef = w.reserve();
+  const content = [
+    `BT /F1 14 Tf 72 720 Td ${lit("Public line stays.")} Tj ET`,
+    `BT /F1 14 Tf 72 690 Td ${lit(LEAKY_SECRET_LINE)} Tj ET`,
+    `BT /F1 14 Tf 72 660 Td ${lit("Another public line.")} Tj ET`,
+  ].join("\n");
+  const contents = w.addStream({}, content);
+
+  const textAp = (value: string) =>
+    w.addStream({ Type: n("XObject"), Subtype: n("Form"), BBox: [0, 0, 200, 20], Resources: { Font: { Helv: helv } } }, `/Tx BMC BT /Helv 11 Tf 2 6 Td ${lit(value)} Tj ET EMC`);
+  const field = (name: string, value: string, tooltip: string, y: number) =>
+    w.add({
+      Type: n("Annot"),
+      Subtype: n("Widget"),
+      FT: n("Tx"),
+      T: Str.ascii(name),
+      TU: Str.ascii(tooltip),
+      V: Str.ascii(value),
+      DV: Str.ascii(value),
+      DA: Str.ascii("/Helv 11 Tf 0 g"),
+      Rect: [72, y, 272, y + 20],
+      F: 4,
+      P: pageRef,
+      AP: { N: textAp(value) },
+    });
+  const secretField = field("notes_field", "Babbage Engine", "Ask Lovelace", 400);
+  const publicField = field("public_field", "ok", "Public", 360);
+  const note = (text: string, y: number) =>
+    w.add({ Type: n("Annot"), Subtype: n("Text"), Rect: [500, y, 520, y + 20], Contents: Str.ascii(text), F: 4, P: pageRef });
+  const freeText = w.add({
+    Type: n("Annot"),
+    Subtype: n("FreeText"),
+    Rect: [300, 300, 500, 320],
+    Contents: Str.ascii(""),
+    DA: Str.ascii("/Helv 11 Tf 0 g"),
+    F: 4,
+    P: pageRef,
+    AP: { N: textAp("Babbage was here") },
+  });
+  // What a page import drops (ADR 0008): a signature field and a push button with a script.
+  const signature = w.add({ Type: n("Annot"), Subtype: n("Widget"), FT: n("Sig"), T: Str.ascii("approval"), Rect: [320, 200, 520, 240], F: 4, P: pageRef });
+  const button = w.add({
+    Type: n("Annot"),
+    Subtype: n("Widget"),
+    FT: n("Btn"),
+    Ff: 1 << 16,
+    T: Str.ascii("reset"),
+    Rect: [72, 200, 172, 224],
+    F: 4,
+    P: pageRef,
+    A: { S: n("JavaScript"), JS: Str.ascii("this.resetForm();") },
+  });
+  const annots = [secretField, publicField, note("Call Lovelace", 500), note("Unrelated", 460), freeText, signature, button];
+
+  const js = (code: string) => w.add({ S: n("JavaScript"), JS: Str.ascii(code) });
+  const file = (name: string, body: string) =>
+    w.add({ Type: n("Filespec"), F: Str.ascii(name), UF: Str.ascii(name), EF: { F: w.addStream({ Type: n("EmbeddedFile") }, body) } });
+  const xmp = w.addStream(
+    { Type: n("Metadata"), Subtype: n("XML") },
+    `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title><rdf:Alt><rdf:li xml:lang="x-default">Report on Lovelace</rdf:li></rdf:Alt></dc:title></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>`,
+    false,
+  );
+  const outlines = w.reserve();
+  writeOutline(
+    w,
+    outlines,
+    [
+      { title: "Introduction", page: 0 },
+      { title: "Lovelace notes", page: 0 },
+    ],
+    [pageRef],
+  );
+  const structRoot = w.reserve();
+  const structElem = (alt: string, actual: string | null) =>
+    w.add({ Type: n("StructElem"), S: n("Figure"), P: structRoot, Alt: Str.ascii(alt), ...(actual ? { ActualText: Str.ascii(actual) } : {}) });
+  w.set(structRoot, { Type: n("StructTreeRoot"), K: [structElem("Lovelace photo", "Babbage"), structElem("Logo", null)] });
+
+  // One page, written by hand: its widgets need the page's ref before it exists.
+  const pagesRef = w.reserve();
+  w.set(pageRef, {
+    Type: n("Page"),
+    Parent: pagesRef,
+    MediaBox: [0, 0, 612, 792],
+    Resources: resources,
+    Contents: contents,
+    Annots: annots,
+  });
+  w.set(pagesRef, { Type: n("Pages"), Kids: [pageRef], Count: 1 });
+  w.setRoot(
+    w.add({
+      Type: n("Catalog"),
+      Pages: pagesRef,
+      Outlines: outlines,
+      Metadata: xmp,
+      MarkInfo: { Marked: true },
+      StructTreeRoot: structRoot,
+      OpenAction: js("this.print(); // Lovelace"),
+      PageLabels: { Nums: [0, { S: n("D"), P: Str.ascii("Lovelace-") }] },
+      AcroForm: { Fields: [secretField, publicField, signature, button], DA: Str.ascii("/Helv 11 Tf 0 g"), DR: { Font: { Helv: helv } } },
+      // Name tree roots are indirect objects, as in most real files.
+      Names: w.add({
+        Dests: w.add({ Names: [Str.ascii("intro"), [pageRef, n("Fit")], Str.ascii("lovelace-section"), [pageRef, n("Fit")]] }),
+        JavaScript: w.add({ Names: [Str.ascii("doc-open"), js("app.alert('Babbage');"), Str.ascii("harmless"), js("var x = 1;")] }),
+        EmbeddedFiles: w.add({
+          Names: [Str.ascii("notes.txt"), file("notes.txt", "Lovelace was here"), Str.ascii("public.txt"), file("public.txt", "nothing here")],
+        }),
+      }),
+    }),
+  );
+  w.setInfo({ Title: Str.ascii("Report on Lovelace"), Author: Str.ascii("Babbage"), Subject: Str.ascii("Quarterly"), Keywords: Str.ascii("Engine, Lovelace") });
+  return w.toBytes();
+}
+
 export const ENCRYPTED_PASSWORD = "selis";
 
 function buildEncrypted(): Uint8Array {

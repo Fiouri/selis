@@ -10,6 +10,7 @@ import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import type { PdfAnnotationObject, PdfDocumentObject, PdfPageObject } from "@embedpdf/models";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { FIXTURES, type FixtureName } from "@selis/fixtures";
+import { checkSample } from "@selis/fixtures/oracle";
 import { beforeAll, describe, expect, it } from "vitest";
 import { EmbeddedText, fromPdfAnnotation, SIGNATURE_CONTENTS, SIGNATURE_PREFIX, toSignatureStamp } from "./annotations";
 import { documentFields, flattenAll, pageWidgets, setField, toFormField } from "./forms";
@@ -249,11 +250,9 @@ describe("visual signatures", () => {
   });
 });
 
-/** With SELIS_SAMPLES=<dir>: the P2b samples for other readers (see the P2b PR). */
-describe.runIf(Boolean(process.env.SELIS_SAMPLES))("samples for other readers", () => {
-  it("writes a filled Greek form (fillable and flattened) and a signed page", async () => {
-    const { writeFileSync } = await import("node:fs");
-    const dir = process.env.SELIS_SAMPLES as string;
+/** The P2b samples, read by qpdf and pdf.js (checkSample; with SELIS_SAMPLES=<dir> also written there). */
+describe("samples for other readers", () => {
+  it("a filled Greek form (fillable and flattened) and a signed page", async () => {
     const doc = await open(fixture("acroform"));
     const list = await fields(doc);
     await setField(engine, text, doc, page0(doc), byName(list, "full_name").id, { kind: "text", text: "Γιάννης Παπαδόπουλος" });
@@ -262,8 +261,8 @@ describe.runIf(Boolean(process.env.SELIS_SAMPLES))("samples for other readers", 
     const sig = png(240, 70, (x, y) => (Math.abs(y - 35 - 22 * Math.sin(x / 18)) < 2.5 ? [20, 30, 120, 255] : [255, 255, 255, 0]));
     const stamp = { id: `${SIGNATURE_PREFIX}s`, page: 0, kind: "signature" as const, rect: { x: 320, y: 520, width: 180, height: 52 }, color: "#000000", opacity: 1, image: { mime: "image/png" as const, bytes: sig } };
     await engine.createPageAnnotation(doc, page0(doc), toSignatureStamp(stamp), { data: sig }).toPromise();
-    writeFileSync(`${dir}/form-filled-signed.pdf`, new Uint8Array((await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer));
+    await checkSample("form-filled-signed.pdf", new Uint8Array((await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer));
     await flattenAll(engine, doc);
-    writeFileSync(`${dir}/form-flattened.pdf`, new Uint8Array((await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer));
+    await checkSample("form-flattened.pdf", new Uint8Array((await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer));
   });
 });
