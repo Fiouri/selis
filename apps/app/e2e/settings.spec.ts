@@ -50,3 +50,24 @@ test("settings: the language picker switches the whole UI", async ({ page }) => 
   await expect(page.getByTestId("setting-language")).toContainText("Ελληνικά");
   await expect(page.getByRole("navigation").getByRole("button", { name: "Βιβλιοθήκη" })).toBeVisible();
 });
+
+test.describe("on a device set to Greek", () => {
+  test.use({ locale: "el-GR" });
+
+  test("the first launch is in English; Greek, once picked, stays after a restart", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Your library is empty" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await page.getByRole("navigation").getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByTestId("setting-language")).toContainText("English");
+    await page.getByTestId("setting-language").click();
+    // English first, then Greek, then "match the device".
+    await expect(page.getByTestId("language-sheet").getByRole("radio")).toHaveText(["English", "Ελληνικά", /device/i]);
+    await page.getByTestId("language-sheet").getByRole("radio", { name: "Ελληνικά" }).click();
+    await expect(page.getByRole("heading", { name: "Ρυθμίσεις" })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Ρυθμίσεις" })).toBeVisible();
+    await expect(page.getByRole("navigation").getByRole("button", { name: "Βιβλιοθήκη" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "el");
+  });
+});

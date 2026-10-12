@@ -26,7 +26,8 @@ type SettingsState = Settings & {
 };
 
 const DEFAULTS: Settings = {
-  locale: "system",
+  // English on first launch, whatever the device language (docs/SPEC.md).
+  locale: "en",
   theme: "system",
   librarySort: "recent",
   libraryView: "grid",
