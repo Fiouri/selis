@@ -160,7 +160,8 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
       notifying = true;
       if (!askedNotifications) {
         askedNotifications = true;
-        await deps.api.transferNotifications().catch(() => false);
+        // Not awaited: the system dialog waits for the user, progress must not.
+        void deps.api.transferNotifications().catch(() => false);
       }
       const pct = percent(running.bytes, running.total);
       await deps.api

@@ -367,6 +367,11 @@ pub async fn transfer_open<R: Runtime>(
     };
     let (key, _source) = device_key::load_or_create(&app).await;
     let base = store_dir(&app)?;
+    // A previous run that ended without closing (killed, crashed) may have left
+    // blobs behind; with nothing to resume they are garbage.
+    if library.resumable_transfers()?.is_empty() {
+        let _ = std::fs::remove_dir_all(&base);
+    }
     let mut config = ServiceConfig::new(key, base.join("store"), network);
     #[cfg(debug_assertions)]
     {

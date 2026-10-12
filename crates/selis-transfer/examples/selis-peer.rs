@@ -1,12 +1,14 @@
 //! Dev peer (never bundled): sends to or receives from the Selis app over the
 //! real protocol, from a terminal.
 //!
-//!   selis-peer send <file.pdf>... [net] [--yes] [--key <file>] [--store <dir>]
+//!   selis-peer send <file.pdf>... [net] [--yes] [--keep] [--lifetime <secs>] [--key <file>] [--store <dir>]
 //!   selis-peer receive <selis://transfer/…> [net] [--out <dir>] [--key <file>] [--store <dir>]
 //!   net: --local-only | --relay-only | --relay <url>
 //!
 //! `send` prints the QR code and the link; when the app scans it, both show the
-//! code and this asks to confirm (or confirms at once with `--yes`).
+//! code and this asks to confirm (or confirms at once with `--yes`). `--keep` stays
+//! up after the transfer (to try the used ticket again); `--lifetime` shortens
+//! the ticket's validity (expiry tests).
 use std::{path::PathBuf, time::Duration};
 
 use iroh::SecretKey;
@@ -21,6 +23,8 @@ struct Args {
     network: Network,
     force_relay: bool,
     yes: bool,
+    keep: bool,
+    lifetime: Option<u64>,
     key: Option<PathBuf>,
     store: PathBuf,
     out: PathBuf,
@@ -38,12 +42,15 @@ fn args() -> anyhow::Result<Args> {
         None,
         PathBuf::from("."),
     );
+    let (mut keep, mut lifetime) = (false, None);
     while let Some(a) = it.next() {
         match a.as_str() {
             "--local-only" => network = Network::LocalOnly,
             "--relay-only" => force_relay = true,
             "--relay" => network = Network::CustomRelay(it.next().unwrap_or_default().parse()?),
             "--yes" => yes = true,
+            "--keep" => keep = true,
+            "--lifetime" => lifetime = it.next().and_then(|v| v.parse().ok()),
             "--key" => key = it.next().map(PathBuf::from),
             "--store" => store = it.next().map(PathBuf::from),
             "--out" => out = it.next().map(PathBuf::from).unwrap_or(out),
@@ -58,6 +65,8 @@ fn args() -> anyhow::Result<Args> {
         network,
         force_relay,
         yes,
+        keep,
+        lifetime,
         key,
         store,
         out,
@@ -105,6 +114,9 @@ async fn main() -> anyhow::Result<()> {
     let a = args()?;
     let mut cfg = ServiceConfig::new(secret(a.key.as_ref())?, a.store.clone(), a.network.clone());
     cfg.force_relay = a.force_relay;
+    if let Some(secs) = a.lifetime {
+        cfg.ticket_lifetime = Duration::from_secs(secs);
+    }
     let service = TransferService::start(cfg).await?;
     println!("endpoint {}", service.endpoint_id());
     let result = match a.cmd.as_str() {
@@ -166,16 +178,30 @@ async fn send(service: &TransferService, a: &Args) -> anyhow::Result<()> {
                     rss()
                 );
             }
-            Some(SendState::Done) => {
+            Some(SendState::Done) if line != last => {
                 println!("done {}", rss());
-                return Ok(());
+                if !a.keep {
+                    return Ok(());
+                }
             }
-            Some(SendState::Failed { error }) => anyhow::bail!("failed: {error}"),
+            Some(SendState::Failed { error }) if line != last => {
+                println!("failed: {error}");
+                if !a.keep {
+                    anyhow::bail!("failed: {error}");
+                }
+            }
+            Some(SendState::Interrupted { bytes, total }) if line != last => {
+                println!(
+                    "interrupted at {} / {} MB, waiting for the receiver",
+                    bytes / 1_000_000,
+                    total / 1_000_000
+                );
+            }
             None => anyhow::bail!("session gone"),
             _ => {}
         }
         last = line;
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
 
