@@ -91,3 +91,20 @@ Findings:
    "Same Wi‑Fi" (`lan` = private/link-local/ULA addresses only).
 5. JNI DNS (finding 2 of the spike) does not abort in the app: the default network setting
    (n0 DNS + relay) worked in every run.
+
+## P3b — library move and trusted devices (2026-10-12)
+
+Release + `measure` builds. Seed: the host sent 50 PDFs (301 MB) to the S23 in 11.1 s; then
+tags (2), favorites, a signature, a setting (sepia) and two extra versions were added there.
+
+| | Result |
+| --- | --- |
+| Move S23 → AVD (QR, same code on both) | 50 documents / 301 MB in **132 s** (AVD NAT ≈ 2.3 MB/s), receiver RSS +6 MB |
+| Libraries compared | summaries equal (50 documents, 2 earlier versions, 2 tags, 1 signature, 301 223 120 bytes); every document's BLAKE3, tags and favorite equal; signature ids equal; theme equal |
+| Move again | **1.7 s**, "0 documents were added · 50 were already there", receiving library unchanged (nothing fetched: blobs it has are skipped) |
+| One tap S23 → AVD (both saved each other, AVD on Receive) | 2.9 s, no code asked |
+
+Found on the devices: a **ticket looked expired** when the sender's clock was 1.3 s ahead of the
+receiver's (the check refused expiries more than 10 minutes in the future by the receiver's
+clock). The receiver now allows 5 minutes of clock difference either way; the sender, whose
+clock set the expiry, enforces it exactly.
