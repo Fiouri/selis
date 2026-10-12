@@ -48,7 +48,7 @@ case "$mode" in
       echo "library files differ: got [$got] want [$want]"
       exit 1
     fi
-    left="$(sh_app 'ls pack-in 2>/dev/null; ls cache/share 2>/dev/null | grep import' | wc -l | tr -d ' ')"
+    left="$(sh_app 'ls pack-in 2>/dev/null; ls cache/share 2>/dev/null | grep import; true' | wc -l | tr -d ' ')"
     if [ "$left" != 0 ]; then
       echo "staging or import copies left behind ($left)"
       exit 1
