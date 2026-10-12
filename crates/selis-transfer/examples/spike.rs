@@ -56,7 +56,13 @@ fn path_of(conn: &Connection) -> String {
     conn.paths()
         .iter()
         .find(|p| p.is_selected())
-        .map(|p| format!("{} {:?}", if p.is_relay() { "relay" } else { "direct" }, p.remote_addr()))
+        .map(|p| {
+            format!(
+                "{} {:?}",
+                if p.is_relay() { "relay" } else { "direct" },
+                p.remote_addr()
+            )
+        })
         .unwrap_or_else(|| "none".into())
 }
 
@@ -100,7 +106,9 @@ async fn main() -> anyhow::Result<()> {
             }
             let ticket = BlobTicket::new(ep.addr(), tag.hash, tag.format);
             println!("TICKET {ticket}");
-            let router = Router::builder(ep).accept(iroh_blobs::ALPN, BlobsProtocol::new(&store, None)).spawn();
+            let router = Router::builder(ep)
+                .accept(iroh_blobs::ALPN, BlobsProtocol::new(&store, None))
+                .spawn();
             let watcher = Arc::new(router.endpoint().clone());
             let _w = watcher;
             tokio::signal::ctrl_c().await?;
@@ -147,13 +155,18 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-            store.blobs().export(ticket.hash(), std::path::absolute(out.as_str())?).await?;
+            store
+                .blobs()
+                .export(ticket.hash(), std::path::absolute(out.as_str())?)
+                .await?;
             println!("exported, hash {}: {}", ticket.hash(), rss());
             paths.abort();
             conn.close(0u32.into(), b"done");
             ep.close().await;
         }
-        _ => anyhow::bail!("usage: spike send <file> | receive <ticket> <out> [--local-only|--relay-only] [--store <dir>]"),
+        _ => anyhow::bail!(
+            "usage: spike send <file> | receive <ticket> <out> [--local-only|--relay-only] [--store <dir>]"
+        ),
     }
     store.shutdown().await?;
     Ok(())
