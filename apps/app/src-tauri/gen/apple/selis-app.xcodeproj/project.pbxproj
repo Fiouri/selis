@@ -19,6 +19,7 @@
 		BDA0F101103063DEB155470C /* assets in Resources */ = {isa = PBXBuildFile; fileRef = D67ABC9240A2EB9AFEF65B87 /* assets */; };
 		E4949425D35438DD743F9A40 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E4D18E11D10645AF168F607 /* libapp.a */; };
 		E49DD28825D1B2CAFFF5D561 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 32E95575FA7CCC87A7DA0694 /* LaunchScreen.storyboard */; };
+		5E1150F7A3C24B0D9E8F7A62 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5E1150F7A3C24B0D9E8F7A61 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -41,6 +42,7 @@
 		A9140B45DBFB0BD055B28822 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		B809BA12520703D0E660FAF8 /* library.rs */ = {isa = PBXFileReference; path = library.rs; sourceTree = "<group>"; };
 		B9E3B8FAB5713EAA5817A04D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		5E1150F7A3C24B0D9E8F7A61 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D67ABC9240A2EB9AFEF65B87 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
 		D8F4D539445943ED15BF50D2 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		FD33FB399D5CB358DB39D8EE /* selis-app_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "selis-app_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -100,6 +102,7 @@
 			isa = PBXGroup;
 			children = (
 				B9E3B8FAB5713EAA5817A04D /* Info.plist */,
+				5E1150F7A3C24B0D9E8F7A61 /* PrivacyInfo.xcprivacy */,
 				70E6BA1303394B19B57B6D48 /* selis-app_iOS.entitlements */,
 			);
 			path = "selis-app_iOS";
@@ -226,6 +229,7 @@
 			files = (
 				14E2A230FF780D02FE716D0A /* Assets.xcassets in Resources */,
 				E49DD28825D1B2CAFFF5D561 /* LaunchScreen.storyboard in Resources */,
+				5E1150F7A3C24B0D9E8F7A62 /* PrivacyInfo.xcprivacy in Resources */,
 				BDA0F101103063DEB155470C /* assets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

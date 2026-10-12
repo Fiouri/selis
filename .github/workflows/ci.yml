@@ -98,6 +98,8 @@ jobs:
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
+      - name: Local-network permission before targetSdk 37 (ADR 0010)
+        run: scripts/check-android-local-network.sh
       - name: Build debug APK
         # ANDROID_HOME comes from the runner image, so it is only visible to the shell.
         run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --debug --apk

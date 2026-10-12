@@ -21,6 +21,25 @@
 	</array>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.anywecon.selis.transfer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>selis</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Selis finds your other device on this Wi-Fi to send documents directly, only while the Transfer screen is open.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_irohv1._udp</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Selis uses the camera only to scan the QR code of a transfer from your other device.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

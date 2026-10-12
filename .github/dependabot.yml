@@ -26,8 +26,12 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # The transfer stack is pinned exactly and moves as one (ADR 0010).
+      iroh:
+        patterns: ["iroh", "iroh-*"]
       cargo-minor-patch:
         update-types: ["minor", "patch"]
+        exclude-patterns: ["iroh", "iroh-*"]
     ignore:
       - dependency-name: "tauri*"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]

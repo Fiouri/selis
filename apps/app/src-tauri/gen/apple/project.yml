@@ -47,6 +47,15 @@ targets:
             LSHandlerRank: Alternate
             LSItemContentTypes: [com.adobe.pdf]
         LSSupportsOpeningDocumentsInPlace: false
+        # selis://transfer/<ticket> links (a QR code read by the camera app) → RunEvent::Opened.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.anywecon.selis.transfer
+            CFBundleURLSchemes: [selis]
+        # Transfer (ADR 0010): mDNS on the local network (iroh's service, iroh-mdns-address-lookup
+        # N0_SERVICE_NAME "irohv1"), the camera for the QR code (ADR 0013).
+        NSLocalNetworkUsageDescription: Selis finds your other device on this Wi-Fi to send documents directly, only while the Transfer screen is open.
+        NSBonjourServices: [_irohv1._udp]
+        NSCameraUsageDescription: Selis uses the camera only to scan the QR code of a transfer from your other device.
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]

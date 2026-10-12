@@ -1,6 +1,6 @@
 # ADR 0003 — Account-free transfer with iroh
 
-- Status: accepted (implementation in P3)
+- Status: accepted (implemented in P3a: ADR 0010 protocol, ADR 0011 device key, ADR 0013 QR scanning)
 - Date: 2026-10-09
 
 ## Context

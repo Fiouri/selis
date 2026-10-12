@@ -194,7 +194,7 @@ function OfferCard({ offer }: { offer: OfferView }) {
       </div>
       {/* Always black on white, whatever the theme, so any camera reads it. */}
       <div className="rounded-[12px] bg-[#ffffff] p-[10px]">
-        <img src={src} width={176} height={176} alt={t("transfer.send.qrAlt")} className="block size-[176px]" data-testid="transfer-qr" />
+        <img src={src} width={176} height={176} alt={t("transfer.send.qrAlt")} className="block size-[176px]" data-testid="transfer-qr" data-link={offer.link} />
       </div>
       <span className="text-[13px] text-neutral-11 tabular-nums" data-testid="transfer-expires">
         {t("transfer.send.expiresIn", { time: formatCountdown(secondsLeft) })}
