@@ -93,7 +93,11 @@ fn manifest_parser_never_panics_and_round_trips() {
 fn control_messages_never_panic() {
     let seeds = [
         postcard::to_stdvec(&ToSender::Hello { token: [3; 16] }).unwrap_or_default(),
-        postcard::to_stdvec(&ToReceiver::Accepted { session: [4; 16], manifest: vec![1, 2, 3] }).unwrap_or_default(),
+        postcard::to_stdvec(&ToReceiver::Accepted {
+            session: [4; 16],
+            manifest: vec![1, 2, 3],
+        })
+        .unwrap_or_default(),
     ];
     let mut rng = Rng(0xc0de);
     for i in 0..20_000 {

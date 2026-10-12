@@ -11,7 +11,8 @@ use std::{path::PathBuf, time::Duration};
 
 use iroh::SecretKey;
 use selis_transfer::{
-    Network, OfferItem, ReceiveState, SendState, ServiceConfig, TransferService, TransferTicket, code::display, qr,
+    Network, OfferItem, ReceiveState, SendState, ServiceConfig, TransferService, TransferTicket,
+    code::display, qr,
 };
 
 struct Args {
@@ -28,8 +29,15 @@ struct Args {
 fn args() -> anyhow::Result<Args> {
     let mut it = std::env::args().skip(1);
     let cmd = it.next().unwrap_or_default();
-    let (mut rest, mut network, mut force_relay, mut yes, mut key, mut store, mut out) =
-        (vec![], Network::Default, false, false, None, None, PathBuf::from("."));
+    let (mut rest, mut network, mut force_relay, mut yes, mut key, mut store, mut out) = (
+        vec![],
+        Network::Default,
+        false,
+        false,
+        None,
+        None,
+        PathBuf::from("."),
+    );
     while let Some(a) = it.next() {
         match a.as_str() {
             "--local-only" => network = Network::LocalOnly,
@@ -42,13 +50,25 @@ fn args() -> anyhow::Result<Args> {
             _ => rest.push(a),
         }
     }
-    let store = store.unwrap_or_else(|| std::env::temp_dir().join(format!("selis-peer-{}", std::process::id())));
-    Ok(Args { cmd, rest, network, force_relay, yes, key, store, out })
+    let store = store
+        .unwrap_or_else(|| std::env::temp_dir().join(format!("selis-peer-{}", std::process::id())));
+    Ok(Args {
+        cmd,
+        rest,
+        network,
+        force_relay,
+        yes,
+        key,
+        store,
+        out,
+    })
 }
 
 /// A persistent key with `--key <file>` (32 raw bytes, created if missing), else a fresh one.
 fn secret(path: Option<&PathBuf>) -> anyhow::Result<SecretKey> {
-    let Some(path) = path else { return Ok(SecretKey::generate()) };
+    let Some(path) = path else {
+        return Ok(SecretKey::generate());
+    };
     if let Ok(bytes) = std::fs::read(path)
         && let Ok(b) = <[u8; 32]>::try_from(bytes.as_slice())
     {
@@ -62,7 +82,11 @@ fn secret(path: Option<&PathBuf>) -> anyhow::Result<SecretKey> {
 fn rss() -> String {
     std::fs::read_to_string("/proc/self/status")
         .ok()
-        .and_then(|s| s.lines().find(|l| l.starts_with("VmHWM")).map(|l| l.split_whitespace().collect::<Vec<_>>().join(" ")))
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("VmHWM"))
+                .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        })
         .unwrap_or_default()
 }
 
@@ -86,7 +110,9 @@ async fn main() -> anyhow::Result<()> {
     let result = match a.cmd.as_str() {
         "send" => send(&service, &a).await,
         "receive" => receive(&service, &a).await,
-        _ => Err(anyhow::anyhow!("usage: selis-peer send <file>... | receive <link>  [--local-only|--relay-only|--relay <url>]")),
+        _ => Err(anyhow::anyhow!(
+            "usage: selis-peer send <file>... | receive <link>  [--local-only|--relay-only|--relay <url>]"
+        )),
     };
     service.close(true).await;
     result
@@ -98,9 +124,18 @@ async fn send(service: &TransferService, a: &Args) -> anyhow::Result<()> {
         .iter()
         .map(|f| {
             let path = std::path::absolute(f)?;
-            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("document.pdf").to_owned();
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("document.pdf")
+                .to_owned();
             let title = name.trim_end_matches(".pdf").to_owned();
-            Ok(OfferItem { title, name, path, history: vec![] })
+            Ok(OfferItem {
+                title,
+                name,
+                path,
+                history: vec![],
+            })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
     let (id, ticket) = service.offer(items).await?;
@@ -119,8 +154,17 @@ async fn send(service: &TransferService, a: &Args) -> anyhow::Result<()> {
                 let ok = a.yes || ask("Same code on the phone? Send").await;
                 service.decide(&id, ok)?;
             }
-            Some(SendState::Sending { bytes, total, route }) if line != last => {
-                println!("{} / {} MB via {route:?} {}", bytes / 1_000_000, total / 1_000_000, rss());
+            Some(SendState::Sending {
+                bytes,
+                total,
+                route,
+            }) if line != last => {
+                println!(
+                    "{} / {} MB via {route:?} {}",
+                    bytes / 1_000_000,
+                    total / 1_000_000,
+                    rss()
+                );
             }
             Some(SendState::Done) => {
                 println!("done {}", rss());
@@ -136,7 +180,10 @@ async fn send(service: &TransferService, a: &Args) -> anyhow::Result<()> {
 }
 
 async fn receive(service: &TransferService, a: &Args) -> anyhow::Result<()> {
-    let link = a.rest.first().ok_or_else(|| anyhow::anyhow!("missing link"))?;
+    let link = a
+        .rest
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("missing link"))?;
     let ticket = TransferTicket::parse(link)?;
     let id = service.receive(ticket, a.out.clone())?;
     let mut last = String::new();
@@ -145,14 +192,31 @@ async fn receive(service: &TransferService, a: &Args) -> anyhow::Result<()> {
         let state = service.receive_state(&id);
         let line = format!("{state:?}");
         match state {
-            Some(ReceiveState::Confirm { code }) if line != last => println!("code {} — confirm it on the sender", display(&code)),
-            Some(ReceiveState::Receiving { bytes, total, route }) if line != last => {
-                println!("{} / {} MB via {route:?} {}", bytes / 1_000_000, total / 1_000_000, rss());
+            Some(ReceiveState::Confirm { code }) if line != last => {
+                println!("code {} — confirm it on the sender", display(&code))
+            }
+            Some(ReceiveState::Receiving {
+                bytes,
+                total,
+                route,
+            }) if line != last => {
+                println!(
+                    "{} / {} MB via {route:?} {}",
+                    bytes / 1_000_000,
+                    total / 1_000_000,
+                    rss()
+                );
             }
             Some(ReceiveState::Done { items }) => {
                 let secs = started.elapsed().as_secs_f64();
                 for i in items {
-                    println!("received {} ({} bytes, blake3 {}) -> {}", i.name, i.size, i.blake3, i.path.display());
+                    println!(
+                        "received {} ({} bytes, blake3 {}) -> {}",
+                        i.name,
+                        i.size,
+                        i.blake3,
+                        i.path.display()
+                    );
                 }
                 println!("done in {secs:.1} s {}", rss());
                 return Ok(());

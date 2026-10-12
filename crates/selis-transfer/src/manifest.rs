@@ -63,7 +63,11 @@ mod hex_hash {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Hash, D::Error> {
         let s = String::deserialize(d)?;
-        if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+        if s.len() != 64
+            || !s
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
             return Err(D::Error::custom("bad blake3"));
         }
         let h = blake3::Hash::from_hex(&s).map_err(|_| D::Error::custom("bad blake3"))?;
