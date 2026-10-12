@@ -47,6 +47,13 @@ changes locally with `npx playwright test --project=visual-390 --update-snapshot
 
 Android: `npm run tauri -- android dev`. See the README for prerequisites.
 
+### Android end-to-end (Maestro)
+
+Flows live in `apps/app/e2e/maestro/` and run through `run.sh` (ANR check, animations off for the
+run). On devices with Android System WebView 15x (e.g. a Galaxy S23), Maestro 2.11 cannot read the
+WebView's DOM; build the patched CLI once with `tools/maestro-patch/build.sh` and run with
+`MAESTRO=F:/DevCache/maestro-selis/bin/maestro` (see [tools/maestro-patch/README.md](tools/maestro-patch/README.md)).
+
 If you change a Tauri command, regenerate the bindings with
 `cargo test -p selis-app export_bindings` and commit `apps/app/src/lib/ipc/bindings.ts`.
 Long-running commands take a `request_id` and run through `RequestResults::run_once`

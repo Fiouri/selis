@@ -1,0 +1,10 @@
+--- a/maestro-client/src/main/java/maestro/android/chromedevtools/DadbChromeDevToolsClient.kt
++++ b/maestro-client/src/main/java/maestro/android/chromedevtools/DadbChromeDevToolsClient.kt
+@@ -256,6 +256,7 @@
+         val ws = okhttp.newWebSocket(
+             Request.Builder()
+                 .url(url)
++                .header("Host", "localhost:9222") // Expected by devtools server (WebView 15x rejects the socket name)
+                 .build(),
+             object : WebSocketListener() {
+                 override fun onMessage(webSocket: WebSocket, text: String) {

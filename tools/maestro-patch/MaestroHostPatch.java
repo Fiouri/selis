@@ -16,7 +16,7 @@ import net.bytebuddy.jar.asm.Opcodes;
  * (DadbChromeDevToolsClient.makeSingleWebsocketRequest, after Request.Builder.url).
  *
  * Usage: java -cp byte-buddy.jar MaestroHostPatch.java <in.class> <out.class>
- * (patch-maestro.sh builds a patched copy of the Maestro install; the original is untouched).
+ * (build.sh applies it to the pinned release; maestro-ws-host.patch is the same change in the Kotlin source).
  */
 public class MaestroHostPatch {
   private static final String BUILDER = "okhttp3/Request$Builder";
