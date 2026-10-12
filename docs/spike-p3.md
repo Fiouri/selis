@@ -45,3 +45,49 @@ with a 42 MB peak RSS: use optimized builds for measurements.
      permissive data license); now allowed explicitly.
    - Three Unlicense crates are browser-only (wasm32). The deny graph is now limited to the
      targets Selis ships.
+
+## In-app measurements (P3a, 2026-10-12)
+
+The app itself (release + `measure` feature, debug-signed: optimized code with WebView DevTools on)
+against the dev peer on the host (`selis-peer`, release), driven by
+`node scripts/measure-transfer.ts` (Receive tab → paste link, or Send tab → QR link; the host
+confirms only after comparing its code with the one on the device). Payload: a 200 MB PDF
+(`%PDF-` header + random bytes). Host on Wi-Fi 192.168.1.2 (NordVPN active, as in the spike).
+RSS: app process `TOTAL RSS` (dumpsys meminfo), peak during the transfer minus the value with the
+Transfer screen already open. Release APK sizes: arm64 22.7 MB, x86_64 24.6 MB.
+
+| Device | Direction | Route (UI chip) | Time / speed | RSS Δ | Same code | Integrity |
+| --- | --- | --- | --- | --- | --- | --- |
+| S23 (Android 16) | host → S23 | Same Wi‑Fi (`lan`) | 6.3 s, **36.9 MB/s** | ≤ 0 | ✓ | BLAKE3 in library ✓ |
+| S23 | host → S23, host relay-only | relay | 200.9 s, **1.0 MB/s** | +18 MB | ✓ | ✓ |
+| S23 | S23 → host | `direct` | 20.5 s, **11.1 MB/s** | +4 MB | ✓ | SHA-256 equal ✓ |
+| S23 | S23 → host, host relay-only | relay | 201.9 s, **1.0 MB/s** | +3 MB | ✓ | ✓ |
+| S23 | resume: `am force-stop` at 40 % | `lan` | resumed at **59 %** (what had reached the store), done 5.0 s after Resume | +17 MB | ✓ | ✓ |
+| S23 | cold start from a `selis://` intent (camera-app path) | `lan` | 6.9 s launch → in library | – | – | ✓ |
+| AVD `selis-midrange-api36` | host → AVD | `lan` (emulator NAT) | 54.3 s, 3.9 MB/s | +10 MB | ✓ | ✓ |
+| AVD | host → AVD, relay-only | relay | 202.0 s, 1.0 MB/s | +4 MB | ✓ | ✓ |
+| AVD | AVD → host | `lan`/`direct` | 47.2 s, 4.6 MB/s | +6 MB | ✓ | ✓ |
+| AVD | AVD → host, relay-only | relay | 199.3 s, 1.0 MB/s | +9 MB | ✓ | ✓ |
+| AVD | resume: `am force-stop` at 40 % | `lan` | resumed at 43 %, done 32.8 s later | +4 MB | ✓ | ✓ |
+
+Refusals on devices: a ticket that lived 3 s → "expired" on S23 and AVD (local check); the link
+already used by the S23 → "already used" on the AVD (sender's single-use token). An unconfirmed
+peer fetching the blobs directly is refused by the gate (integration test, mutation-checked).
+No socket owned by the app UID after a cold start, nor after leaving the Transfer screen
+(`transfer.sh sockets`, S23 and AVD).
+
+Findings:
+
+1. **Device key bug found on the device:** two `register_android_plugin` calls in one Tauri plugin
+   keep only the last handle, so `deviceKey` went to `TransferPlugin` and every start used a new
+   identity; resume after a kill was then refused ("unknown session"). Fixed (own Tauri plugin),
+   resume verified above.
+2. **The notification-permission dialog blocked progress polling** (the UI awaited it). Fixed.
+3. **One AVD → host direct run stalled** (~1 MB per 105 s, path flapping `lan`/`direct`, no relay
+   fallback) and was stopped; the rerun reached 4.6 MB/s. Seen only through the emulator's NAT;
+   watch for it on real networks (iroh path selection), the receiver can cancel and the transfer
+   resumes.
+4. Route labels: a direct path to the host's global IPv6 address shows "Direct connection", not
+   "Same Wi‑Fi" (`lan` = private/link-local/ULA addresses only).
+5. JNI DNS (finding 2 of the spike) does not abort in the app: the default network setting
+   (n0 DNS + relay) worked in every run.

@@ -79,6 +79,9 @@ async function rssMb(serial: string): Promise<number | null> {
   }
 }
 
+/** Every sampler started, stopped when the run ends (also on errors). */
+const samplers: Array<{ stop: () => Promise<number> }> = [];
+
 class RssSampler {
   private samples: number[] = [];
   private running = false;
@@ -90,6 +93,7 @@ class RssSampler {
   }
 
   start(): void {
+    samplers.push(this);
     this.running = true;
     this.loop = (async () => {
       while (this.running) {
@@ -208,6 +212,7 @@ const peers: Array<{ kill: () => void }> = [];
 /** The dev peer on this computer. */
 class Peer {
   readonly lines: Array<{ t: number; line: string }> = [];
+  exited = false;
   private readonly proc: ChildProcess;
 
   constructor(args: readonly string[]) {
@@ -233,6 +238,9 @@ class Peer {
     };
     this.proc.stdout?.on("data", onData);
     this.proc.stderr?.on("data", onData);
+    this.proc.on("exit", () => {
+      this.exited = true;
+    });
     peers.push(this);
   }
 
@@ -357,7 +365,9 @@ async function scenarioSend(o: Options, cdp: Cdp): Promise<Result> {
       const route = await cdp.evaluate<string | null>(`${q("transfer-route")}?.dataset.route ?? null`);
       if (route) routes.add(route);
       if (!tData && receiver.lines.some((l) => /^[1-9]\d* \/ \d+ MB/.test(l.line))) tData = Date.now();
-      if (receiver.lines.some((l) => l.line.startsWith("Error"))) throw new Error("peer failed");
+      if (receiver.lines.some((l) => l.line.startsWith("Error")) || (receiver.exited && !receiver.lines.some((l) => l.line.startsWith("done in")))) {
+        throw new Error("peer failed or stopped");
+      }
       return receiver.lines.some((l) => l.line.startsWith("done in")) || null;
     },
     30 * 60_000,
@@ -489,6 +499,7 @@ async function main(): Promise<number> {
     return 0;
   } finally {
     for (const peer of peers) peer.kill();
+    await Promise.all(samplers.map((sampler) => sampler.stop()));
     cdp.close();
     try {
       adb(o.serial, ["forward", "--remove-all"]);
