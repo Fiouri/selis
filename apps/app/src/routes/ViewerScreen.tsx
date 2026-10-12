@@ -1,6 +1,6 @@
 import { nextTurn, type QuarterTurns } from "@selis/engine";
 import { Button, EmptyState, Skeleton } from "@selis/ui";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DocumentGlyph } from "../components/Illustrations";
@@ -214,6 +214,8 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
    */
   const finishAnnotating = useCallback(() => {
     setMode("view");
+    // Back in view mode the actions show again, even if the page scrolled down meanwhile.
+    setDockHidden(false);
     useSignState.getState().activate(null);
     useFormState.getState().setActive(null);
     if (!session || !doc) return;
@@ -445,7 +447,12 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-page-canvas" data-testid="viewer-screen">
+    <div
+      className="relative h-full w-full overflow-hidden bg-page-canvas"
+      // What covers the pages (top bar, mode sheet): inline editors keep clear of it (scroll-margin).
+      style={{ "--selis-cover-top": `${barHeight}px`, "--selis-cover-bottom": `${sheetHeight}px` } as CSSProperties}
+      data-testid="viewer-screen"
+    >
       {body}
       {pagesMode ? null : annotating ? (
         <AnnotateBar
