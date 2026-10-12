@@ -37,6 +37,9 @@ const CHIP_HIDE_MS = 1_500;
 const SAVE_PAGE_MS = 800;
 /** Room under the last page for the floating dock (64 + 28 + breathing room). */
 const DOCK_SPACE = 112;
+/** Notes quoted by name in the redaction confirm; the rest are counted. */
+const MAX_LISTED_NOTES = 3;
+const clip = (text: string) => (text.length > 40 ? `${text.slice(0, 39)}…` : text);
 /** Scrolling this far down hides the dock; up shows it again. */
 const DOCK_SCROLL_PX = 8;
 
@@ -210,6 +213,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
 
   /** The sheet that offers to delete the versions from before a redaction. */
   const [earlierVersions, setEarlierVersions] = useState(false);
+  const [confirmDeleteEarlier, setConfirmDeleteEarlier] = useState(false);
   const [deletingEarlier, setDeletingEarlier] = useState(false);
 
   /**
@@ -258,6 +262,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   };
 
   const deleteEarlierVersions = async () => {
+    setConfirmDeleteEarlier(false);
     setDeletingEarlier(true);
     try {
       const removed = await api.deleteEarlierVersions(docId);
@@ -271,11 +276,35 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     }
   };
 
-  const [confirmRedact, setConfirmRedact] = useState(false);
+  /** Side effects listed in the confirm dialog; null while it is closed. */
+  const [confirmRedact, setConfirmRedact] = useState<readonly string[] | null>(null);
+  const [checkingRedact, setCheckingRedact] = useState(false);
   const [redacting, setRedacting] = useState(false);
   const redactCount = useRedactState((s) => s.marks.size);
+  /** Opens the confirm dialog with what the redaction also does beyond the marked areas. */
+  const askRedact = async () => {
+    if (!doc) return;
+    const details: string[] = [];
+    if (state.status === "ready" && state.meta.kind === "linked") details.push(t("redact.sideLinked"));
+    setCheckingRedact(true);
+    try {
+      const preview = await doc.redactionPreview();
+      if (preview.annotations.length > 0) {
+        const shown = preview.annotations.slice(0, MAX_LISTED_NOTES).map((text) => t("redact.sideNoteQuote", { text: clip(text) }));
+        const list = shown.join(", ") + (preview.annotations.length > MAX_LISTED_NOTES ? "…" : "");
+        details.push(t("redact.sideNotes", { count: preview.annotations.length, list }));
+      }
+      if (preview.ownerPassword) details.push(t("redact.sideOwnerPassword"));
+    } catch (err) {
+      // The dialog still opens; applying reports its own failure.
+      console.warn("selis: redaction preview failed", err);
+    } finally {
+      setCheckingRedact(false);
+    }
+    setConfirmRedact(details);
+  };
   const applyRedactions = async () => {
-    setConfirmRedact(false);
+    setConfirmRedact(null);
     if (!doc || !session) return;
     setRedacting(true);
     try {
@@ -531,7 +560,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
             mode === "sign" ? (
               <SignSheet ref={sheetRef} />
             ) : mode === "redact" ? (
-              <RedactSheet ref={sheetRef} busy={redacting} onApply={() => setConfirmRedact(true)} />
+              <RedactSheet ref={sheetRef} busy={redacting || checkingRedact} onApply={() => void askRedact()} />
             ) : mode === "form" ? (
               <FormSheet ref={sheetRef} onJump={(index, y) => mainRef.current?.scrollToPage(index, y)} onFlatten={() => void flatten()} />
             ) : (
@@ -572,19 +601,31 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
       <EarlierVersionsSheet
         open={earlierVersions}
         busy={deletingEarlier}
-        onDelete={() => void deleteEarlierVersions()}
+        onDelete={() => setConfirmDeleteEarlier(true)}
         onKeep={() => setEarlierVersions(false)}
       />
       <ConfirmDialog
-        open={confirmRedact}
+        open={confirmRedact !== null}
         danger
         title={t("redact.confirmTitle", { count: redactCount })}
         message={t("redact.confirmBody")}
+        details={confirmRedact ?? []}
         confirmLabel={t("redact.confirm")}
         cancelLabel={t("redact.cancel")}
         onConfirm={() => void applyRedactions()}
-        onCancel={() => setConfirmRedact(false)}
+        onCancel={() => setConfirmRedact(null)}
         testId="redact-dialog"
+      />
+      <ConfirmDialog
+        open={confirmDeleteEarlier}
+        danger
+        title={t("redact.earlierConfirmTitle")}
+        message={t("redact.earlierConfirmBody")}
+        confirmLabel={t("redact.earlierConfirm")}
+        cancelLabel={t("redact.cancel")}
+        onConfirm={() => void deleteEarlierVersions()}
+        onCancel={() => setConfirmDeleteEarlier(false)}
+        testId="redact-earlier-dialog"
       />
       <ConfirmDialog
         open={state.status === "recovery"}

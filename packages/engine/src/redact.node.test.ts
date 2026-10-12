@@ -18,6 +18,7 @@ import {
   intersects,
   isDark,
   pdfjsAnnotations,
+  pdfjsDocumentParts,
   pdfjsRender,
   pdfjsText,
   type Raster,
@@ -349,8 +350,14 @@ describe("the redacted file, read by pdf.js", () => {
   it("form: no trace of the redacted value or label, no mark left, the other fields kept", async () => {
     const formPending = new Uint8Array(await withMarks(fixture("acroform"), [mark(0, { x: 40, y: 80, width: 460, height: 40 })]));
     const out = new Uint8Array((await applyRedactions(engine, text, formPending.slice().buffer)).bytes);
-    expect(findInFile(formPending, ["Ada Lovelace"])).toEqual(["Ada Lovelace"]);
+    expect(findInFile(formPending, ["Ada Lovelace", "full_name"])).toEqual(["Ada Lovelace", "full_name"]);
     expect(findInFile(out, ["Ada Lovelace"])).toEqual([]);
+    // The field whose widget went is not left in /AcroForm /Fields either (no name, no tooltip).
+    expect(findInFile(out, ["full_name", "Full name"])).toEqual([]);
+    expect((await pdfjsDocumentParts(formPending)).fields).toEqual(["full_name", "email", "agree", "plan"]);
+    const parts = await pdfjsDocumentParts(out);
+    expect(parts.fields).toEqual(["email", "agree", "plan"]);
+    expect(parts.widgets.map((w) => w.name)).toEqual(["email", "agree", "plan"]);
     expect((await pdfjsText(out)).pages.join("\n")).not.toContain("Full name");
     const annots = await pdfjsAnnotations(out);
     expect(annots.some((a) => a.subtype === "Redact")).toBe(false);

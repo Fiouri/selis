@@ -182,12 +182,14 @@ export async function applyRedactions(
   engine: PdfiumNative,
   text: EmbeddedText,
   current: ArrayBuffer,
-): Promise<{ bytes: ArrayBuffer; applied: number; sanitized: string[] }> {
+): Promise<{ bytes: ArrayBuffer; applied: number; sanitized: string[]; annotations: string[]; ownerPassword: boolean }> {
   let applied = 0;
+  let ownerPassword = false;
   const terms: string[] = [];
   const emptied = await withScratch(engine, current, async (doc) => {
     for (const page of doc.pages) applied += await emptyFields(engine, text, doc, page, terms);
-    if (text.isEncrypted(doc)) text.removeEncryption(doc);
+    ownerPassword = text.isEncrypted(doc);
+    if (ownerPassword) text.removeEncryption(doc);
     return (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
   });
   if (applied === 0) throw new Error("no redaction marks to apply");
@@ -202,5 +204,5 @@ export async function applyRedactions(
   });
   // The whiteouts' new text stamps hold the user's new words: kept as written.
   const { bytes, report } = await sanitizeRedacted(new Uint8Array(redacted), terms, (nm) => stamps.has(nm));
-  return { bytes: bytes.slice().buffer, applied, sanitized: report.removed };
+  return { bytes: bytes.slice().buffer, applied, sanitized: report.removed, annotations: report.annotations, ownerPassword };
 }

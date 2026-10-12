@@ -9,6 +9,7 @@ import type {
   ImportLosses,
   OutlineItem,
   PageSize,
+  RedactionPreview,
   SearchHit,
   StampImage,
   TextRun,
@@ -47,6 +48,7 @@ export type WorkerRequest =
   | { type: "editPages"; reqId: number; docId: string; op: PageOp }
   | { type: "extract"; reqId: number; docId: string; indices: number[] }
   | { type: "applyRedactions"; reqId: number; docId: string }
+  | { type: "redactionPreview"; reqId: number; docId: string }
   | { type: "importLosses"; reqId: number; docId: string; bytes: ArrayBuffer }
   | { type: "appearance"; reqId: number; docId: string; index: number; id: string }
   | { type: "cancel"; reqId: number }
@@ -75,6 +77,7 @@ export type WorkerResponse =
   | { type: "extracted"; reqId: number; bytes: ArrayBuffer }
   | { type: "redacted"; reqId: number; pages: PageSize[]; before: ArrayBuffer; applied: number }
   | { type: "importLosses"; reqId: number; losses: ImportLosses }
+  | { type: "redactionPreview"; reqId: number; preview: RedactionPreview }
   | { type: "appearance"; reqId: number; image: StampImage }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };

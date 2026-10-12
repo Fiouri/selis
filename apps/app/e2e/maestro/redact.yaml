@@ -76,5 +76,10 @@ name: Redact - text and whiteout, apply, version
     timeout: 10000
 - tapOn: "Delete earlier versions"
 - extendedWaitUntil:
+    visible: "Delete the earlier versions?"
+    timeout: 5000
+- tapOn:
+    id: "redact-earlier-dialog-confirm"
+- extendedWaitUntil:
     visible: "Deleted 1 earlier version."
     timeout: 10000

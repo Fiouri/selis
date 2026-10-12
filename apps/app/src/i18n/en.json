@@ -376,6 +376,13 @@
     "earlierDelete": "Delete earlier versions",
     "earlierKeep": "Keep them",
     "earlierDeleted": "{count, plural, =0 {No earlier versions to delete.} one {Deleted # earlier version.} other {Deleted # earlier versions.}}",
-    "earlierFailed": "The earlier versions could not be deleted."
+    "earlierFailed": "The earlier versions could not be deleted.",
+    "sideLinked": "This is a linked file: the original outside Selis still contains this text. Only the new version in Selis changes.",
+    "sideNotes": "{count, plural, one {# note elsewhere also goes, because it shares a removed word: {list}} other {# notes elsewhere also go, because they share a removed word: {list}}}",
+    "sideNoteQuote": "“{text}”",
+    "sideOwnerPassword": "The document's owner password and its permission settings are not kept in the new version.",
+    "earlierConfirmTitle": "Delete the earlier versions?",
+    "earlierConfirmBody": "Every earlier version of this document in Selis is deleted, the imported copy among them. Only the new version stays. A linked original outside Selis is not touched. This cannot be undone.",
+    "earlierConfirm": "Delete"
   }
 }

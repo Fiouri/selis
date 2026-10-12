@@ -119,6 +119,11 @@ export interface DocHandle {
    * applied. Like a page operation, it rebuilds the document (`onStructureChange`).
    */
   applyRedactions(): Promise<{ before: ArrayBuffer; applied: number }>;
+  /**
+   * What applying the marks would also do beyond the page content (runs the
+   * whole redaction on a scratch copy; the document does not change).
+   */
+  redactionPreview(): Promise<RedactionPreview>;
   /** What inserting the PDF `bytes` into this document would not carry over (ADR 0008). */
   importLosses(bytes: ArrayBuffer): Promise<ImportLosses>;
   /** The pages `indices` as a new PDF (forms kept fillable). */
@@ -136,6 +141,14 @@ export interface DocHandle {
   save(): Promise<ArrayBuffer>;
   close(): Promise<void>;
 }
+
+/** Side effects of applying the redaction marks, for the confirm dialog. */
+export type RedactionPreview = {
+  /** Text of the notes / comments elsewhere that go because they share a redacted word. */
+  readonly annotations: readonly string[];
+  /** The document has an owner password: the new version is written without its permission settings. */
+  readonly ownerPassword: boolean;
+};
 
 /** Parts of an inserted PDF the page import drops: counts per kind (0 = none). */
 export type ImportLosses = {

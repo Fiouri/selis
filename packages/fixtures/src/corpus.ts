@@ -567,6 +567,29 @@ export function leakyDocument(): Uint8Array {
 
 export const ENCRYPTED_PASSWORD = "selis";
 
+/**
+ * A one-page document with an owner password only (no user password): it opens
+ * without asking, but carries a security handler and restricted permissions.
+ * "Owner secret line." sits at baseline y = 720 (Helvetica 12). Not in the corpus.
+ */
+export function ownerPasswordDocument(): Uint8Array {
+  const w = new PdfWriter("selis-fixture-owner-password");
+  const resources = helveticaResources(w);
+  finishDocument(
+    w,
+    [
+      {
+        size: A4,
+        content: [`BT /F1 12 Tf 56 760 Td ${lit("Public line.")} Tj ET`, `BT /F1 12 Tf 56 720 Td ${lit("Owner secret line.")} Tj ET`].join("\n"),
+      },
+    ],
+    resources,
+  );
+  // Print only (bit 3); no copying or modifying.
+  w.encrypt("", "selis-owner", -3904 | 4);
+  return w.toBytes();
+}
+
 function buildEncrypted(): Uint8Array {
   const w = new PdfWriter("selis-fixture-encrypted");
   const resources = helveticaResources(w);

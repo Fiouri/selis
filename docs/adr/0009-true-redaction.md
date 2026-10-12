@@ -102,3 +102,20 @@ EmbedPDF 2.15.1 ships PDFium's redaction (`/Redact` annotations, `applyAllRedact
   tests; CI installs qpdf.
 - Partial glyph overlap: PDFium removes whole text objects / glyphs that meet the quads, so a mark
   that clips a line removes those glyphs entirely (safer than keeping them).
+
+## Update 2026-10-12 (P2 follow-ups)
+
+- **The confirm dialog lists the side effects before anything happens.** The worker runs the whole
+  redaction on a scratch copy (`redactionPreview`) and reports:
+  - the notes elsewhere that go because they share a redacted word (quoted, up to three);
+  - whether an owner password and its permissions will be dropped.
+
+  For a linked document, the dialog also says that the original outside Selis still contains the
+  text. The list is what applying will do, because it is computed by the same code.
+- **Fields left without a widget leave `/AcroForm /Fields`.** A field whose only widget was under a
+  mark was kept with its name and tooltip; now it goes (and so do widget kids that are on no page).
+- **Deleting earlier versions** asks for an explicit destructive confirm first. Rows go in one
+  transaction, and files are removed only after the commit. Only library-owned files are removed:
+  a linked document's external file never is (unit test). When the library opens, a sweep removes
+  any file in the library-owned folders that no row refers to: what a crash between the commit and
+  the file removals would leave behind.

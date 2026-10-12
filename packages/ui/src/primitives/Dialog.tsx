@@ -6,6 +6,8 @@ export type ConfirmDialogProps = {
   open: boolean;
   title: string;
   message: string;
+  /** Extra points under the message (e.g. side effects), shown as a list. */
+  details?: readonly string[];
   confirmLabel: string;
   cancelLabel: string;
   /** Destructive action: the confirm button uses the danger colors. */
@@ -30,6 +32,7 @@ export function ConfirmDialog({
   open,
   title,
   message,
+  details,
   confirmLabel,
   cancelLabel,
   danger = false,
@@ -83,9 +86,19 @@ export function ConfirmDialog({
         <h2 id={titleId} className="text-md font-semibold text-neutral-12">
           {title}
         </h2>
-        <p id={messageId} className="mt-2 text-sm text-neutral-11">
-          {message}
-        </p>
+        <div id={messageId}>
+          <p className="mt-2 text-sm text-neutral-11">{message}</p>
+          {details && details.length > 0 ? (
+            <ul
+              className="mt-3 flex max-h-48 list-disc flex-col gap-1 overflow-y-auto pl-5 text-sm text-neutral-12"
+              data-testid={testId && `${testId}-details`}
+            >
+              {details.map((d, i) => (
+                <li key={i}>{d}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
         <div className="mt-5 flex justify-end gap-2">
           <Button ref={cancelRef} variant="secondary" onClick={onCancel} data-testid={testId && `${testId}-cancel`}>
             {cancelLabel}

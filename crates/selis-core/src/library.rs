@@ -181,6 +181,8 @@ impl Library {
         lib.prepare_thumbnail_dir()?;
         lib.prepare_work_dir()?;
         lib.prepare_signature_dir()?;
+        // Best effort: a file that cannot be removed now is tried again next time.
+        let _ = lib.sweep_orphans();
         Ok(lib)
     }
 
