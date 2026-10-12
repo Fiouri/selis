@@ -1,0 +1,176 @@
+/**
+ * Transfer screen against the mock backend's scripted other device
+ * (src/lib/mock-transfer.ts): send with the code, decline, receive by paste,
+ * deep link and camera scan, pause and resume, plain-language errors.
+ */
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { expect, type Page, test } from "@playwright/test";
+import { fixturePath } from "@selis/fixtures";
+import { addToLibrary, presetSettings } from "./helpers";
+
+const LINK = readFileSync(fileURLToPath(import.meta.resolve("@selis/fixtures/transfer/link.txt")), "utf8").trim();
+
+type Hooks = {
+  peerScans: () => void;
+  senderConfirms: () => void;
+  hold: (on: boolean) => void;
+  incoming: (files: Array<{ name: string; bytes: number[] }>) => void;
+  failReceive: (code: string | null) => void;
+  link: (url: string) => void;
+  expireOffers: () => void;
+};
+
+async function hook<K extends keyof Hooks>(page: Page, name: K, ...args: Parameters<Hooks[K]>): Promise<void> {
+  await page.evaluate(
+    ({ name, args }) => {
+      const hooks = (window as unknown as { __selisTest: { transfer: Record<string, (...a: unknown[]) => void> } }).__selisTest
+        .transfer;
+      hooks[name]?.(...args);
+    },
+    { name, args },
+  );
+}
+
+async function openTransfer(page: Page): Promise<void> {
+  await page.getByRole("navigation").getByRole("button", { name: "Transfer" }).click();
+  await expect(page.getByTestId("transfer-screen")).toBeVisible();
+}
+
+async function receiveTab(page: Page): Promise<void> {
+  await page.getByRole("tab", { name: "Receive" }).click();
+  await expect(page.getByTestId("transfer-receive")).toBeVisible();
+}
+
+async function pasteLink(page: Page, link: string): Promise<void> {
+  await page.getByTestId("transfer-paste").click();
+  await page.getByTestId("transfer-paste-input").fill(link);
+  await page.getByTestId("transfer-paste-submit").click();
+}
+
+test.beforeEach(async ({ page }) => {
+  await presetSettings(page, { locale: "en", theme: "light" });
+});
+
+test("sends two documents once the same code is confirmed", async ({ page }) => {
+  await page.goto("/");
+  await addToLibrary(page, "greek.pdf", "Contract.pdf");
+  await addToLibrary(page, "mixed-sizes.pdf", "Invoice.pdf");
+  await openTransfer(page);
+
+  const send = page.getByTestId("transfer-send-start");
+  await expect(send).toBeDisabled();
+  await page.getByTestId("transfer-select-all").click();
+  await expect(page.getByTestId("transfer-doc").and(page.locator('[aria-checked="true"]'))).toHaveCount(2);
+  await page.getByTestId("transfer-history").click();
+  await send.click();
+
+  await expect(page.getByTestId("transfer-qr")).toBeVisible();
+  await expect(page.getByTestId("transfer-offer-summary")).toContainText("2 documents");
+  await expect(page.getByTestId("transfer-expires")).toContainText(/Expires in (10:00|9:\d\d)/);
+
+  await hook(page, "peerScans");
+  await expect(page.getByTestId("transfer-send-code")).toHaveText("482 913");
+  await page.getByTestId("transfer-confirm").click();
+  await expect(page.getByTestId("transfer-send-done")).toBeVisible();
+  await expect(page.getByTestId("transfer-send-done")).toContainText("2 documents arrived");
+  await page.getByTestId("transfer-send-again").click();
+  await expect(page.getByTestId("transfer-choose")).toBeVisible();
+});
+
+test("a code that does not match sends nothing", async ({ page }) => {
+  await page.goto("/");
+  await addToLibrary(page, "greek.pdf", "Contract.pdf");
+  await openTransfer(page);
+  await page.getByTestId("transfer-doc").first().click();
+  await page.getByTestId("transfer-send-start").click();
+  await hook(page, "peerScans");
+  await page.getByTestId("transfer-mismatch").click();
+  await expect(page.getByTestId("transfer-send-problem")).toHaveAttribute("data-problem", "declined");
+  await expect(page.getByTestId("transfer-send-problem")).toHaveText("The code wasn’t confirmed, so nothing was sent.");
+});
+
+test("an expired code asks for a new one", async ({ page }) => {
+  await page.goto("/");
+  await addToLibrary(page, "greek.pdf", "Contract.pdf");
+  await openTransfer(page);
+  await page.getByTestId("transfer-doc").first().click();
+  await page.getByTestId("transfer-send-start").click();
+  await expect(page.getByTestId("transfer-qr")).toBeVisible();
+  await hook(page, "expireOffers");
+  await expect(page.getByTestId("transfer-send-problem")).toHaveAttribute("data-problem", "expired");
+  await page.getByRole("button", { name: "New code" }).click();
+  await expect(page.getByTestId("transfer-choose")).toBeVisible();
+});
+
+test("receives by pasted link into the library", async ({ page }) => {
+  await page.goto("/");
+  await openTransfer(page);
+  await receiveTab(page);
+  await page.evaluate(
+    (bytes) => {
+      const hooks = (window as unknown as { __selisTest: { transfer: Hooks } }).__selisTest.transfer;
+      hooks.incoming([{ name: "Lease.pdf", bytes }]);
+    },
+    [...readFileSync(fixturePath("greek.pdf"))],
+  );
+  await pasteLink(page, `  ${LINK}\n`);
+  await expect(page.getByTestId("transfer-receive-code")).toHaveText("482 913");
+  await hook(page, "senderConfirms");
+  await expect(page.getByTestId("transfer-receive-done")).toBeVisible();
+  await expect(page.getByTestId("transfer-receive-count")).toHaveText("1 document was added to your library.");
+  await page.getByTestId("transfer-open-library").click();
+  await expect(page.getByRole("button", { name: /Lease/ })).toBeVisible();
+});
+
+test("refuses what is not a transfer link", async ({ page }) => {
+  await page.goto("/");
+  await openTransfer(page);
+  await receiveTab(page);
+  await pasteLink(page, "https://example.com/not-selis");
+  await expect(page.getByTestId("transfer-receive-problem")).toHaveText("That isn’t a Selis transfer link.");
+});
+
+test("a selis:// link from another app opens Receive and shows the code", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("navigation")).toBeVisible();
+  await hook(page, "link", LINK);
+  await expect(page.getByTestId("transfer-screen")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Receive" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("transfer-receive-code")).toHaveText("482 913");
+});
+
+test("an interrupted receive pauses and resumes", async ({ page }) => {
+  await page.goto("/");
+  await openTransfer(page);
+  await receiveTab(page);
+  await hook(page, "failReceive", "interrupted");
+  await pasteLink(page, LINK);
+  await hook(page, "senderConfirms");
+  await expect(page.getByTestId("transfer-receive-paused")).toBeVisible();
+  await page.getByTestId("transfer-resume").click();
+  await expect(page.getByTestId("transfer-receive-done")).toBeVisible();
+});
+
+test("a paused receive survives leaving the screen and resumes from the list", async ({ page }) => {
+  await page.goto("/");
+  await openTransfer(page);
+  await receiveTab(page);
+  await hook(page, "failReceive", "interrupted");
+  await pasteLink(page, LINK);
+  await hook(page, "senderConfirms");
+  await expect(page.getByTestId("transfer-receive-paused")).toBeVisible();
+  await page.getByTestId("transfer-receive-cancel").click();
+  // Cancel drops it for good: nothing is listed.
+  await expect(page.getByTestId("transfer-paused-list")).toHaveCount(0);
+});
+
+test("camera denied falls back to pasting", async ({ page, browserName }) => {
+  test.skip(browserName !== "chromium", "permission emulation is Chromium-only");
+  await page.goto("/");
+  await openTransfer(page);
+  await receiveTab(page);
+  await page.getByTestId("transfer-scan").click();
+  await expect(page.getByTestId("transfer-camera-problem")).toBeVisible();
+  await expect(page.getByTestId("transfer-paste")).toBeVisible();
+});

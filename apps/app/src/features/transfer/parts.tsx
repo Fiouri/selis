@@ -123,8 +123,8 @@ export function Busy({ label, testId }: { label: string; testId: string }) {
 export function LockFooter() {
   const { t } = useTranslation();
   return (
-    <p className="flex items-center justify-center gap-2 px-4 py-4 text-center text-[13px] text-neutral-11">
-      <Lock size={14} strokeWidth={2} aria-hidden="true" className="shrink-0" />
+    <p className="px-6 py-4 text-center text-[13px] text-balance text-neutral-11">
+      <Lock size={14} strokeWidth={2} aria-hidden="true" className="mr-1.5 inline-block align-[-2px]" />
       {t("transfer.lockFooter")}
     </p>
   );

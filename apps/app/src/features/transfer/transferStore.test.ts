@@ -25,7 +25,7 @@ function fakeApi(overrides: Partial<TransferApi> = {}): TransferApi {
     transferForegroundStop: vi.fn(() => Promise.resolve(null)),
     transferNotifications: vi.fn(() => Promise.resolve(true)),
     ...overrides,
-  } as TransferApi;
+  };
 }
 
 /** Timers run when `flush` is called (one poll step each). */
@@ -92,7 +92,7 @@ describe("transfer store", () => {
       { kind: "sending", bytes: 5, total: 10, route: "lan" },
       { kind: "done" },
     ];
-    const api = fakeApi({ transferSendStatus: vi.fn(() => Promise.resolve(views.shift() ?? { kind: "done" })) });
+    const api = fakeApi({ transferSendStatus: vi.fn((): Promise<SendView> => Promise.resolve(views.shift() ?? { kind: "done" })) });
     const { store, flush, timers } = harness(api);
     await store.getState().open();
     await store.getState().offerDocuments(["a", "b"], true);
@@ -116,7 +116,7 @@ describe("transfer store", () => {
       { kind: "receiving", bytes: 1, total: 2, route: "relay" },
       { kind: "done", documentIds: ["x"], duplicates: 0 },
     ];
-    const api = fakeApi({ transferReceiveStatus: vi.fn(() => Promise.resolve(views.shift() ?? { kind: "connecting" })) });
+    const api = fakeApi({ transferReceiveStatus: vi.fn((): Promise<ReceiveView> => Promise.resolve(views.shift() ?? { kind: "connecting" })) });
     const { store, flush, received } = harness(api);
     await store.getState().open();
     await store.getState().receiveLink(LINK);

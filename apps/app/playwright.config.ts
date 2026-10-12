@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { FAKE_CAMERA_FILE } from "./e2e/fake-camera";
 
 const PORT = 4173;
 
@@ -29,8 +30,24 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    { name: "pixel-7", use: { ...devices["Pixel 7"] }, testIgnore: "**/visual.spec.ts" },
-    { name: "iphone-15", use: { ...devices["iPhone 15"] }, testIgnore: "**/visual.spec.ts" },
+    { name: "pixel-7", use: { ...devices["Pixel 7"] }, testIgnore: ["**/visual.spec.ts", "**/transfer-camera.spec.ts"] },
+    { name: "iphone-15", use: { ...devices["iPhone 15"] }, testIgnore: ["**/visual.spec.ts", "**/transfer-camera.spec.ts"] },
+    {
+      // QR scanning with a camera that films the fixture code (Chromium's fake capture).
+      name: "camera",
+      testMatch: "**/transfer-camera.spec.ts",
+      use: {
+        ...devices["Pixel 7"],
+        permissions: ["camera"],
+        launchOptions: {
+          args: [
+            "--use-fake-ui-for-media-stream",
+            "--use-fake-device-for-media-stream",
+            `--use-file-for-fake-video-capture=${FAKE_CAMERA_FILE}`,
+          ],
+        },
+      },
+    },
     {
       name: "visual-390",
       testMatch: "**/visual.spec.ts",
