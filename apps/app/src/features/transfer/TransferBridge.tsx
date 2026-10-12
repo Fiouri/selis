@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { api } from "../../lib/api";
 import { useNavigation } from "../../state/navigation";
 import { refreshLibrary } from "../library/queries";
+import { usePack } from "./packStore";
 import { onDocumentsReceived, transferStore } from "./transferStore";
 
 /** Lets a warm deep link land (onNewIntent) before asking Rust for it. */
@@ -44,6 +45,7 @@ export function TransferBridge() {
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("selis:transfer-timeout", onTimeout);
     const unsubscribe = onDocumentsReceived(() => refreshLibrary(queryClient));
+    usePack.setState({ onImported: () => refreshLibrary(queryClient) });
     return () => {
       disposed = true;
       window.clearTimeout(timer);

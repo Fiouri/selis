@@ -9,6 +9,7 @@ import { formatBytes } from "./format";
 import { Busy, Card, CodeBlock, Problem, Progress } from "./parts";
 import { type ScanFailure, ScanError, type Scanner, startScanner } from "./qrScanner";
 import { type TransferProblem, useTransfer } from "./transferStore";
+import { ImportPack } from "./PackSheets";
 import { SaveDevice } from "./TrustedDevices";
 
 /**
@@ -45,6 +46,7 @@ function ScanOrPaste({ problem }: { problem: TransferProblem | null }) {
       </Button>
       <p className="text-center text-[13px] text-neutral-11">{t("transfer.receive.help")}</p>
       <TrustedHint />
+      <ImportPack />
       {problem ? <Problem problem={problem} testId="transfer-receive-problem" /> : null}
       <PausedList />
       <PasteSheet open={pasting} onClose={() => setPasting(false)} />

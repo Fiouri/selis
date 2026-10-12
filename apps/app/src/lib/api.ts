@@ -200,6 +200,19 @@ export const api = {
     unwrap(
       ipc().long("transfer_move_push", (requestId) => commands.transferMovePush(requestId, endpointId), OFFER),
     ),
+  // .selispack (P3c). Export and import may take a while (Argon2id, large libraries).
+  packKind: (source: string) => unwrap(ipc().short("pack_kind", () => commands.packKind(source), READ)),
+  packExport: (documentIds: string[] | null, includeHistory: boolean, passphrase: string | null) =>
+    unwrap(
+      ipc().long(
+        "pack_export",
+        (requestId) => commands.packExport(requestId, documentIds, includeHistory, passphrase),
+        SAVE,
+      ),
+    ),
+  packImport: (source: string, passphrase: string | null) =>
+    unwrap(ipc().long("pack_import", (requestId) => commands.packImport(requestId, source, passphrase), SAVE)),
+  pickPack: () => unwrap(ipc().long("pick_pack", (requestId) => commands.pickPack(requestId), PICK)),
   pendingTransferLink: () => unwrap(ipc().short("pending_transfer_link", () => commands.pendingTransferLink(), READ)),
   dismissTransferLink: (link: string) =>
     unwrap(ipc().short("dismiss_transfer_link", () => commands.dismissTransferLink(link), READ)),
@@ -245,6 +258,10 @@ export type {
   IncomingView,
   LibrarySummary,
   OfferView,
+  PackImportView,
+  PackKind,
+  PackProblem,
+  PackSummary,
   PendingOpen,
   PingView,
   ReceiveView,

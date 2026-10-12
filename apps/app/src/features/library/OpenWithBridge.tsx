@@ -3,6 +3,9 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../../components/Toast";
 import { api } from "../../lib/api";
+import { usePack } from "../transfer/packStore";
+import { transferStore } from "../transfer/transferStore";
+import { useNavigation } from "../../state/navigation";
 import { showImported, showImportError } from "./importFeedback";
 import { OpenWithInbox } from "./openWithInbox";
 import { importController } from "./useImport";
@@ -33,6 +36,11 @@ export function OpenWithBridge() {
       },
       onFailed: (state) => {
         showImportError(t, state);
+      },
+      onPack: (item) => {
+        useNavigation.getState().selectTab("transfer");
+        transferStore().getState().setTab("receive");
+        void usePack.getState().openPack(item.source, item.name);
       },
       log: (message, error) => {
         console.warn(message, error);

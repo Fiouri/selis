@@ -42,6 +42,13 @@
                 <data android:scheme="content" />
                 <data android:mimeType="application/pdf" />
             </intent-filter>
+            <!-- .selispack (ADR 0012): "Open with" / share of a pack; the magic bytes decide. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.anywecon.selispack" />
+            </intent-filter>
             <!-- Transfer links (QR code scanned with the camera app): the Receive tab. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

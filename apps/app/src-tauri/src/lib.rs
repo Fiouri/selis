@@ -85,6 +85,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::transfer::transfer_move_offer,
         commands::transfer::transfer_move_push,
         commands::transfer::transfer_debug_force_relay,
+        commands::pack::pack_kind::<tauri::Wry>,
+        commands::pack::pack_export::<tauri::Wry>,
+        commands::pack::pack_import::<tauri::Wry>,
+        commands::pack::pick_pack::<tauri::Wry>,
         commands::requests::take_result,
     ])
 }

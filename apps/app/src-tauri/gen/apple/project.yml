@@ -46,6 +46,18 @@ targets:
             CFBundleTypeRole: Editor
             LSHandlerRank: Alternate
             LSItemContentTypes: [com.adobe.pdf]
+          # .selispack (ADR 0012): "Open in Selis" from Files / Mail.
+          - CFBundleTypeName: Selis pack
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.anywecon.selis.selispack]
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.anywecon.selis.selispack
+            UTTypeDescription: Selis pack
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [selispack]
+              public.mime-type: [application/vnd.anywecon.selispack]
         LSSupportsOpeningDocumentsInPlace: false
         # selis://transfer/<ticket> links (a QR code read by the camera app) → RunEvent::Opened.
         CFBundleURLTypes:

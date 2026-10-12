@@ -4,6 +4,7 @@
 pub mod device;
 pub mod library;
 pub mod open_with;
+pub mod pack;
 pub mod picker;
 pub mod requests;
 pub mod save;
@@ -62,6 +63,7 @@ impl From<selis_core::Error> for CommandError {
             E::InvalidArgument(_) => ErrorCode::InvalidArgument,
             E::Conflict(_) => ErrorCode::Conflict,
             E::Db(_) | E::Json(_) | E::SchemaTooNew { .. } => ErrorCode::Internal,
+            E::Pack(_) => ErrorCode::InvalidArgument,
         };
         Self::new(code, err.to_string())
     }

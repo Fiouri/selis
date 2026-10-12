@@ -219,6 +219,38 @@
       "toDevice": "Move to {name}",
       "empty": "Your library is empty.",
       "movedBody": "Signatures and settings came along."
+    },
+    "pack": {
+      "exportOpen": "Save as file…",
+      "exportTitle": "Save as a .selispack file",
+      "exportHelp": "One file you can move any way you like: USB, e-mail, your own cloud. Open it in Selis on the other device.",
+      "selected": "{count, plural, =0 {Selected documents (none chosen)} one {The # chosen document} other {The # chosen documents}}",
+      "whole": "The whole library (versions, tags, signatures, settings)",
+      "protect": "Protect with a passphrase",
+      "passphrase": "Passphrase",
+      "passphraseAgain": "Passphrase again",
+      "noRecovery": "Without the passphrase the file cannot be opened. There is no way to recover it.",
+      "tooShort": "At least {count} characters.",
+      "mismatch": "The two passphrases are different.",
+      "working": "Creating the file…",
+      "create": "Create file",
+      "created": "{count, plural, one {File with # document ready} other {File with # documents ready}}",
+      "exportFailed": "The file could not be created. Check the free space.",
+      "importOpen": "Open a .selispack file",
+      "importing": "Checking the file…",
+      "importedTitle": "Added from the file",
+      "passphraseTitle": "This file is protected",
+      "unlock": "Open",
+      "close": "Close",
+      "problem": {
+        "notAPack": "That isn't a Selis file.",
+        "unsupported": "This file was made by a newer Selis. Update Selis and try again.",
+        "passphraseNeeded": "This file needs its passphrase.",
+        "wrongPassphrase": "Wrong passphrase.",
+        "damaged": "The file is damaged or incomplete, so nothing was added.",
+        "tooLarge": "The file is larger than Selis accepts.",
+        "io": "The file could not be read."
+      }
     }
   },
   "settings": {

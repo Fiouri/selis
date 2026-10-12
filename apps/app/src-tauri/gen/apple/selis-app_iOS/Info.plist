@@ -18,9 +18,45 @@
 				<string>com.adobe.pdf</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Selis pack</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.anywecon.selis.selispack</string>
+			</array>
+		</dict>
 	</array>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.anywecon.selis.selispack</string>
+			<key>UTTypeDescription</key>
+			<string>Selis pack</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>selispack</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/vnd.anywecon.selispack</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

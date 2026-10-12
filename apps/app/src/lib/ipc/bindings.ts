@@ -203,6 +203,21 @@ export const commands = {
 	transferMovePush: (requestId: string, endpointId: string) => typedError<string, CommandError>(__TAURI_INVOKE("transfer_move_push", { requestId, endpointId })),
 	/**  Debug builds only: all traffic through the relay (applies at the next open). */
 	transferDebugForceRelay: (on: boolean) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_debug_force_relay", { on })),
+	/**  The first bytes of a picked or shared file: a pack (plain or encrypted), or not. */
+	packKind: (source: string) => typedError<"plain" | "encrypted" | null, CommandError>(__TAURI_INVOKE("pack_kind", { source })),
+	/**
+	 *  Writes a pack (selected documents, or the whole library when `document_ids`
+	 *  is `None`) and opens the share sheet for it. The passphrase, if any, never
+	 *  leaves this call.
+	 */
+	packExport: (requestId: string, documentIds: string[] | null, includeHistory: boolean, passphrase: string | null) => typedError<PackSummary, CommandError>(__TAURI_INVOKE("pack_export", { requestId, documentIds, includeHistory, passphrase })),
+	/**
+	 *  Imports a pack from a picked or shared file: checks everything first, then
+	 *  adds what is new (documents by BLAKE3), applies moved settings.
+	 */
+	packImport: (requestId: string, source: string, passphrase: string | null) => typedError<PackImportView, CommandError>(__TAURI_INVOKE("pack_import", { requestId, source, passphrase })),
+	/**  The picker for a pack (any file type: other apps label packs as binary data). */
+	pickPack: (requestId: string) => typedError<PickOutcome, CommandError>(__TAURI_INVOKE("pick_pack", { requestId })),
 	/**
 	 *  The state of a long-running request: still running, its final result, or
 	 *  unknown (never received, or expired). Read-only; a fresh call the UI makes
@@ -346,12 +361,29 @@ export type OfferView = {
 	expiresAt: number,
 };
 
+export type PackImportView = { status: "imported"; documentIds: string[]; duplicates: number; signatures: number; settings: boolean } | { status: "refused"; problem: PackProblem };
+
+/**  What the first bytes of a file say about it. */
+export type PackKind = "plain" | "encrypted";
+
+/**  Why a pack could not be used (the UI explains each). */
+export type PackProblem = "notAPack" | "unsupported" | "passphraseNeeded" | "wrongPassphrase" | "damaged" | "tooLarge";
+
+export type PackSummary = {
+	documents: number,
+	files: number,
+	bytes: number,
+	encrypted: boolean,
+};
+
 export type PendingOpen = {
 	id: string,
 	/**  `content://` URI (Android) or `file://` URL (iOS), passed to `import_document`. */
 	source: string,
 	/**  The sender's file name, when it told us. */
 	name: string | null,
+	/**  A `.selispack` (its magic bytes), not a PDF: the pack import takes it. */
+	pack: boolean,
 };
 
 export type PickOutcome = { status: "picked"; source: string } | { status: "cancelled" };
