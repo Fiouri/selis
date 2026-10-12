@@ -102,8 +102,8 @@ Tier 2 — end of every feature:
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro
   2.11 sends the DevTools socket name as the WebSocket Host, which WebView 15x (the S23) rejects, so
-  run the S23 with a patched copy: `apps/app/e2e/maestro/tools/patch-maestro.sh` once, then
-  `MAESTRO=F:/DevCache/maestro-selis/bin/maestro run.sh …` (the installed Maestro is untouched).
+  run the S23 with a patched copy: `tools/maestro-patch/build.sh` once (pinned upstream release,
+  SHA-256 checked; see its README), then `MAESTRO=F:/DevCache/maestro-selis/bin/maestro run.sh …`.
 - Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC) + 390×844 visual snapshots in
   light/dark/sepia (`visual-390`; baselines per OS, see CONTRIBUTING.md): `npm run e2e`
 - Windows compile check: `npm run tauri -- build --no-bundle`

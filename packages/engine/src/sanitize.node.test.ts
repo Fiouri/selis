@@ -10,7 +10,7 @@ import { createRequire } from "node:module";
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import { type PdfDocumentObject } from "@embedpdf/models";
 import { init } from "@embedpdf/pdfium";
-import { FIXTURES, LEAKY_SECRET_LINE, leakyDocument } from "@selis/fixtures";
+import { FIXTURES, LEAKY_SECRET_LINE, leakyDocument, ownerPasswordDocument } from "@selis/fixtures";
 import { findInFile, pdfjsDocumentParts, pdfjsPageCount, pdfjsText, qpdfCheck, qpdfRewrite } from "@selis/fixtures/oracle";
 import { beforeAll, describe, expect, it } from "vitest";
 import { EmbeddedText, toPdfAnnotation } from "./annotations";
@@ -97,6 +97,7 @@ describe("redacting a line named all over the document", () => {
   let before: Uint8Array;
   let after: Uint8Array;
   let removed: string[];
+  let annotations: string[];
 
   beforeAll(async () => {
     before = leakyDocument();
@@ -123,6 +124,8 @@ describe("redacting a line named all over the document", () => {
     const result = await applyRedactions(engine, text, pending);
     after = new Uint8Array(result.bytes);
     removed = result.sanitized;
+    annotations = result.annotations;
+    expect(result.ownerPassword).toBe(false);
   });
 
   it("leaves no trace of the secret words anywhere in the bytes", () => {
@@ -146,6 +149,10 @@ describe("redacting a line named all over the document", () => {
     expect(p.widgets.find((w) => w.name === "notes_field")).toMatchObject({ value: "", tooltip: "" });
     expect(p.widgets.find((w) => w.name === "public_field")).toMatchObject({ value: "ok", tooltip: "Public" });
     expect(p.notes).toEqual(["Unrelated"]);
+  });
+
+  it("names the notes it removes for sharing a redacted word (the confirm dialog lists them)", () => {
+    expect(annotations).toEqual(["Call Lovelace", "FreeText"]);
   });
 
   it("reports what it took out", () => {
@@ -173,5 +180,29 @@ describe("what inserting a PDF drops (ADR 0008)", () => {
     const greek = FIXTURES.find((x) => x.name === "greek")?.build();
     if (!greek) throw new Error("no greek fixture");
     expect(await importLosses(engine, text, greek.slice().buffer)).toEqual({ signatures: 0, buttons: 0, tooltips: 0, scripts: 0 });
+  });
+});
+
+describe("a document with an owner password only", () => {
+  it("is redacted without its security handler, and says so", async () => {
+    const before = ownerPasswordDocument();
+    expect(Buffer.from(before).toString("latin1")).toContain("/Encrypt");
+    const doc = await open(before);
+    const page = doc.pages[0];
+    if (!page) throw new Error("no page");
+    // "Owner secret line." at baseline 720 of 841.89 (top-left y ≈ 122).
+    const rect = { x: 50, y: 108, width: 200, height: 18 };
+    await engine
+      .createPageAnnotation(doc, page, toPdfAnnotation({ id: `m-${nextId++}`, page: 0, kind: "redact", rect, segments: [rect], fill: "black", text: "", color: "#000000", opacity: 1 }))
+      .toPromise();
+    const pending = (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
+    const result = await applyRedactions(engine, text, pending);
+    expect(result.ownerPassword).toBe(true);
+    const out = new Uint8Array(result.bytes);
+    expect(Buffer.from(out).toString("latin1")).not.toContain("/Encrypt");
+    const pageText = (await pdfjsText(out)).pages.join("\n");
+    expect(pageText).toContain("Public line.");
+    expect(pageText).not.toContain("Owner secret");
+    qpdfCheck(out);
   });
 });

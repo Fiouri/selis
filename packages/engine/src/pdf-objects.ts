@@ -314,7 +314,7 @@ function unpredict(data: Uint8Array, columns: number, colors: number, bpc: numbe
 }
 
 const num = (o: PdfObj | undefined, fallback = 0): number => (o?.t === "num" ? Number(o.v) : fallback);
-const nameOf = (o: PdfObj | undefined): string | null => (o?.t === "name" ? o.v : null);
+export const nameOf = (o: PdfObj | undefined): string | null => (o?.t === "name" ? o.v : null);
 
 /**
  * Decoded stream data: no filter, or FlateDecode (with a PNG predictor). Other

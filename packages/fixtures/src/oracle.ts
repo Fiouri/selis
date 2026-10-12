@@ -195,12 +195,16 @@ export function rawAndInflated(bytes: Uint8Array): string {
   return parts.join("\n");
 }
 
-/** How a string can appear in a PDF's bytes: UTF-8 (XMP, names), UTF-16BE (text strings), latin1. */
+/**
+ * How a string can appear in a PDF's bytes: UTF-8 (XMP, names), UTF-16BE (text
+ * strings), latin1, each also as a hex string (`<…>`, either case).
+ */
 function encodings(s: string): string[] {
   const utf16 = Buffer.alloc(s.length * 2);
   for (let i = 0; i < s.length; i++) utf16.writeUInt16BE(s.charCodeAt(i), i * 2);
   const hex16 = utf16.toString("hex");
-  return [Buffer.from(s, "utf8").toString("latin1"), utf16.toString("latin1"), hex16, hex16.toUpperCase(), s];
+  const hex8 = Buffer.from(s, "utf8").toString("hex");
+  return [Buffer.from(s, "utf8").toString("latin1"), utf16.toString("latin1"), hex16, hex16.toUpperCase(), hex8, hex8.toUpperCase(), s];
 }
 
 /**
@@ -291,6 +295,8 @@ export type DocumentParts = {
   readonly javascript: readonly string[];
   readonly labels: readonly string[] | null;
   readonly widgets: ReadonlyArray<{ readonly name: string; readonly value: string; readonly tooltip: string }>;
+  /** Fully qualified names of the fields in /AcroForm /Fields (with or without a widget). */
+  readonly fields: readonly string[];
   readonly notes: readonly string[];
 };
 
@@ -346,6 +352,7 @@ export async function pdfjsDocumentParts(bytes: Uint8Array): Promise<DocumentPar
       javascript,
       labels: (await doc.getPageLabels()) ?? null,
       widgets,
+      fields: toKeys(await doc.getFieldObjects()),
       notes,
     };
   });

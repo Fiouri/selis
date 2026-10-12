@@ -76,5 +76,13 @@ name: Redact - text and whiteout, apply, version
     timeout: 10000
 - tapOn: "Delete earlier versions"
 - extendedWaitUntil:
+    visible: "Delete the earlier versions?"
+    timeout: 5000
+# Maestro's DevTools snapshot does not always carry the confirm button's test id.
+- tapOn:
+    text: "Delete"
+    rightOf:
+      id: "redact-earlier-dialog-cancel"
+- extendedWaitUntil:
     visible: "Deleted 1 earlier version."
     timeout: 10000

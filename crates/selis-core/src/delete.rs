@@ -76,6 +76,34 @@ impl Library {
         Ok(report)
     }
 
+    /// Removes files in the library-owned folders that no version, document or
+    /// thumbnail refers to: left behind when the app died between a delete's
+    /// commit and its file removals (deletes remove files only after the rows
+    /// are gone), or an import's temp file. Run when the library opens, before
+    /// anything writes. Returns how many files went. Files outside those folders
+    /// (a linked document's external file) are never looked at.
+    pub(crate) fn sweep_orphans(&self) -> Result<u32> {
+        let mut removed = 0;
+        for dir in OWNED_DIRS {
+            let path = self.root.join(dir.trim_end_matches('/'));
+            let Ok(entries) = std::fs::read_dir(&path) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                if !entry.file_type().is_ok_and(|t| t.is_file()) {
+                    continue;
+                }
+                let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                    continue;
+                };
+                if self.remove_if_unreferenced(&format!("{dir}{name}"))? {
+                    removed += 1;
+                }
+            }
+        }
+        Ok(removed)
+    }
+
     /// Deletes a library-owned file once no version, document or thumbnail
     /// points at it. Returns whether a file was removed.
     pub(crate) fn remove_if_unreferenced(&self, location: &str) -> Result<bool> {
@@ -284,6 +312,87 @@ mod tests {
         assert!(Path::new(&thumb).is_file());
         assert_eq!(lib.delete_document("linked-2")?.removed_files, 1);
         assert!(!Path::new(&thumb).exists());
+        Ok(())
+    }
+    #[test]
+    fn deleting_earlier_versions_of_a_linked_document_never_touches_the_external_file() -> Result<()>
+    {
+        let (_dir, lib) = lib()?;
+        let outside = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let external = outside.path().join("Εξωτερικό.pdf");
+        std::fs::write(&external, pdf("ext")).map_err(|e| Error::io(&external, e))?;
+        let ext = external.to_string_lossy().into_owned();
+        let v2 = lib.resolve_location("library/lv2.pdf")?;
+        std::fs::write(&v2, pdf("v2")).map_err(|e| Error::io(&v2, e))?;
+        let v3 = lib.resolve_location("library/lv3.pdf")?;
+        std::fs::write(&v3, pdf("v3")).map_err(|e| Error::io(&v3, e))?;
+        let conn = lib.conn();
+        conn.execute(
+            "INSERT INTO documents (id, title, kind, location, blake3, size_bytes, created_at, modified_at)
+             VALUES ('linked-1', 'ext', 'linked', 'library/lv3.pdf', 'h3', 20, 0, 0)",
+            [],
+        )?;
+        for (id, seq, path) in [
+            ("lv1", 1, ext.as_str()),
+            ("lv2", 2, "library/lv2.pdf"),
+            ("lv3", 3, "library/lv3.pdf"),
+        ] {
+            conn.execute(
+                "INSERT INTO versions (id, document_id, seq, blake3, size_bytes, created_at, label, file_path)
+                 VALUES (?1, 'linked-1', ?2, ?1, 20, ?2, 'auto', ?3)",
+                rusqlite::params![id, seq, path],
+            )?;
+        }
+        drop(conn);
+
+        let report = lib.delete_earlier_versions("linked-1")?;
+        assert_eq!(report.removed_versions, 2);
+        // The external original stays, byte for byte; the library's own earlier copy goes.
+        assert_eq!(
+            std::fs::read(&external).map_err(|e| Error::io(&external, e))?,
+            pdf("ext")
+        );
+        assert!(!v2.exists());
+        assert!(v3.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn opening_the_library_sweeps_unreferenced_files_and_nothing_else() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let lib = Library::open(dir.path())?;
+        let id = lib
+            .import_reader(pdf("kept").as_slice(), "kept")?
+            .document
+            .id;
+        lib.save_thumbnail(&id, &webp())?;
+        // Left behind by a crash between a delete's commit and its file removal,
+        // and an import's temp file.
+        let orphan = lib.resolve_location("library/orphan.pdf")?;
+        std::fs::write(&orphan, pdf("orphan")).map_err(|e| Error::io(&orphan, e))?;
+        let temp = dir.path().join("library").join(".tmpAbC123");
+        std::fs::write(&temp, b"partial").map_err(|e| Error::io(&temp, e))?;
+        let stray_thumb = dir.path().join(THUMBS_DIR).join("gone.webp");
+        std::fs::write(&stray_thumb, webp()).map_err(|e| Error::io(&stray_thumb, e))?;
+        // Outside the owned folders: never touched.
+        let other = dir.path().join("notes.txt");
+        std::fs::write(&other, b"keep").map_err(|e| Error::io(&other, e))?;
+        drop(lib);
+
+        let lib = Library::open(dir.path())?;
+        assert!(!orphan.exists() && !temp.exists() && !stray_thumb.exists());
+        assert!(other.exists());
+        assert_eq!(
+            dir_len(&dir.path().join("library"))?,
+            1,
+            "the imported copy stays"
+        );
+        assert_eq!(
+            dir_len(&dir.path().join(THUMBS_DIR))?,
+            1,
+            "its thumbnail stays"
+        );
+        assert_eq!(lib.list_documents(&LibraryQuery::default())?.len(), 1);
         Ok(())
     }
 }

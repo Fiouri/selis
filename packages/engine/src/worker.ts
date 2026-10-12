@@ -557,6 +557,21 @@ async function handleRedact(req: Extract<WorkerRequest, { type: "applyRedactions
   }
 }
 
+/** The whole redaction on a scratch copy: what it would remove beyond the page content. */
+async function handleRedactionPreview(req: Extract<WorkerRequest, { type: "redactionPreview" }>): Promise<void> {
+  const t = target(req);
+  if (!t) return;
+  try {
+    const engine = await native();
+    if (!textStamps) throw new Error("engine not ready");
+    const current = (await engine.saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
+    const { annotations, ownerPassword } = await applyRedactions(engine, textStamps, current);
+    post({ type: "redactionPreview", reqId: req.reqId, preview: { annotations, ownerPassword } });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
 async function handleImportLosses(req: Extract<WorkerRequest, { type: "importLosses" }>): Promise<void> {
   try {
     const engine = await native();
@@ -699,6 +714,9 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "importLosses":
       void handleImportLosses(req);
+      break;
+    case "redactionPreview":
+      void handleRedactionPreview(req);
       break;
     case "appearance":
       void handleAppearance(req);

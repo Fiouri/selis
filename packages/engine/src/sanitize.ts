@@ -15,6 +15,7 @@
 import {
   bytesToLatin1,
   decodeStream,
+  nameOf,
   type PdfDict,
   PdfDocumentObjects,
   type PdfObj,
@@ -54,12 +55,16 @@ export function termMatcher(terms: readonly string[]): TermMatcher {
 export type SanitizeReport = {
   /** One entry per thing removed or rewritten, e.g. "Info /Title", "outline title", "embedded file". */
   readonly removed: string[];
+  /** The text of each annotation removed because it names a redacted word (its type when it has none). */
+  readonly annotations: string[];
 };
 
 type Ctx = {
   doc: PdfDocumentObjects;
   match: TermMatcher;
   removed: string[];
+  /** Text of the annotations removed for naming a redacted word. */
+  annotations: string[];
   /** Annotations left exactly as they are (their dictionaries). */
   kept: Set<PdfDict>;
 };
@@ -323,23 +328,68 @@ async function sanitizeFields(ctx: Ctx, catalog: PdfDict): Promise<void> {
   if (state.regenerate) form.set("NeedAppearances", { t: "bool", v: true });
 }
 
-/** Annotations: those whose text or drawn appearance names a redacted word go; author / subject keys go. */
-async function sanitizeAnnotations(ctx: Ctx, catalog: PdfDict): Promise<void> {
+/**
+ * Form fields left without a widget on any page (their widget was under a
+ * mark, removed by PDFium) leave /AcroForm /Fields too: a field nobody can
+ * see or fill only keeps its name and tooltip around. Widget kids that are on
+ * no page go from their parent the same way.
+ */
+function removeOrphanFields(ctx: Ctx, catalog: PdfDict): void {
+  const form = ctx.doc.dict(catalog.get("AcroForm"));
+  const fields = ctx.doc.array(form?.get("Fields"));
+  if (!form || !fields) return;
+  const onPage = new Set<PdfDict>();
+  for (const page of pagesOf(ctx, catalog)) {
+    for (const a of ctx.doc.array(page.get("Annots")) ?? []) {
+      const d = ctx.doc.dict(a);
+      if (d) onPage.add(d);
+    }
+  }
+  const seen = new Set<PdfDict>();
+  /** Whether the field (or one of its kids) still has a widget on a page; prunes the kids that do not. */
+  const alive = (field: PdfDict): boolean => {
+    if (seen.has(field)) return onPage.has(field);
+    seen.add(field);
+    const kids = ctx.doc.array(field.get("Kids"));
+    if (!kids || kids.length === 0) return onPage.has(field);
+    const kept = kids.filter((k) => {
+      const d = ctx.doc.dict(k);
+      return d !== null && alive(d);
+    });
+    kids.splice(0, kids.length, ...kept);
+    return kept.length > 0 || onPage.has(field);
+  };
+  const kept = fields.filter((f) => {
+    const d = ctx.doc.dict(f);
+    if (d && alive(d)) return true;
+    ctx.removed.push("orphan field");
+    return false;
+  });
+  fields.splice(0, fields.length, ...kept);
+}
+
+function pagesOf(ctx: Ctx, catalog: PdfDict): PdfDict[] {
   const pages: PdfDict[] = [];
   const seen = new Set<PdfDict>();
   const collect = (node: PdfDict) => {
     if (seen.has(node)) return;
     seen.add(node);
     const kids = ctx.doc.array(node.get("Kids"));
-    if (kids) for (const k of kids) {
-      const d = ctx.doc.dict(k);
-      if (d) collect(d);
-    }
-    else pages.push(node);
+    if (kids) {
+      for (const k of kids) {
+        const d = ctx.doc.dict(k);
+        if (d) collect(d);
+      }
+    } else pages.push(node);
   };
   const root = ctx.doc.dict(catalog.get("Pages"));
   if (root) collect(root);
-  for (const page of pages) {
+  return pages;
+}
+
+/** Annotations: those whose text or drawn appearance names a redacted word go; author / subject keys go. */
+async function sanitizeAnnotations(ctx: Ctx, catalog: PdfDict): Promise<void> {
+  for (const page of pagesOf(ctx, catalog)) {
     await sanitizeActions(ctx, page);
     const annots = ctx.doc.array(page.get("Annots"));
     if (!annots) continue;
@@ -352,6 +402,8 @@ async function sanitizeAnnotations(ctx: Ctx, catalog: PdfDict): Promise<void> {
         await sanitizeActions(ctx, d);
         continue;
       }
+      const contents = ctx.doc.get(d.get("Contents"));
+      const label = contents.t === "str" && textOf(contents.v).trim() !== "" ? textOf(contents.v).trim() : (nameOf(d.get("Subtype")) ?? "annotation");
       const texts = [d.get("Contents"), d.get("RC")];
       let named = false;
       for (const t of texts) {
@@ -370,6 +422,7 @@ async function sanitizeAnnotations(ctx: Ctx, catalog: PdfDict): Promise<void> {
         const popup = ctx.doc.dict(d.get("Popup"));
         if (popup) gone.add(popup);
         ctx.removed.push("annotation");
+        ctx.annotations.push(label);
         continue;
       }
       dropKeys(ctx, d, ["T", "Subj"], "annotation");
@@ -456,7 +509,7 @@ export async function sanitizeRedacted(
     const nm = o.t === "dict" ? o.v.get("NM") : undefined;
     if (o.t === "dict" && nm?.t === "str" && keep(textOf(nm.v))) kept.add(o.v);
   }
-  const ctx: Ctx = { doc, match: termMatcher(terms), removed: [], kept };
+  const ctx: Ctx = { doc, match: termMatcher(terms), removed: [], annotations: [], kept };
   const catalog = doc.catalog();
   if (!catalog) throw new Error("no catalog");
   await sanitizeMetadata(ctx);
@@ -466,6 +519,7 @@ export async function sanitizeRedacted(
   await sanitizeFields(ctx, catalog);
   await sanitizeAnnotations(ctx, catalog);
   sanitizeStructure(ctx, catalog);
+  removeOrphanFields(ctx, catalog);
   sweepStrings(ctx);
-  return { bytes: doc.write(), report: { removed: ctx.removed } };
+  return { bytes: doc.write(), report: { removed: ctx.removed, annotations: ctx.annotations } };
 }

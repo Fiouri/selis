@@ -152,11 +152,53 @@ test("redact: after the redacted version is saved, the earlier versions can be d
   await expect(page.getByTestId("redact-earlier-sheet")).toBeVisible({ timeout: 10_000 });
   expect(await versionCount(page)).toBe(2);
   await page.getByTestId("redact-earlier-delete").click();
+  // An explicit destructive confirm first; Cancel keeps everything.
+  await expect(page.getByTestId("redact-earlier-dialog")).toContainText("Delete the earlier versions?");
+  await page.getByTestId("redact-earlier-dialog-cancel").click();
+  expect(await versionCount(page)).toBe(2);
+  await page.getByTestId("redact-earlier-delete").click();
+  await page.getByTestId("redact-earlier-dialog-confirm").click();
   await expect(page.getByText("Deleted 1 earlier version.")).toBeVisible();
   await expect(page.getByTestId("redact-earlier-sheet")).toHaveCount(0);
   expect(await versionCount(page)).toBe(1);
   // The current version is the redacted one.
   await expectSearch(page, "σύννεφο", "None");
+});
+
+test("redact: the confirm lists a note elsewhere that goes because it shares a removed word", async ({ page }, info) => {
+  await open(page);
+  // A note far from the line, naming one of its words, and one that does not.
+  await page.getByTestId("dock-annotate").click();
+  const notes = page.getByTestId("annotation-layer-1");
+  const box = await notes.boundingBox();
+  if (!box) throw new Error("layer not laid out");
+  for (const [y, text] of [
+    [0.36, "Θυμήσου το σύννεφο"],
+    [0.44, "Άσχετο σχόλιο"],
+  ] as const) {
+    await page.getByTestId("tool-note").click();
+    await page.mouse.click(box.x + box.width * 0.88, box.y + box.height * y);
+    await page.getByTestId("note-editor-input").fill(text);
+    await page.getByTestId("note-editor-save").click();
+    await expect(page.getByTestId("note-editor")).toHaveCount(0);
+  }
+  await page.getByTestId("annotate-done").click();
+  await expect(page.getByTestId("save-status")).toHaveText(/saved$/, { timeout: 10_000 });
+  // Back to the top of page 1 (the note editor may have scrolled the page on a small screen).
+  await page.getByTestId("pdf-viewer").evaluate((el) => {
+    el.scrollTop = 0;
+  });
+
+  const layer = await startRedact(page);
+  await page.getByTestId("redact-tool-area").click();
+  await dragBox(page, layer, [50, 143], [545, 163]);
+  await page.getByTestId("redact-apply").click();
+  const details = page.getByTestId("redact-dialog-details");
+  await expect(details).toHaveText("1 note elsewhere also goes, because it shares a removed word: “Θυμήσου το σύννεφο”");
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SCREENSHOTS}/${info.project.name}-redact-confirm-notes.png` });
+  await page.getByTestId("redact-dialog-confirm").click();
+  await expect(page.getByText("Applied 1 mark.")).toBeVisible();
 });
 
 test("redact: undoing the redaction before Done offers nothing to delete", async ({ page }) => {

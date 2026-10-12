@@ -11,6 +11,7 @@ export {
   LARGE_PAGE_COUNT,
   LEAKY_SECRET_LINE,
   leakyDocument,
+  ownerPasswordDocument,
 } from "./corpus.ts";
 
 /** Directory where `npm run fixtures` writes the generated corpus (git-ignored). */

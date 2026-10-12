@@ -30,6 +30,10 @@ async function thumbShape(page: Page, n: number): Promise<"portrait" | "landscap
   return img.evaluate((i: HTMLImageElement) => (i.naturalWidth > i.naturalHeight ? "landscape" : "portrait"));
 }
 
+async function libraryCount(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as TestWindow).__selisTest.inspect.ids().length);
+}
+
 test("pages: select, rotate, duplicate, delete, reorder, undo/redo, add, extract, split", async ({ page }, info) => {
   await page.goto("/");
   await importFixture(page, "mixed-sizes.pdf");
@@ -130,15 +134,15 @@ test("pages: select, rotate, duplicate, delete, reorder, undo/redo, add, extract
   // Extract page 9 (the form) into a new document, then split before page 3.
   await page.getByTestId("pages-extract").click();
   await page.getByTestId("pages-extract-selected").click();
-  await expect(page.getByText("Created 1 new document in the library.")).toBeVisible();
+  // The library itself is the assertion (the 4 s toast can come and go between polls on a loaded runner).
+  await expect.poll(() => libraryCount(page)).toBe(2);
   await page.getByTestId("page-thumb-9").click();
   await page.getByTestId("page-thumb-3").scrollIntoViewIfNeeded();
   await page.getByTestId("page-thumb-3").click();
   await page.getByTestId("pages-extract").click();
   await expect(page.getByTestId("pages-split")).toContainText("Split before page 3");
   await page.getByTestId("pages-split").click();
-  await expect(page.getByText("Created 2 new documents in the library.")).toBeVisible();
-  expect(await page.evaluate(() => (window as unknown as TestWindow).__selisTest.inspect.ids().length)).toBe(4);
+  await expect.poll(() => libraryCount(page)).toBe(4);
 
   // Close: one version for the session; the document keeps the inserted form.
   await page.getByTestId("pages-close").click();

@@ -201,6 +201,9 @@ for (const lang of LANGS) {
         await page.getByTestId("signature-mode-draw").click();
         await page.getByTestId("signature-save").click();
         await expect(page.getByTestId("signature-card")).toHaveCount(1);
+        // The new signature is armed for placing before the page tap (a loaded runner can lag).
+        await expect(page.getByTestId("signature-card")).toHaveAttribute("aria-pressed", "true");
+        await expect(page.getByTestId("signature-pad")).toHaveCount(0);
         const layer = page.getByTestId("signature-layer-1");
         const pageBox = await layer.boundingBox();
         if (!pageBox) throw new Error("page not laid out");
