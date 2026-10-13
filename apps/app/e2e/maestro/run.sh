@@ -16,6 +16,15 @@
 # ($ANDROID_AVD_HOME, default ~/.android/avd) must have at least $MIN_FREE_GB
 # (default 30) GB free, or the script stops (exit 3) before Maestro or the
 # emulator can fill the drive.
+#
+# APK guard: Maestro copies its driver APKs (maestro-app*.apk, maestro-server*.apk)
+# and the app (tmp*.apk) into the temp dir on every run and never deletes them;
+# 1,800 such copies (34 GB) piled up by P3. Each run.sh gets its own temp dir under
+# .tmp/maestro-tmp/ (so parallel runs on two devices never delete each other's
+# files), emptied after every run and removed on exit. Before every run, dirs of
+# run.sh processes that are gone are removed, and the script stops (exit 3) if any
+# *.apk older than this run is still in .tmp or .tmp/maestro-tmp. Run logs and
+# Maestro debug output older than 7 days are pruned at start.
 set -u
 
 serial="${1:?usage: run.sh <serial> <flow.yaml> [runs]}"
@@ -30,9 +39,14 @@ app_id="$(sed -n 's/^appId:[[:space:]]*//p' "$flow" | head -1 | tr -d '\r')"
 tmp="$root/.tmp"
 out="$tmp/maestro-runs/$(basename "$flow" .yaml)/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$out"
+# Marks the start of this script: an APK not newer than it was left by an earlier run.
+started="$out/.started"
+touch "$started"
+run_tmp="$tmp/maestro-tmp/$$"
+mkdir -p "$run_tmp"
 case "$(uname -s)" in
-  MINGW* | MSYS* | CYGWIN*) win_tmp="$(cygpath -w "$tmp")" ;;
-  *) win_tmp="$tmp" ;;
+  MINGW* | MSYS* | CYGWIN*) win_tmp="$(cygpath -w "$run_tmp")" ;;
+  *) win_tmp="$run_tmp" ;;
 esac
 export TMP="$win_tmp" TEMP="$win_tmp" JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$win_tmp" MSYS_NO_PATHCONV=1
 maestro="${MAESTRO:-maestro}"
@@ -56,6 +70,47 @@ check_disk() {
   done
 }
 
+# Prunes run logs and Maestro debug output older than 7 days.
+prune_old() {
+  if [ -d "$tmp/maestro-runs" ]; then
+    find "$tmp/maestro-runs" -mindepth 2 -maxdepth 2 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null
+    find "$tmp/maestro-runs" -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null
+  fi
+  # --debug-output .tmp/maestro: Maestro writes .maestro/tests/<timestamp>/.
+  if [ -d "$tmp/maestro/.maestro/tests" ]; then
+    find "$tmp/maestro/.maestro/tests" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null
+  fi
+}
+
+# Removes the temp dirs of run.sh processes that are gone (killed before their
+# exit trap), then fails if an APK older than this run is still around: in .tmp
+# itself (Maestro run without run.sh) or in a live run's dir (it should have
+# emptied it after its run).
+check_apks() {
+  local dir pid stale
+  for dir in "$tmp"/maestro-tmp/*/; do
+    [ -d "$dir" ] || continue
+    pid="$(basename "$dir")"
+    [ "$pid" = "$$" ] && continue
+    kill -0 "$pid" 2>/dev/null || rm -rf "$dir"
+  done
+  stale="$({
+    find "$tmp" -maxdepth 1 -name '*.apk' -type f ! -newer "$started"
+    find "$tmp/maestro-tmp" -mindepth 2 -maxdepth 2 -name '*.apk' -type f ! -newer "$started"
+  } 2>/dev/null)"
+  [ -z "$stale" ] && return 0
+  echo "ABORT: APKs left over from an earlier run ($(echo "$stale" | wc -l) files, e.g. $(echo "$stale" | head -1))." >&2
+  echo "Delete them (rm .tmp/*.apk .tmp/maestro-tmp/*/*.apk), then rerun." >&2
+  return 1
+}
+
+# Maestro's copies of its driver and the app (~0.8 GB) from this script's runs.
+clean_apks() {
+  find "$run_tmp" -mindepth 1 -delete 2>/dev/null
+}
+
+prune_old
+
 # Animations off for the runs (restored on exit): Chrome WebView then reports
 # prefers-reduced-motion and the app's sheets appear at once. With them on,
 # Maestro can read a sheet's rows mid-slide and tap a row lower (seen on the S23).
@@ -75,12 +130,16 @@ restore_scales() {
     fi
   done
 }
-trap restore_scales EXIT
+cleanup() {
+  restore_scales
+  rm -rf "$run_tmp"
+}
+trap cleanup EXIT
 
 pass=0
 fail=0
 for i in $(seq 1 "$runs"); do
-  if ! check_disk; then
+  if ! check_disk || ! check_apks; then
     echo "$(basename "$flow"): stopped before run $i/$runs, pass=$pass fail=$fail (disk guard)"
     exit 3
   fi
@@ -96,9 +155,8 @@ for i in $(seq 1 "$runs"); do
   if [ "$result" = pass ] && [ -n "${POST_RUN:-}" ] && ! $POST_RUN "$serial" > "$out/post-$i.log" 2>&1; then
     result="FAIL (POST_RUN: $(tail -1 "$out/post-$i.log" | tr -d '\r'))"
   fi
-  # Maestro copies an APK (~0.8 GB) into TMP on every run and never deletes it:
-  # left alone, a few hundred runs fill the drive.
-  find "$tmp" -maxdepth 1 -name 'tmp*.apk' -type f -delete 2>/dev/null
+  # Maestro never deletes its APK copies: left alone, a few hundred runs fill the drive.
+  clean_apks
   adb -s "$serial" logcat -d -v time > "$out/logcat-$i.txt"
   if grep -q "ANR in $app_id" "$out/logcat-$i.txt"; then
     result="FAIL (ANR: $(grep -m1 "ANR in $app_id" "$out/logcat-$i.txt" | tr -d '\r'))"

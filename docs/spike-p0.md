@@ -348,3 +348,13 @@ full disk. `apps/app/e2e/maestro/run.sh` now deletes those copies after each run
 every run**, checks the free space on the drives holding `.tmp` and the AVDs
 (`$ANDROID_AVD_HOME`, default `~/.android/avd`; junctions are followed to the real drive).
 Below `MIN_FREE_GB` (default **30 GB**) it stops with exit code 3 and says which drive is short.
+
+**2026-10-14:** the cleanup above only matched `tmp*.apk`, but Maestro also leaves its driver APKs
+(`maestro-app*.apk`, `maestro-server*.apk`, ~12 MB together per run): 1,887 of them (with five
+stray 0.8 GB builds, 34 GB in all) had piled up in `.tmp` by the end of P3. `run.sh` now gives
+each invocation its own temp dir (`.tmp/maestro-tmp/<pid>`, so parallel runs on the S23 and the
+AVD never touch each other's files), empties it after every run and removes it on exit; dirs of
+`run.sh` processes that died are removed before the next run. The guard also **stops (exit 3) if
+any `*.apk` older than the current invocation is still in `.tmp` or a live run's dir**, and run
+logs (`.tmp/maestro-runs`) and Maestro debug output (`.tmp/maestro`) older than 7 days are
+pruned at start.
