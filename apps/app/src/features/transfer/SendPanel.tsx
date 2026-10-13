@@ -10,6 +10,7 @@ import { ALL_DOCUMENTS } from "../library/libraryStore";
 import { useDocuments } from "../library/queries";
 import { formatBytes, formatCountdown } from "./format";
 import { MoveLibrary } from "./MoveLibrary";
+import { ExportPack } from "./PackSheets";
 import { Busy, Card, CodeBlock, Problem, Progress } from "./parts";
 import { type Push, type TransferProblem, useTransfer } from "./transferStore";
 import { SaveDevice, TrustedDevices } from "./TrustedDevices";
@@ -153,6 +154,7 @@ function ChooseDocuments() {
             : t("transfer.send.start")}
       </Button>
       <MoveLibrary />
+      <ExportPack selected={chosen.map((d) => d.id)} />
     </div>
   );
 }

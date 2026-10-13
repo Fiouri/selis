@@ -1,0 +1,105 @@
+# .selispack on Android (ADR 0012): "Open with" a plain pack from the Files app,
+# then a protected pack through "Open a .selispack file" (wrong passphrase first),
+# then a tampered one, which must add nothing.
+# PRE_RUN="apps/app/e2e/maestro/pack.sh pre" makes the packs on the host, pushes
+# them to Download/selis-fixtures, clears Selis and opens Files there;
+# POST_RUN="apps/app/e2e/maestro/pack.sh check" verifies app data and the originals.
+# Run with ./run.sh (ANR check).
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis pack open with, passphrase, tamper
+---
+- extendedWaitUntil:
+    visible: "greek.pdf"
+    timeout: 15000
+# The packs sort after the PDFs: below the fold on a phone.
+- scrollUntilVisible:
+    element: "plain.selispack"
+    direction: DOWN
+    timeout: 15000
+- longPressOn: "plain.selispack"
+- tapOn: "More options"
+- tapOn: "Open with"
+- tapOn: "Selis"
+- extendedWaitUntil:
+    visible: "Added from the file"
+    timeout: 30000
+- assertVisible: "3 documents were added to your library."
+- tapOn: "Close"
+
+# Protected: the same three documents, so all are already there.
+- tapOn: "Open a .selispack file"
+# The picker opens on Recent, which lists no .selispack: search by name.
+- tapOn:
+    id: "com.google.android.documentsui:id/option_menu_search"
+- inputText: "protected"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "protected.selispack"
+    timeout: 15000
+# A tap while the keyboard is still closing only closes it (hideKeyboard would leave
+# search): tap again while the file is still listed.
+- repeat:
+    while:
+      notVisible: "This file is protected"
+    times: 3
+    commands:
+      - tapOn:
+          text: "protected.selispack"
+          optional: true
+      - waitForAnimationToEnd:
+          timeout: 3000
+- extendedWaitUntil:
+    visible: "This file is protected"
+    timeout: 15000
+- tapOn: "Passphrase"
+- inputText: "wrong horse"
+- tapOn: "Open"
+- extendedWaitUntil:
+    visible: "Wrong passphrase."
+    timeout: 30000
+- tapOn: "Passphrase"
+- inputText: "correct horse"
+- tapOn: "Open"
+- extendedWaitUntil:
+    visible: "Added from the file"
+    timeout: 30000
+- assertVisible: "0 documents were added to your library."
+- assertVisible: "3 were already there."
+- tapOn: "Close"
+
+# Tampered: refused, nothing added.
+- tapOn: "Open a .selispack file"
+# The picker opens on Recent, which lists no .selispack: search by name.
+- tapOn:
+    id: "com.google.android.documentsui:id/option_menu_search"
+- inputText: "tampered"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "tampered.selispack"
+    timeout: 15000
+# A tap while the keyboard is still closing only closes it (hideKeyboard would leave
+# search): tap again while the file is still listed.
+- repeat:
+    while:
+      notVisible: "This file is protected"
+    times: 3
+    commands:
+      - tapOn:
+          text: "tampered.selispack"
+          optional: true
+      - waitForAnimationToEnd:
+          timeout: 3000
+- extendedWaitUntil:
+    visible: "This file is protected"
+    timeout: 15000
+- tapOn: "Passphrase"
+- inputText: "correct horse"
+- tapOn: "Open"
+- extendedWaitUntil:
+    visible: "The file is damaged or incomplete, so nothing was added."
+    timeout: 30000
+- tapOn: "Close"
+- tapOn: "Library"
+# Titles come from the pack (the file names), not from the PDF metadata.
+- assertVisible: "Open greek"

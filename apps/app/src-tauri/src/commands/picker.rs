@@ -23,7 +23,7 @@ pub enum PickOutcome {
     Cancelled,
 }
 
-fn to_source(path: FilePath) -> String {
+pub(crate) fn to_source(path: FilePath) -> String {
     match path {
         FilePath::Url(url) => url.to_string(),
         FilePath::Path(path) => path.to_string_lossy().into_owned(),

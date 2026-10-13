@@ -43,13 +43,19 @@ other device has its Receive tab open. **Move whole library** (Send tab) sends e
 documents with versions, tags, favorites, signatures and settings — to a new phone; documents it
 already has are skipped, so running it again changes nothing.
 
+No network at all? **Save as file…** (Send tab) puts the chosen documents — or the whole library —
+into one `.selispack` file, optionally protected with a passphrase, for USB, e-mail or your own
+cloud. Open it with Selis ("Open with", or Receive › **Open a .selispack file**); a damaged,
+truncated or altered file adds nothing ([ADR 0012](docs/adr/0012-selispack.md)).
+
 Devices connect directly when they can (same Wi‑Fi, or across networks), otherwise through an
 encrypted relay. Settings › Transfer: **Local network only** (no relay, no address lookup) or your
 own **relay**. Nothing touches the network until you open the Transfer screen. Details:
 [docs/PRIVACY.md](docs/PRIVACY.md), protocol: [ADR 0010](docs/adr/0010-transfer-protocol.md).
 
 Developers: `cargo run -p selis-transfer --example selis-peer -- send <file.pdf>` (or
-`receive <link>`) is a terminal peer for testing against the app.
+`receive <link>`) is a terminal peer for testing against the app;
+`cargo run -p selis-core --example selispack -- make|open …` makes and checks packs.
 
 ## Privacy
 

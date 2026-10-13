@@ -16,7 +16,7 @@ import app.tauri.plugin.Plugin
 /**
  * "Open with" and share target (intent filters in AndroidManifest.xml).
  *
- * Collects PDF `content://` URIs from ACTION_VIEW, ACTION_SEND and
+ * Collects PDF (and `.selispack`, ADR 0012) `content://` URIs from ACTION_VIEW, ACTION_SEND and
  * ACTION_SEND_MULTIPLE — the launch intent on a cold start, onNewIntent on a
  * warm start — until Rust takes them with `takePending` (src/commands/open_with.rs).
  * Rust then imports a copy into the library through the content resolver in

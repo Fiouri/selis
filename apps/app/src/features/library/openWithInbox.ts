@@ -18,6 +18,8 @@ export type OpenWithDeps = {
   /** One document imported; `last` is true when nothing else is waiting. */
   onImported: (outcome: ImportOutcome, batch: { last: boolean; count: number }) => void;
   onFailed: (state: ImportErrorState) => void;
+  /** A `.selispack` (Rust read its magic bytes): the pack import takes it. */
+  onPack: (item: PendingOpen) => void;
   log: (message: string, error: unknown) => void;
 };
 
@@ -60,6 +62,13 @@ export class OpenWithInbox {
 
   private pump(): void {
     if (this.active || this.stopWaiting) return;
+    // Packs go to the pack import (one at a time is enough: it asks for a passphrase).
+    while (this.queue[0]?.pack) {
+      const pack = this.queue.shift();
+      if (!pack) break;
+      void this.deps.dismiss(pack.id);
+      this.deps.onPack(pack);
+    }
     const next = this.queue[0];
     if (!next) return;
     const started = this.deps.importSource(next.source, next.name, {

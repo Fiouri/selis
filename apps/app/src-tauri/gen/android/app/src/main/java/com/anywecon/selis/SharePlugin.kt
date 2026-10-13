@@ -18,6 +18,10 @@ class ShareArgs {
   lateinit var path: String
   /** File name the recipient sees ("Report.pdf"). */
   lateinit var name: String
+  /** MIME type (default PDF). */
+  var mime: String? = null
+  /** The file is already in cache/share under its final name (a .selispack): share it as is. */
+  var inPlace: Boolean = false
 }
 
 /**
@@ -37,12 +41,21 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
       try {
         val dir = File(activity.cacheDir, "share").apply { mkdirs() }
         val cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)
-        dir.listFiles()?.filter { it.lastModified() < cutoff }?.forEach { it.delete() }
-        val out = File(dir, safeName(args.name))
-        File(args.path).inputStream().use { input -> out.outputStream().use { input.copyTo(it) } }
+        dir.listFiles()?.filter { it.lastModified() < cutoff && !it.name.startsWith(".") }?.forEach { it.delete() }
+        val mime = args.mime ?: "application/pdf"
+        val out = if (args.inPlace) {
+          // Only files inside the share folder (the FileProvider exposes nothing else).
+          val file = File(args.path).canonicalFile
+          if (file.parentFile != dir.canonicalFile) error("not in the share folder")
+          file
+        } else {
+          File(dir, safeName(args.name)).also { dest ->
+            File(args.path).inputStream().use { input -> dest.outputStream().use { input.copyTo(it) } }
+          }
+        }
         val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", out)
         val send = Intent(Intent.ACTION_SEND).apply {
-          type = "application/pdf"
+          type = mime
           putExtra(Intent.EXTRA_STREAM, uri)
           clipData = ClipData.newRawUri(out.name, uri)
           addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

@@ -44,3 +44,13 @@ strip = true
 [profile.devtool]
 inherits = "release"
 panic = "unwind"
+
+# Argon2id (64 MiB) and BLAKE3 are slow unoptimized: keep tests and debug builds usable.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
+[profile.dev.package.blake3]
+opt-level = 3

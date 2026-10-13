@@ -383,6 +383,44 @@ for (const lang of LANGS) {
         await expect(page).toHaveScreenshot(shot("transfer-move"));
       });
 
+      test(`selispack export and passphrase (${theme})`, async ({ page }) => {
+        await page.goto("/");
+        await addToLibrary(page, "greek.pdf", c.greek);
+        await page.getByRole("navigation").getByRole("button", { name: ui(lang, "tabs.transfer") }).click();
+        await page.getByTestId("transfer-doc").first().click();
+        await page.getByTestId("pack-export-open").click();
+        await page.getByTestId("pack-protect").click();
+        await page.getByTestId("pack-passphrase").fill("correct horse");
+        await page.getByTestId("pack-passphrase-again").fill("correct hors");
+        await expect(page.getByTestId("pack-mismatch")).toBeVisible();
+        await settle(page);
+        // The bottom-anchored sheet has a fractional height: one field's borders land on
+        // either side of a pixel boundary from run to run (~700 px of 1-px shift).
+        await expect(page).toHaveScreenshot(shot("pack-export"), { maxDiffPixelRatio: 0.004 });
+        await page.getByTestId("pack-passphrase-again").fill("correct horse");
+        await page.getByTestId("pack-export-create").click();
+        await expect(page.getByTestId("pack-export-sheet")).toHaveCount(0);
+        // The "file ready" toast must not end up in the next screenshots.
+        await expect(page.getByTestId("toast")).toHaveCount(0, { timeout: 15_000 });
+        await page.getByRole("tab", { name: ui(lang, "transfer.tabReceive") }).click();
+        await page.evaluate(() => {
+          type Hooks = { lastExport: () => string | null; nextPick: (t: string | null) => void };
+          const hooks = (window as unknown as { __selisTest: { pack: Hooks } }).__selisTest.pack;
+          hooks.nextPick(hooks.lastExport());
+        });
+        await page.getByTestId("pack-import-open").click();
+        await page.getByTestId("pack-unlock-passphrase").fill("wrong passphrase");
+        await page.getByTestId("pack-unlock").click();
+        await expect(page.getByTestId("pack-wrong")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("pack-passphrase"));
+        await page.getByTestId("pack-unlock-passphrase").fill("correct horse");
+        await page.getByTestId("pack-unlock").click();
+        await expect(page.getByTestId("pack-import-done")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("pack-imported"));
+      });
+
       test(`recent (${theme})`, async ({ page }) => {
         await page.goto("/");
         await stockLibrary(page, lang);

@@ -6,6 +6,7 @@
  * (chunked uploads → working copy → versions).
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { createMockPack, PACK_COMMANDS } from "./mock-pack";
 import { createMockTransfer, TRANSFER_COMMANDS } from "./mock-transfer";
 import type {
   CommandError,
@@ -151,7 +152,7 @@ function installTestOpenWith(): void {
     for (const { name, bytes } of files) {
       const source = registerMockFile(new File([new Uint8Array(bytes)], name, { type: "application/pdf" }));
       nextOpenId += 1;
-      pendingOpens.push({ id: `open-${nextOpenId}`, source, name });
+      pendingOpens.push({ id: `open-${nextOpenId}`, source, name, pack: name.endsWith(".selispack") });
     }
     document.dispatchEvent(new Event("visibilitychange"));
   };
@@ -498,11 +499,24 @@ export function installMockIpc(): void {
     },
   });
   (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.transfer = transfer.hooks;
+  const pack = createMockPack({
+    fail,
+    runOnce,
+    register: registerMockFile,
+    file: (token) => files.get(token),
+    documentBytes: async (docId) => new Uint8Array(await (await fetch(entryOf(docId).url)).arrayBuffer()),
+    allDocumentIds: () => listDocuments({ search: "", filter: "all", tagId: null, sort: "recent" }).map((d) => d.id),
+    title: (docId) => entryOf(docId).doc.title,
+    importBytes: (name, bytes) =>
+      importDocument(registerMockFile(new File([new Uint8Array(bytes)], name, { type: "application/pdf" })), name),
+  });
+  (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.pack = pack.hooks;
   mockIPC(async (cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     const id = String(args.id);
     if (knobs().failCommands?.includes(cmd)) fail("io", `${cmd} failed (test knob)`);
     if (TRANSFER_COMMANDS.has(cmd)) return transfer.handle(cmd, args);
+    if (PACK_COMMANDS.has(cmd)) return pack.handle(cmd, args);
     switch (cmd) {
       case "import_document":
         return runOnce(cmd, String(args.requestId), () =>

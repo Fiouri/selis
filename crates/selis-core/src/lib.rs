@@ -12,6 +12,7 @@ pub mod fsutil;
 pub mod hash;
 pub mod library;
 pub mod moving;
+pub mod pack;
 pub mod received;
 pub mod retention;
 pub mod save;
@@ -31,6 +32,7 @@ pub use library::{
     LibrarySort, title_from_file_name,
 };
 pub use moving::LibrarySummary;
+pub use pack::{PackImport, PackKind, PackRequest, PackSummary};
 pub use received::{ReceivedDocument, ReceivedFile};
 pub use retention::{RetentionPolicy, RetentionReport};
 pub use save::{SavedVersion, VersionLabel, WorkingCopy};

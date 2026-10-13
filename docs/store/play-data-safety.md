@@ -24,6 +24,10 @@ changes networking, permissions or SDKs.
 - **No SDKs that collect data:** no analytics, crash reporting, ads, or Google ML Kit
   (QR scanning is on-device with jsQR, ADR 0013).
 - **Camera:** frames are processed on the device only, never stored or sent → not collected.
+- **`.selispack` export:** a file the user creates and hands to an app of their choice through the
+  system share sheet; Selis does not transmit it and receives nothing → not collected or shared
+  by Selis. The optional passphrase is never stored. "Encrypted in transit" does not apply to a
+  plain (no passphrase) pack the user sends elsewhere: say so in the privacy policy (done).
 - **Device identity key:** generated and kept on the device (Android Keystore), never sent → not
   collected. The public key is visible to the device you transfer with and to the relay.
 

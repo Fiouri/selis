@@ -63,6 +63,10 @@ const APP_COMMANDS: &[&str] = &[
     "transfer_move_offer",
     "transfer_move_push",
     "transfer_debug_force_relay",
+    "pack_kind",
+    "pack_export",
+    "pack_import",
+    "pick_pack",
     "take_result",
 ];
 

@@ -1,0 +1,25 @@
+# cargo-fuzz targets for `.selispack` (ADR 0012), a file anyone can hand the app:
+# `RUSTC_BOOTSTRAP=1 cargo fuzz run pack` from this folder (Linux/macOS; CI job "fuzz").
+# Not a workspace member (libFuzzer only).
+[package]
+name = "selis-core-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+selis-core = { path = ".." }
+tempfile = "3"
+
+[[bin]]
+name = "pack"
+path = "fuzz_targets/pack.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

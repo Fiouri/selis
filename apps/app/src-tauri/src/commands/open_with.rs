@@ -41,6 +41,8 @@ pub struct PendingOpen {
     pub source: String,
     /// The sender's file name, when it told us.
     pub name: Option<String>,
+    /// A `.selispack` (its magic bytes), not a PDF: the pack import takes it.
+    pub pack: bool,
 }
 
 #[derive(Default)]
@@ -57,6 +59,7 @@ struct QueueState {
     items: Vec<PendingOpen>,
     next_id: u64,
     link: Option<String>,
+    sniffed: std::collections::HashSet<String>,
 }
 
 /// Longest transfer link kept (a real one is a few hundred characters).
@@ -81,7 +84,32 @@ impl OpenQueue {
         state.next_id += 1;
         let id = format!("open-{}", state.next_id);
         let name = name.map(|n| n.trim().to_owned()).filter(|n| !n.is_empty());
-        state.items.push(PendingOpen { id, source, name });
+        state.items.push(PendingOpen {
+            id,
+            source,
+            name,
+            pack: false,
+        });
+    }
+
+    /// Items whose first bytes have not been looked at yet.
+    pub fn unsniffed(&self) -> Vec<PendingOpen> {
+        let state = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        state
+            .items
+            .iter()
+            .filter(|i| !state.sniffed.contains(&i.id))
+            .cloned()
+            .collect()
+    }
+
+    /// Records what an item's first bytes said (a pack or not).
+    pub fn mark_sniffed(&self, id: &str, pack: bool) {
+        let mut state = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        state.sniffed.insert(id.to_owned());
+        if let Some(item) = state.items.iter_mut().find(|i| i.id == id) {
+            item.pack = pack;
+        }
     }
 
     pub fn list(&self) -> Vec<PendingOpen> {
@@ -139,8 +167,11 @@ pub async fn pending_opens<R: Runtime>(
 ) -> CommandResult<Vec<PendingOpen>> {
     #[cfg(target_os = "android")]
     android::drain(&app, &queue).await?;
-    #[cfg(not(target_os = "android"))]
-    let _ = app;
+    // Packs travel through the same "Open with" as PDFs; the magic bytes tell them apart.
+    for item in queue.unsniffed() {
+        let kind = super::pack::pack_kind(app.clone(), item.source.clone()).await;
+        queue.mark_sniffed(&item.id, matches!(kind, Ok(Some(_))));
+    }
     Ok(queue.list())
 }
 

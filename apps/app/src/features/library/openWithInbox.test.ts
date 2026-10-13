@@ -4,7 +4,12 @@ import type { ImportErrorState, ImportHandlers } from "./importController";
 import { OpenWithInbox, type OpenWithDeps } from "./openWithInbox";
 
 const outcome = (id: string) => ({ document: { id }, duplicate: false }) as unknown as ImportOutcome;
-const item = (id: string, name: string | null = null): PendingOpen => ({ id, source: `content://${id}`, name });
+const item = (id: string, name: string | null = null, pack = false): PendingOpen => ({
+  id,
+  source: `content://${id}`,
+  name,
+  pack,
+});
 
 function setup(pending: PendingOpen[][]) {
   let busy = false;
@@ -25,6 +30,7 @@ function setup(pending: PendingOpen[][]) {
     },
     onImported: vi.fn(),
     onFailed: vi.fn(),
+    onPack: vi.fn(),
     log: vi.fn(),
   };
   const inbox = new OpenWithInbox(deps);
@@ -105,5 +111,14 @@ describe("OpenWithInbox", () => {
     expect(t.deps.log).toHaveBeenCalled();
     await t.inbox.check();
     expect(t.running()).toEqual(["content://a"]);
+  });
+
+  it("hands packs to the pack import and imports the PDFs", async () => {
+    const t = setup([[item("p1", "Library.selispack", true), item("a", "A.pdf")]]);
+    await t.inbox.check();
+    expect(t.deps.onPack).toHaveBeenCalledWith(expect.objectContaining({ id: "p1" }));
+    expect(t.deps.dismiss).toHaveBeenCalledWith("p1");
+    expect(t.deps.importSource).toHaveBeenCalledTimes(1);
+    expect(t.deps.importSource).toHaveBeenCalledWith("content://a", "A.pdf", expect.anything());
   });
 });
