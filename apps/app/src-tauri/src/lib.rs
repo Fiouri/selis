@@ -113,6 +113,8 @@ pub fn run() {
             builder.mount_events(app);
             #[cfg(debug_assertions)]
             debug_log::init(&app.path().app_cache_dir()?);
+            // A pack shared before (perhaps unencrypted) never outlives the run (PRIVACY.md).
+            commands::pack::sweep_packs_at_start(app.handle());
             let root = app.path().app_data_dir()?;
             let library = Library::open(root)?;
             // A transfer "active" in the database belonged to a process that died.
