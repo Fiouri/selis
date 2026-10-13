@@ -17,6 +17,7 @@ type Hooks = {
   hold: (on: boolean) => void;
   incoming: (files: Array<{ name: string; bytes: number[] }>) => void;
   failReceive: (code: string | null) => void;
+  failResumes: (code: string | null) => void;
   link: (url: string) => void;
   expireOffers: () => void;
 };
@@ -90,7 +91,7 @@ test("a code that does not match sends nothing", async ({ page }) => {
   await expect(page.getByTestId("transfer-send-problem")).toHaveText("The code wasn’t confirmed, so nothing was sent.");
 });
 
-test("an expired code asks for a new one", async ({ page }) => {
+test("an expired code is replaced by a new one for the same documents", async ({ page }) => {
   await page.goto("/");
   await addToLibrary(page, "greek.pdf", "Contract.pdf");
   await openTransfer(page);
@@ -98,9 +99,16 @@ test("an expired code asks for a new one", async ({ page }) => {
   await page.getByTestId("transfer-send-start").click();
   await expect(page.getByTestId("transfer-qr")).toBeVisible();
   await hook(page, "expireOffers");
-  await expect(page.getByTestId("transfer-send-problem")).toHaveAttribute("data-problem", "expired");
+  await expect(page.getByTestId("transfer-offer-expired")).toContainText("This code has expired");
+  await expect(page.getByTestId("transfer-qr")).toHaveCount(0);
   await page.getByRole("button", { name: "New code" }).click();
-  await expect(page.getByTestId("transfer-choose")).toBeVisible();
+  // Straight back to a live QR code for the same document, no dead end.
+  await expect(page.getByTestId("transfer-qr")).toBeVisible();
+  await expect(page.getByTestId("transfer-offer-summary")).toContainText("1 document");
+  await expect(page.getByTestId("transfer-expires")).toContainText(/Expires in (10:00|9:\d\d)/);
+  await hook(page, "peerScans");
+  await page.getByTestId("transfer-confirm").click();
+  await expect(page.getByTestId("transfer-send-done")).toBeVisible();
 });
 
 test("receives by pasted link into the library", async ({ page }) => {
@@ -148,6 +156,43 @@ test("an interrupted receive pauses and resumes", async ({ page }) => {
   await pasteLink(page, LINK);
   await hook(page, "senderConfirms");
   await expect(page.getByTestId("transfer-receive-paused")).toBeVisible();
+  await page.getByTestId("transfer-resume").click();
+  await expect(page.getByTestId("transfer-receive-done")).toBeVisible();
+});
+
+test("a resume that fails says why, counts, and then offers a new code", async ({ page }) => {
+  await page.goto("/");
+  await openTransfer(page);
+  await receiveTab(page);
+  await hook(page, "failReceive", "unreachable");
+  await hook(page, "failResumes", "unreachable");
+  await pasteLink(page, LINK);
+  await hook(page, "senderConfirms");
+  const paused = page.getByTestId("transfer-receive-paused");
+  await expect(paused).toBeVisible();
+  await expect(page.getByTestId("transfer-paused-reason")).toHaveText("Sender not reachable — ask for a new code.");
+  await expect(page.getByTestId("transfer-new-code")).toHaveCount(0);
+  for (const n of [1, 2, 3]) {
+    await page.getByTestId("transfer-resume").click();
+    await expect(page.getByTestId("transfer-resume-attempts")).toHaveText(n === 1 ? "1 attempt failed" : `${n} attempts failed`);
+  }
+  await expect(page.getByTestId("transfer-paused-reason")).toBeVisible();
+  await page.getByTestId("transfer-new-code").click();
+  await expect(paused).toHaveCount(0);
+  await expect(page.getByTestId("transfer-scan")).toBeVisible();
+  await expect(page.getByTestId("transfer-paused-list")).toHaveCount(0);
+});
+
+test("a dropped connection pauses with the reason and resumes", async ({ page }) => {
+  await page.goto("/");
+  await openTransfer(page);
+  await receiveTab(page);
+  await hook(page, "failReceive", "interrupted");
+  await pasteLink(page, LINK);
+  await hook(page, "senderConfirms");
+  await expect(page.getByTestId("transfer-paused-reason")).toHaveText(
+    "The connection dropped. Resume, or ask the sender for a new code.",
+  );
   await page.getByTestId("transfer-resume").click();
   await expect(page.getByTestId("transfer-receive-done")).toBeVisible();
 });

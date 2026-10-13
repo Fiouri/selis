@@ -5330,6 +5330,7 @@ dependencies = [
  "tauri-specta",
  "tempfile",
  "tokio",
+ "tracing-subscriber",
  "windows-native-keyring-store",
  "zbus-secret-service-keyring-store",
 ]
@@ -5375,6 +5376,8 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

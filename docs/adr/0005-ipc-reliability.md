@@ -94,3 +94,11 @@ Tauri/wry upgrade that passes all of these:
 Even then, keep the request id + `run_once` for writes. Idempotent writes are worth having for
 retries in their own right (P3 transfer, P2 saves). Only drop the resume and deadline polling in
 `reliable.ts` and the short-call retries.
+
+## Amendment (2026-10-13): the first calls of a cold start
+
+On a slow cold start (the 3 GB AVD) the first IPC calls reject with an empty `ApiError` before
+the native side is ready. Calls made once on startup must retry: the open-with and transfer
+bridges use `retryOnStartup` (`lib/startupRetry.ts`, 0.5 → 8 s), and Rust's `drain` waits up to
+10 s for the open-with plugin handle. Without it, a `selis://` link or PDF from the launch
+intent stayed unread until the app came back to the foreground.

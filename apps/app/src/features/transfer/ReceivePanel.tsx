@@ -8,7 +8,7 @@ import { useNavigation } from "../../state/navigation";
 import { formatBytes } from "./format";
 import { Busy, Card, CodeBlock, Problem, Progress } from "./parts";
 import { type ScanFailure, ScanError, type Scanner, startScanner } from "./qrScanner";
-import { type TransferProblem, useTransfer } from "./transferStore";
+import { RESUME_ATTEMPTS_BEFORE_NEW_CODE, type TransferProblem, useTransfer } from "./transferStore";
 import { ImportPack, PackResult, usePackResultShown } from "./PackSheets";
 import { SaveDevice } from "./TrustedDevices";
 
@@ -251,6 +251,8 @@ function ReceiveStatus({ view }: { view: ReceiveView }) {
   const resetReceive = useTransfer((s) => s.resetReceive);
   const receiveId = useTransfer((s) => s.receiveId);
   const resume = useTransfer((s) => s.resume);
+  const newCode = useTransfer((s) => s.newCode);
+  const attempts = useTransfer((s) => s.resumeAttempts);
   const from = useTransfer((s) => s.incomingFrom);
   const selectTab = useNavigation((s) => s.selectTab);
   const fromLine = from ? (
@@ -340,19 +342,46 @@ function ReceiveStatus({ view }: { view: ReceiveView }) {
           </div>
         </Card>
       );
-    case "paused":
+    case "paused": {
+      // After a few failed resumes the way forward is a fresh code from the sender.
+      const giveUp = attempts >= RESUME_ATTEMPTS_BEFORE_NEW_CODE;
+      const resumeButton = (
+        <Button
+          variant={giveUp ? "secondary" : "primary"}
+          onClick={() => receiveId && void resume(receiveId)}
+          data-testid="transfer-resume"
+        >
+          {t("transfer.receive.resume")}
+        </Button>
+      );
       return (
         <Card testId="transfer-receive-paused">
           <h2 className="text-[17px] font-semibold text-neutral-12">{t("transfer.receive.pausedTitle")}</h2>
-          <Progress label={t("transfer.receive.pausedBody")} bytes={view.bytes} total={view.total} testId="transfer-paused-progress" />
+          {view.total > 0 ? (
+            <Progress label={t("transfer.receive.pausedBody")} bytes={view.bytes} total={view.total} testId="transfer-paused-progress" />
+          ) : null}
+          {view.reason ? (
+            <p role="alert" className="text-center text-md text-danger-11" data-testid="transfer-paused-reason" data-reason={view.reason}>
+              {t(view.reason === "unreachable" ? "transfer.receive.pausedUnreachable" : "transfer.receive.pausedInterrupted")}
+            </p>
+          ) : null}
+          {attempts > 0 ? (
+            <p className="text-center text-[13px] text-neutral-11 tabular-nums" data-testid="transfer-resume-attempts">
+              {t("transfer.receive.attempts", { count: attempts })}
+            </p>
+          ) : null}
           <div className="flex w-full flex-col gap-2">
-            <Button onClick={() => receiveId && void resume(receiveId)} data-testid="transfer-resume">
-              {t("transfer.receive.resume")}
-            </Button>
+            {giveUp ? (
+              <Button onClick={() => void newCode()} data-testid="transfer-new-code">
+                {t("transfer.receive.newCode")}
+              </Button>
+            ) : null}
+            {resumeButton}
             {cancel}
           </div>
         </Card>
       );
+    }
     case "failed":
       return (
         <Card testId="transfer-receive-failed">

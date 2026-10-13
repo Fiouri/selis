@@ -7,7 +7,9 @@
  * - `senderConfirms()`: the sending device confirmed (a receive starts);
  * - `hold(true)`: transfers stop at 40 % (screenshots), `hold(false)` resumes;
  * - `incoming(files)`: what the next receive brings (default: a 1-page PDF);
- * - `failReceive(code)`: the next receive fails with that error after the code;
+ * - `failReceive(code)`: the next receive fails with that error after the code
+ *   (`interrupted` / `unreachable`: it pauses, resumable);
+ * - `failResumes(code)`: every resume pauses again with that reason (`null`: they work);
  * - `link(url)`: a `selis://` deep link arrives (camera app, another app);
  * - `expireOffers()`: offered codes expire now;
  * - `devices(list)`: trusted devices and how they answer a ping;
@@ -69,6 +71,7 @@ type Hooks = {
   hold: (on: boolean) => void;
   incoming: (files: Array<{ name: string; bytes: number[] }>) => void;
   failReceive: (code: TransferErrorCode | null) => void;
+  failResumes: (code: TransferErrorCode | null) => void;
   link: (url: string) => void;
   expireOffers: () => void;
   devices: (list: Array<{ id: string; name: string; online: boolean; ready: boolean }>) => void;
@@ -124,6 +127,7 @@ export function createMockTransfer(deps: Deps) {
   let open = false;
   let held = false;
   let nextFail: TransferErrorCode | null = null;
+  let resumeFail: TransferErrorCode | null = null;
   let nextFiles: Array<{ name: string; bytes: Uint8Array }> | null = null;
   let pendingLink: string | null = null;
   const sends = new Map<string, Send>();
@@ -172,10 +176,10 @@ export function createMockTransfer(deps: Deps) {
     if (Date.now() - r.createdAt < CONNECT_MS) return { kind: "connecting" };
     if (r.confirmedAt === null) return { kind: "confirm", code: MOCK_CODE };
     if (r.fail) {
-      const bytes = progress(r.confirmedAt, r.total, r.baseBytes);
+      // A failed try moves nothing: a third on the first failure, then what was there (stable screenshots).
       r.result =
-        r.fail === "interrupted"
-          ? { kind: "paused", bytes: Math.max(bytes, Math.floor(r.total / 3)), total: r.total }
+        r.fail === "interrupted" || r.fail === "unreachable"
+          ? { kind: "paused", bytes: Math.max(r.baseBytes, Math.floor(r.total / 3)), total: r.total, reason: r.fail }
           : { kind: "failed", error: r.fail };
       return r.result;
     }
@@ -219,6 +223,9 @@ export function createMockTransfer(deps: Deps) {
     },
     failReceive: (code) => {
       nextFail = code;
+    },
+    failResumes: (code) => {
+      resumeFail = code;
     },
     link: (url) => {
       pendingLink = url;
@@ -374,7 +381,7 @@ export function createMockTransfer(deps: Deps) {
         if (r.result?.kind !== "paused") deps.fail("invalidArgument", "not resumable");
         r.baseBytes = r.result.bytes;
         r.result = null;
-        r.fail = null;
+        r.fail = resumeFail;
         r.confirmedAt = Date.now();
         r.createdAt = Date.now() - CONNECT_MS;
         return null;
@@ -382,7 +389,7 @@ export function createMockTransfer(deps: Deps) {
       case "transfer_pause": {
         for (const r of receives.values()) {
           const view = receiveView(r);
-          if (view.kind === "receiving") r.result = { kind: "paused", bytes: view.bytes, total: view.total };
+          if (view.kind === "receiving") r.result = { kind: "paused", bytes: view.bytes, total: view.total, reason: null };
         }
         return null;
       }

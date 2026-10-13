@@ -122,7 +122,9 @@
       "doneBody": "{count, plural, one {# έγγραφο έφτασε} other {# έγγραφα έφτασαν}} στην άλλη συσκευή.",
       "again": "Νέα αποστολή",
       "failedTitle": "Δεν στάλθηκε",
-      "newCode": "Νέος κωδικός"
+      "newCode": "Νέος κωδικός",
+      "expiredTitle": "Ο κωδικός έληξε",
+      "expiredBody": "Δημιουργήστε νέο κωδικό για τα ίδια έγγραφα."
     },
     "receive": {
       "scan": "Σάρωση QR code",
@@ -153,7 +155,11 @@
       "resume": "Συνέχεια",
       "discard": "Απόρριψη",
       "pausedList": "Μεταφορές σε παύση",
-      "pausedItem": "{count, plural, one {# έγγραφο} other {# έγγραφα}} · {done} από {total}"
+      "pausedItem": "{count, plural, one {# έγγραφο} other {# έγγραφα}} · {done} από {total}",
+      "pausedUnreachable": "Ο αποστολέας δεν είναι διαθέσιμος — ζητήστε νέο κωδικό.",
+      "pausedInterrupted": "Η σύνδεση διακόπηκε. Συνεχίστε ή ζητήστε νέο κωδικό από τον αποστολέα.",
+      "attempts": "{count, plural, one {# προσπάθεια απέτυχε} other {# προσπάθειες απέτυχαν}}",
+      "newCode": "Νέος κωδικός"
     },
     "error": {
       "expired": "Ο κωδικός έληξε. Ζητήστε νέο από τον αποστολέα.",

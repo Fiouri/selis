@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../../components/Toast";
 import { api } from "../../lib/api";
+import { retryOnStartup } from "../../lib/startupRetry";
 import { usePack } from "../transfer/packStore";
 import { transferStore } from "../transfer/transferStore";
 import { useNavigation } from "../../state/navigation";
@@ -46,7 +47,8 @@ export function OpenWithBridge() {
         console.warn(message, error);
       },
     });
-    void inbox.check();
+    // A cold start may answer the first calls with an error: the launch intent's documents wait.
+    const stopRetrying = retryOnStartup(() => inbox.check());
 
     let timer = 0;
     const onVisibility = () => {
@@ -56,6 +58,7 @@ export function OpenWithBridge() {
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
+      stopRetrying();
       document.removeEventListener("visibilitychange", onVisibility);
       window.clearTimeout(timer);
       inbox.dispose();

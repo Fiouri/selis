@@ -228,6 +228,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 
 #[cfg(target_os = "android")]
 mod android {
+    use std::time::Duration;
+
     use serde::Deserialize;
     use tauri::plugin::PluginHandle;
     use tauri::{AppHandle, Manager, Runtime};
@@ -236,6 +238,10 @@ mod android {
     use crate::commands::{CommandError, CommandResult, ErrorCode};
 
     pub struct OpenWithHandle<R: Runtime>(pub PluginHandle<R>);
+
+    /// How long a command waits for plugin setup on a cold start.
+    const HANDLE_WAIT: Duration = Duration::from_secs(10);
+    const HANDLE_STEP: Duration = Duration::from_millis(50);
 
     #[derive(Deserialize)]
     struct Taken {
@@ -252,8 +258,22 @@ mod android {
     /// Moves what the Kotlin plugin collected into the queue (a JNI call, not
     /// WebView IPC, so nothing can get lost on the way).
     pub async fn drain<R: Runtime>(app: &AppHandle<R>, queue: &OpenQueue) -> CommandResult<()> {
-        let Some(handle) = app.try_state::<OpenWithHandle<R>>() else {
-            return Ok(());
+        // On a slow cold start the UI asks before plugin setup has registered the
+        // handle; answering "nothing" then lost the launch intent's link or PDF
+        // until the app came back to the foreground. Wait for it instead.
+        let mut waited = Duration::ZERO;
+        let handle = loop {
+            if let Some(handle) = app.try_state::<OpenWithHandle<R>>() {
+                break handle;
+            }
+            if waited >= HANDLE_WAIT {
+                return Err(CommandError::new(
+                    ErrorCode::Internal,
+                    "open-with: plugin not registered",
+                ));
+            }
+            tokio::time::sleep(HANDLE_STEP).await;
+            waited += HANDLE_STEP;
         };
         let taken: Taken = handle
             .0

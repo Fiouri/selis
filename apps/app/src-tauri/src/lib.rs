@@ -4,6 +4,8 @@
 //! is open (`commands/transfer.rs`).
 
 mod commands;
+#[cfg(debug_assertions)]
+mod debug_log;
 mod device_key;
 mod requests;
 
@@ -109,6 +111,8 @@ pub fn run() {
             #[cfg(feature = "measure")]
             std::hint::black_box(MEASURE_BUILD_MARKER);
             builder.mount_events(app);
+            #[cfg(debug_assertions)]
+            debug_log::init(&app.path().app_cache_dir()?);
             let root = app.path().app_data_dir()?;
             let library = Library::open(root)?;
             // A transfer "active" in the database belonged to a process that died.

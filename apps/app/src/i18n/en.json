@@ -122,7 +122,9 @@
       "doneBody": "{count, plural, one {# document arrived} other {# documents arrived}} on the other device.",
       "again": "Send more",
       "failedTitle": "Not sent",
-      "newCode": "New code"
+      "newCode": "New code",
+      "expiredTitle": "This code has expired",
+      "expiredBody": "Make a new code for the same documents."
     },
     "receive": {
       "scan": "Scan QR code",
@@ -153,7 +155,11 @@
       "resume": "Resume",
       "discard": "Discard",
       "pausedList": "Paused transfers",
-      "pausedItem": "{count, plural, one {# document} other {# documents}} · {done} of {total}"
+      "pausedItem": "{count, plural, one {# document} other {# documents}} · {done} of {total}",
+      "pausedUnreachable": "Sender not reachable — ask for a new code.",
+      "pausedInterrupted": "The connection dropped. Resume, or ask the sender for a new code.",
+      "attempts": "{count, plural, one {# attempt failed} other {# attempts failed}}",
+      "newCode": "Get a new code"
     },
     "error": {
       "expired": "This code has expired. Ask the sender for a new one.",

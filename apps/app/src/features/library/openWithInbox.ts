@@ -37,9 +37,11 @@ export class OpenWithInbox {
     this.deps = deps;
   }
 
-  async check(): Promise<void> {
-    if (this.checking) return;
+  /** Reads what other apps handed over; `false` when it could not be read (asked again later). */
+  async check(): Promise<boolean> {
+    if (this.checking) return true;
     this.checking = true;
+    let read = true;
     try {
       for (const item of await this.deps.pending()) {
         if (this.seen.has(item.id)) continue;
@@ -49,10 +51,12 @@ export class OpenWithInbox {
     } catch (err) {
       // Asked again on the next resume; reading consumes nothing.
       this.deps.log("selis: could not read shared documents", err);
+      read = false;
     } finally {
       this.checking = false;
     }
     this.pump();
+    return read;
   }
 
   dispose(): void {

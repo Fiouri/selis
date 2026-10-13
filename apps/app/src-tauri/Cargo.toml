@@ -38,10 +38,12 @@ tauri-specta.workspace = true
 tokio = { version = "1.53.2", default-features = false, features = ["sync", "time"] }
 # Device key in the OS secure storage (ADR 0011); Android uses DeviceKeyPlugin.kt.
 keyring-core = "=1.0.0"
+# Debug builds only (`debug_log.rs`): transfer diagnostics to a file in the app cache.
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["env-filter", "fmt"] }
 
 [dev-dependencies]
 tempfile.workspace = true
-tokio = { version = "1.53.2", default-features = false, features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1.53.2", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 # Same version as wry, whose JNI handle we receive.

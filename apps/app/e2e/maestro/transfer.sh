@@ -10,6 +10,12 @@
 #                                         fixture (auto-confirm) and opens its selis:// link (cold start)
 #   transfer.sh post <serial>             (POST_RUN) the fixture is in the library, the Transfer
 #                                         screen was left so no socket remains, stops the peer
+#   transfer.sh pre-recover <serial>      (PRE_RUN of transfer-recover.yaml, debug build) clears the
+#                                         app, makes offered codes expire after 60 s
+#                                         (debug.selis.ticket_lifetime), starts the dev peer sending a
+#                                         200 MB file that drops out once data flows, opens its link
+#   transfer.sh post-recover <serial>     (POST_RUN) the peer dropped out, nothing was received or
+#                                         left in the transfer inbox, no socket, switch cleared
 #
 # /proc/net/{udp,udp6,tcp,tcp6} list sockets with their owner UID (column 8); the
 # app's UID comes from `pm list packages -U`.
@@ -91,6 +97,43 @@ case "$cmd" in
     # As the camera app would: the link opens Selis (cold start) on the Receive tab.
     adb_ shell am start -W -a android.intent.action.VIEW -d "'$link'" "$pkg" >/dev/null
     echo "OK: peer sending, link opened"
+    ;;
+  pre-recover)
+    mkdir -p "$state"
+    peer="$root/target/release/examples/selis-peer"
+    [ -x "$peer.exe" ] && peer="$peer.exe"
+    [ -x "$peer" ] || { echo "build it: cargo build --release -p selis-transfer --example selis-peer" >&2; exit 2; }
+    native() { if command -v cygpath > /dev/null; then cygpath -w "$1"; else echo "$1"; fi; }
+    payload="$state/vanishing-200mb.pdf"
+    if [ ! -f "$payload" ]; then
+      { printf '%%PDF-1.7\n'; head -c 200000000 /dev/urandom; printf '\n%%%%EOF\n'; } > "$payload"
+    fi
+    adb_ shell pm clear "$pkg" >/dev/null
+    adb_ shell pm grant "$pkg" android.permission.POST_NOTIFICATIONS
+    adb_ shell setprop debug.selis.ticket_lifetime 60
+    rm -rf "$state/store-recover"
+    rm -f "$state/peer-recover.log"
+    "$peer" send "$(native "$payload")" --yes --drop-after-accept --store "$(native "$state/store-recover")" > "$state/peer-recover.log" 2>&1 &
+    echo $! > "$state/peer.pid"
+    # Importing 200 MB into the peer's store takes a while on a busy disk.
+    for _ in $(seq 1 180); do grep -q '^LINK ' "$state/peer-recover.log" && break; sleep 1; done
+    link="$(sed -n 's/^LINK //p' "$state/peer-recover.log" | tr -d '\r')"
+    [ -n "$link" ] || { echo "FAIL: the peer printed no link" >&2; kill "$(cat "$state/peer.pid")" 2>/dev/null; exit 1; }
+    adb_ shell am start -W -a android.intent.action.VIEW -d "'$link'" "$pkg" >/dev/null
+    echo "OK: vanishing peer sending, link opened"
+    ;;
+  post-recover)
+    status=0
+    adb_ shell setprop debug.selis.ticket_lifetime "''"
+    grep -q '^dropping out' "$state/peer-recover.log" || { echo "FAIL: the peer never dropped out" >&2; status=1; }
+    left="$(adb_ shell run-as "$pkg" sh -c "'ls cache/transfer/in 2>/dev/null'" | tr -d '\r' || true)"
+    [ -z "$left" ] || { echo "FAIL: transfer inbox still holds: $left" >&2; status=1; }
+    sleep 2
+    "$0" sockets "$serial" || status=1
+    [ -f "$state/peer.pid" ] && kill "$(cat "$state/peer.pid")" 2>/dev/null || true
+    rm -rf "$state/store-recover"
+    [ "$status" -eq 0 ] && echo "OK: gave up on the vanished sender cleanly"
+    exit "$status"
     ;;
   post)
     want="$(sha256sum "$fixture" | cut -d' ' -f1)"

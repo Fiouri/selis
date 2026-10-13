@@ -205,6 +205,8 @@ function OfferCard({ offer }: { offer: OfferView }) {
   const cancelSend = useTransfer((s) => s.cancelSend);
   const secondsLeft = useSecondsLeft(offer.expiresAt);
   const src = useMemo(() => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(offer.qrSvg)}`, [offer.qrSvg]);
+  // The countdown ran out: never a dead QR code, a new one is one tap away.
+  if (secondsLeft <= 0) return <ExpiredCard />;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(offer.link);
@@ -233,6 +235,27 @@ function OfferCard({ offer }: { offer: OfferView }) {
           {t("transfer.send.copyLink")}
         </Button>
         <Button variant="ghost" className="flex-1" onClick={() => void cancelSend()} data-testid="transfer-send-cancel">
+          {t("transfer.cancel")}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function ExpiredCard() {
+  const { t } = useTranslation();
+  const renewOffer = useTransfer((s) => s.renewOffer);
+  const cancelSend = useTransfer((s) => s.cancelSend);
+  const preparing = useTransfer((s) => s.preparing);
+  return (
+    <Card testId="transfer-offer-expired">
+      <h2 className="text-[17px] font-semibold text-neutral-12">{t("transfer.send.expiredTitle")}</h2>
+      <p className="text-center text-md text-neutral-11">{t("transfer.send.expiredBody")}</p>
+      <div className="flex w-full flex-col gap-2">
+        <Button onClick={() => void renewOffer()} disabled={preparing} data-testid="transfer-new-code">
+          {t("transfer.send.newCode")}
+        </Button>
+        <Button variant="secondary" onClick={() => void cancelSend()} data-testid="transfer-send-cancel">
           {t("transfer.cancel")}
         </Button>
       </div>
@@ -311,12 +334,13 @@ function DoneCard({ count, peer }: { count: number; peer: string | null }) {
 function FailedCard({ problem }: { problem: TransferProblem }) {
   const { t } = useTranslation();
   const resetSend = useTransfer((s) => s.resetSend);
+  if (problem === "expired") return <ExpiredCard />;
   return (
     <Card testId="transfer-send-failed">
       <h2 className="text-[17px] font-semibold text-neutral-12">{t("transfer.send.failedTitle")}</h2>
       <Problem problem={problem} testId="transfer-send-problem" />
       <Button className="w-full" onClick={resetSend} data-testid="transfer-send-again">
-        {problem === "expired" ? t("transfer.send.newCode") : t("transfer.retry")}
+        {t("transfer.retry")}
       </Button>
     </Card>
   );

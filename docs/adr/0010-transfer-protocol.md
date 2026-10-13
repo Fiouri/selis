@@ -105,3 +105,24 @@ targetSdk 37; CI fails the build when targetSdk reaches 37 without it.
 - License: iroh pulls `webpki-roots` (CDLA-Permissive-2.0), allowed in `deny.toml`.
 - The blob store needs free space for the payload; the receiver's exported files are deleted
   once imported (peak ≈ 2× the payload until then).
+
+## Amendment (2026-10-13): endpoint lifecycle and failure reasons
+
+- **Close holds the lock to the end.** The Transfer screen closes the endpoint on every
+  visibility change and reopens it when visible. Closing (endpoint close, store shutdown,
+  deleting `cache/transfer`) now runs under the same lock as opening, so an open that comes in
+  meanwhile starts on a fresh store. Before, a close still running deleted the store of the
+  endpoint opened in between: every fetch then failed at byte 0 and the receive showed
+  "paused" on every Resume (found in the P3 close-out on the S23). Test:
+  `an_open_during_a_close_keeps_its_store`.
+- **A store that cannot write is a storage failure**, not an interruption (probe file in the
+  store directory after a fetch error), so it is not offered for resuming forever.
+- **A resume keeps its saved point.** A resume that cannot reach the sender pauses again with
+  the reason (`unreachable` / `interrupted`); the paused card says what to do and, after three
+  failed resumes, leads with "Get a new code". An expired QR code offers "New code" for the
+  same documents.
+- **Diagnostics:** every error site logs its step and cause through `tracing`. Debug builds
+  write it to `cache/logs/rust.log` (filter: `debug.selis.rust_log`); the dev peer takes
+  `RUST_LOG`. `debug.selis.ticket_lifetime` shortens offered codes for Maestro. Both exist in
+  debug builds only (`scripts/check-release-apk.sh` fails a release APK containing
+  `debug.selis.`).

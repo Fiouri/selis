@@ -420,6 +420,8 @@ impl Gate {
                             .is_some_and(|id| lock(&gate.allowed).contains_key(&id));
                         if ok && let Some(id) = msg.endpoint_id {
                             lock(&gate.connections).insert(msg.connection_id, id);
+                        } else {
+                            tracing::warn!(peer = ?msg.endpoint_id, "blobs: connection refused");
                         }
                         msg.tx
                             .send(if ok {
@@ -440,6 +442,9 @@ impl Gate {
                                 .get(&p)
                                 .is_some_and(|h| h.contains(&msg.request.hash))
                         });
+                        if !ok {
+                            tracing::warn!(?peer, hash = %msg.request.hash, "blobs: request refused");
+                        }
                         msg.tx
                             .send(if ok {
                                 Ok(())
@@ -483,6 +488,7 @@ struct ReceiveSession {
 struct Inner {
     endpoint: Endpoint,
     store: FsStore,
+    store_dir: PathBuf,
     gate: Arc<Gate>,
     sends: Mutex<HashMap<SessionId, SendSession>>,
     receives: Mutex<HashMap<SessionId, ReceiveSession>>,
@@ -551,6 +557,7 @@ impl TransferService {
         let inner = Arc::new(Inner {
             endpoint: endpoint.clone(),
             store: store.clone(),
+            store_dir: config.store_dir.clone(),
             gate: Arc::clone(&gate),
             sends: Mutex::new(HashMap::new()),
             receives: Mutex::new(HashMap::new()),
@@ -790,25 +797,25 @@ impl TransferService {
                 .connect(EndpointAddr::new(target), PUSH_ALPN),
         )
         .await
-        .map_err(|_| TransferError::Unreachable)?
-        .map_err(|_| TransferError::Unreachable)?;
+        .map_err(stop(TransferError::Unreachable, "push: connect timed out"))?
+        .map_err(stop(TransferError::Unreachable, "push: connect"))?;
         let exchange = async {
             let (mut tx, mut rx) = conn
                 .open_bi()
                 .await
-                .map_err(|_| TransferError::Unreachable)?;
+                .map_err(stop(TransferError::Unreachable, "push: open stream"))?;
             wire::send(&mut tx, request)
                 .await
-                .map_err(|_| TransferError::Interrupted)?;
+                .map_err(stop(TransferError::Interrupted, "push: send request"))?;
             let answer: PushResponse = wire::recv(&mut rx)
                 .await
-                .map_err(|_| TransferError::NotReady)?;
+                .map_err(stop(TransferError::NotReady, "push: read answer"))?;
             let _ = tx.finish();
             Ok::<_, TransferError>(answer)
         };
         let answer = tokio::time::timeout(PUSH_TIMEOUT, exchange)
             .await
-            .map_err(|_| TransferError::Unreachable)?;
+            .map_err(stop(TransferError::Unreachable, "push: exchange timed out"))?;
         conn.close(0u32.into(), b"done");
         answer
     }
@@ -999,6 +1006,26 @@ enum Start {
     Resume(ResumeInfo),
 }
 
+/// Whether the blob store can still write (a probe file in its directory).
+async fn store_writable(dir: &Path) -> bool {
+    let probe = dir.join(".probe");
+    let ok = tokio::fs::write(&probe, b"ok").await.is_ok();
+    let _ = tokio::fs::remove_file(&probe).await;
+    ok
+}
+
+/// Maps a failure to what the UI shows and logs its cause (`tracing`: silent
+/// unless a subscriber is installed — the dev peer and debug app builds).
+fn stop<E: std::fmt::Debug>(
+    error: TransferError,
+    step: &'static str,
+) -> impl FnOnce(E) -> TransferError {
+    move |cause| {
+        tracing::warn!(?error, step, ?cause, "transfer stopped");
+        error
+    }
+}
+
 fn route_of(conn: &Connection) -> Route {
     match conn.paths().iter().find(|p| p.is_selected()) {
         Some(p) if p.is_relay() => Route::Relay,
@@ -1029,43 +1056,48 @@ async fn receive_task(
     let sender = addr.id;
     let conn = tokio::time::timeout(CONNECT_TIMEOUT, inner.endpoint.connect(addr.clone(), ALPN))
         .await
-        .map_err(|_| TransferError::Unreachable)?
-        .map_err(|_| TransferError::Unreachable)?;
-    let (mut tx, mut rx) = conn
-        .open_bi()
-        .await
-        .map_err(|_| TransferError::Interrupted)?;
+        .map_err(stop(
+            TransferError::Unreachable,
+            "receive: connect timed out",
+        ))?
+        .map_err(stop(TransferError::Unreachable, "receive: connect"))?;
+    let (mut tx, mut rx) = conn.open_bi().await.map_err(stop(
+        TransferError::Interrupted,
+        "receive: open control stream",
+    ))?;
     let token = match &start {
         Start::Ticket(t) => {
             wire::send(&mut tx, &ToSender::Hello { token: t.token })
                 .await
-                .map_err(|_| TransferError::Interrupted)?;
+                .map_err(stop(TransferError::Interrupted, "receive: send hello"))?;
             Some(t.token)
         }
         Start::Resume(r) => {
             wire::send(&mut tx, &ToSender::Resume { session: r.session })
                 .await
-                .map_err(|_| TransferError::Interrupted)?;
+                .map_err(stop(TransferError::Interrupted, "receive: send resume"))?;
             None
         }
     };
-    let first: ToReceiver = wire::recv(&mut rx)
-        .await
-        .map_err(|_| TransferError::Interrupted)?;
+    let first: ToReceiver = wire::recv(&mut rx).await.map_err(stop(
+        TransferError::Interrupted,
+        "receive: read first answer",
+    ))?;
     let accepted = match (first, token) {
         (ToReceiver::CodeShown, Some(token)) => {
             let code = confirmation_code(&conn, &token, sender, inner.endpoint.id());
             set_receive(inner, id, ReceiveState::Confirm { code });
             wire::recv(&mut rx)
                 .await
-                .map_err(|_| TransferError::Interrupted)?
+                .map_err(stop(TransferError::Interrupted, "receive: read decision"))?
         }
         (other, _) => other,
     };
     let (session, manifest) = match accepted {
         ToReceiver::Accepted { session, manifest } => (
             session,
-            Manifest::parse(&manifest).map_err(|_| TransferError::Protocol)?,
+            Manifest::parse(&manifest)
+                .map_err(stop(TransferError::Protocol, "receive: parse manifest"))?,
         ),
         ToReceiver::Declined => return Err(TransferError::Declined),
         ToReceiver::Rejected { reason } => {
@@ -1118,8 +1150,11 @@ async fn receive_task(
             inner.endpoint.connect(addr, iroh_blobs::ALPN),
         )
         .await
-        .map_err(|_| TransferError::Unreachable)?
-        .map_err(|_| TransferError::Unreachable)?;
+        .map_err(stop(
+            TransferError::Unreachable,
+            "receive: blobs connect timed out",
+        ))?
+        .map_err(stop(TransferError::Unreachable, "receive: blobs connect"))?;
         let mut last = tokio::time::Instant::now() - PROGRESS_EVERY;
         for (hash, size) in missing {
             let content = HashAndFormat::raw(hash);
@@ -1151,7 +1186,16 @@ async fn receive_task(
                         }
                     }
                     GetProgressItem::Done(_) => break,
-                    GetProgressItem::Error(_) => return Err(TransferError::Interrupted),
+                    GetProgressItem::Error(e) => {
+                        // A store that no longer answers (its directory deleted, the
+                        // disk full) fails every retry: not something to resume.
+                        let error = if store_writable(&inner.store_dir).await {
+                            TransferError::Interrupted
+                        } else {
+                            TransferError::Storage
+                        };
+                        return Err(stop(error, "receive: fetch blob")(e));
+                    }
                 }
             }
             match inner.store.blobs().status(hash).await {
@@ -1165,7 +1209,8 @@ async fn receive_task(
 
     // Every blob is known or complete at its stated size.
     set_receive(inner, id, ReceiveState::Verifying);
-    std::fs::create_dir_all(dest).map_err(|_| TransferError::Storage)?;
+    std::fs::create_dir_all(dest)
+        .map_err(stop(TransferError::Storage, "receive: create destination"))?;
     let export = |hash: Hash, ext: &'static str| {
         let store = inner.store.clone();
         let known = known.get(&hash).cloned();
@@ -1180,8 +1225,9 @@ async fn receive_task(
                     .blobs()
                     .export(hash, &part)
                     .await
-                    .map_err(|_| TransferError::Storage)?;
-                std::fs::rename(&part, &path).map_err(|_| TransferError::Storage)?;
+                    .map_err(stop(TransferError::Storage, "receive: export blob"))?;
+                std::fs::rename(&part, &path)
+                    .map_err(stop(TransferError::Storage, "receive: move exported blob"))?;
             }
             Ok::<_, TransferError>(path)
         }
@@ -1429,8 +1475,9 @@ impl ControlProtocol {
                     return Ok(());
                 }
                 Ok(_) => return Err(wire::WireError::Malformed),
-                Err(_) => {
+                Err(cause) => {
                     // Dropped mid-way: it may come back with the session token.
+                    tracing::warn!(?cause, bytes, total, "send: receiver dropped");
                     self.set(&id, SendState::Interrupted { bytes, total });
                     return Ok(());
                 }

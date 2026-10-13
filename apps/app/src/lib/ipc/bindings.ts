@@ -411,7 +411,9 @@ peer: string | null; trusted: boolean } |
  *  Stopped mid-way (connection lost, app stopped, Android's daily limit):
  *  `transfer_resume` continues without fetching again what arrived.
  */
-{ kind: "paused"; bytes: number; total: number } | { kind: "failed"; error: TransferErrorCode };
+{ kind: "paused"; bytes: number; total: number; 
+/**  Why it stopped (`unreachable`, `interrupted`); `None` when paused on purpose. */
+reason: TransferErrorCode | null } | { kind: "failed"; error: TransferErrorCode };
 
 export type ResumableView = {
 	id: string,
