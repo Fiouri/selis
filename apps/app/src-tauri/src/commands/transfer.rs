@@ -22,7 +22,8 @@
 //! Long-running commands take a request id (ADR 0005).
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -32,8 +33,8 @@ use selis_core::{
 };
 use selis_transfer::{
     EndpointId, Have, Network, OfferItem, OfferLibrary, OfferSignature, OfferVersion, ReceiveState,
-    ResumeInfo, Route, SendState, ServiceConfig, TransferError, TransferService, TransferTicket,
-    qr,
+    ResumeInfo, Route, SecretKey, SendState, ServiceConfig, TransferError, TransferService,
+    TransferTicket, qr,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -181,6 +182,8 @@ pub enum ReceiveView {
         bytes: u64,
         #[specta(type = specta_typescript::Number)]
         total: u64,
+        /// Why it stopped (`unreachable`, `interrupted`); `None` when paused on purpose.
+        reason: Option<TransferErrorCode>,
     },
     #[serde(rename_all = "camelCase")]
     Failed {
@@ -380,15 +383,6 @@ pub async fn transfer_open<R: Runtime>(
     state: State<'_, Arc<TransferState>>,
     library: State<'_, Arc<Library>>,
 ) -> CommandResult<TransferInfo> {
-    let mut open = state.open.lock().await;
-    *lock(&state.close_requested) = false;
-    if let Some(o) = open.as_ref() {
-        return Ok(TransferInfo {
-            device_id: o.service.endpoint_id().to_string(),
-            network: o.network,
-            debug: cfg!(debug_assertions),
-        });
-    }
     let settings = settings::load(&library)?;
     let (network, view) = if settings.local_only {
         (Network::LocalOnly, NetworkView::LocalOnly)
@@ -401,51 +395,18 @@ pub async fn transfer_open<R: Runtime>(
     } else {
         (Network::Default, NetworkView::Default)
     };
-    let (key, _source) = device_key::load_or_create(&app).await;
     let base = store_dir(&app)?;
-    // A previous run that ended without closing (killed, crashed) may have left
-    // blobs behind; with nothing to resume they are garbage.
-    if library.resumable_transfers()?.is_empty() {
-        let _ = std::fs::remove_dir_all(&base);
-    }
-    // Testing aid, compiled out of release builds (scripts/check-release-apk.sh).
-    #[cfg(debug_assertions)]
-    let force_relay = {
-        std::hint::black_box("SELIS_DEBUG_FORCE_RELAY");
-        *lock(&state.force_relay) && view != NetworkView::LocalOnly
-    };
-    #[cfg(not(debug_assertions))]
-    let force_relay = false;
-    // Files the library already has (same BLAKE3) are never fetched again.
-    let lib = Arc::clone(&library);
-    let have = Have(Arc::new(move |hash: &selis_transfer::Hash| {
-        lib.file_with_hash(&hash.to_hex())
-    }));
-    let config = ServiceConfig {
-        force_relay,
-        have: Some(have),
-        ..ServiceConfig::new(key, base.join("store"), network)
+    let key = async {
+        let (key, _source) = device_key::load_or_create(&app).await;
+        key
     };
     #[cfg(target_os = "android")]
-    android_call(&app, "open", serde_json::json!({})).await;
-    let service = TransferService::start(config)
+    let opened = android_call(&app, "open", serde_json::json!({}));
+    #[cfg(not(target_os = "android"))]
+    let opened = async {};
+    state
+        .open_at(&library, &base, (network, view), key, opened)
         .await
-        .map_err(|e| err(ErrorCode::Io, e.to_string()))?;
-    service.set_trusted(trusted_ids(&library));
-    let info = TransferInfo {
-        device_id: service.endpoint_id().to_string(),
-        network: view,
-        debug: cfg!(debug_assertions),
-    };
-    *open = Some(Open {
-        service: Arc::new(service),
-        network: view,
-        trackers: HashMap::new(),
-        links: HashMap::new(),
-        sessions: HashMap::new(),
-        send_tasks: HashMap::new(),
-    });
-    Ok(info)
 }
 
 /// Closes the endpoint when the Transfer screen closes or the app goes to the
@@ -468,47 +429,141 @@ pub async fn transfer_close<R: Runtime>(
 }
 
 async fn close_now<R: Runtime>(app: &AppHandle<R>, state: &TransferState, library: &Library) {
-    let Some(open) = state.open.lock().await.take() else {
-        return;
-    };
-    for (id, task) in open.trackers {
-        task.abort();
-        pause_row(library, state, &id);
-    }
-    for session in open.sessions.values() {
-        open.service.cancel_receive(session);
-    }
-    for (session, (task, row)) in open.send_tasks {
-        task.abort();
-        let finished = matches!(
-            lock(&state.sends).get(&session),
-            Some(SendView::Done { .. } | SendView::Failed { .. })
-        );
-        if !finished {
-            let _ = library.transfer_update(
-                &row,
-                &TransferUpdate {
-                    state: Some(TransferRowState::Cancelled),
-                    ..Default::default()
-                },
-            );
-        }
-    }
-    lock(&state.sends).clear();
-    *lock(&state.close_requested) = false;
-    // Partial downloads stay for resuming; with none left the store goes.
-    let wipe = library
-        .resumable_transfers()
-        .map(|r| r.is_empty())
-        .unwrap_or(false);
-    open.service.close(wipe).await;
-    if wipe && let Ok(dir) = store_dir(app) {
-        let _ = std::fs::remove_dir_all(dir);
-    }
+    let base = store_dir(app).ok();
     #[cfg(target_os = "android")]
-    android_call(app, "close", serde_json::json!({})).await;
+    let closed = android_call(app, "close", serde_json::json!({}));
     #[cfg(not(target_os = "android"))]
-    let _ = app;
+    let closed = async {
+        let _ = app;
+    };
+    state.close_at(library, base, closed).await;
+}
+
+impl TransferState {
+    /// Opens the endpoint over `base` (its store), unless one is open. `key` is
+    /// only awaited for a new endpoint; `opened` runs just before it starts.
+    async fn open_at(
+        &self,
+        library: &Arc<Library>,
+        base: &Path,
+        (network, view): (Network, NetworkView),
+        key: impl Future<Output = SecretKey>,
+        opened: impl Future<Output = ()>,
+    ) -> CommandResult<TransferInfo> {
+        let mut open = self.open.lock().await;
+        *lock(&self.close_requested) = false;
+        if let Some(o) = open.as_ref() {
+            return Ok(TransferInfo {
+                device_id: o.service.endpoint_id().to_string(),
+                network: o.network,
+                debug: cfg!(debug_assertions),
+            });
+        }
+        // A previous run that ended without closing (killed, crashed) may have left
+        // blobs behind; with nothing to resume they are garbage.
+        if library.resumable_transfers()?.is_empty() {
+            let _ = std::fs::remove_dir_all(base);
+        }
+        // Testing aid, compiled out of release builds (scripts/check-release-apk.sh).
+        #[cfg(debug_assertions)]
+        let force_relay = {
+            std::hint::black_box("SELIS_DEBUG_FORCE_RELAY");
+            *lock(&self.force_relay) && view != NetworkView::LocalOnly
+        };
+        #[cfg(not(debug_assertions))]
+        let force_relay = false;
+        // Files the library already has (same BLAKE3) are never fetched again.
+        let lib = Arc::clone(library);
+        let have = Have(Arc::new(move |hash: &selis_transfer::Hash| {
+            lib.file_with_hash(&hash.to_hex())
+        }));
+        #[allow(unused_mut)]
+        let mut config = ServiceConfig {
+            force_relay,
+            have: Some(have),
+            ..ServiceConfig::new(key.await, base.join("store"), network)
+        };
+        // Testing aid (Maestro: an expiring QR code without waiting 10 minutes).
+        #[cfg(debug_assertions)]
+        if let Some(secs) = crate::debug_log::property("debug.selis.ticket_lifetime")
+            .and_then(|v| v.parse::<u64>().ok())
+        {
+            config.ticket_lifetime = Duration::from_secs(secs);
+        }
+        opened.await;
+        let service = TransferService::start(config)
+            .await
+            .map_err(|e| err(ErrorCode::Io, e.to_string()))?;
+        service.set_trusted(trusted_ids(library));
+        let info = TransferInfo {
+            device_id: service.endpoint_id().to_string(),
+            network: view,
+            debug: cfg!(debug_assertions),
+        };
+        *open = Some(Open {
+            service: Arc::new(service),
+            network: view,
+            trackers: HashMap::new(),
+            links: HashMap::new(),
+            sessions: HashMap::new(),
+            send_tasks: HashMap::new(),
+        });
+        Ok(info)
+    }
+
+    /// Closes the endpoint; with nothing left to resume, `base` (the store) goes.
+    /// `closed` runs once the endpoint is closed, before the store is deleted.
+    /// The lock is held to the end: an open that comes in meanwhile (the screen
+    /// returning) waits, then starts on a fresh store instead of one about to
+    /// be deleted under it.
+    async fn close_at(
+        &self,
+        library: &Library,
+        base: Option<PathBuf>,
+        closed: impl Future<Output = ()>,
+    ) {
+        let state = self;
+        let mut slot = state.open.lock().await;
+        let Some(open) = slot.take() else {
+            return;
+        };
+        for (id, task) in open.trackers {
+            task.abort();
+            pause_row(library, state, &id);
+        }
+        for session in open.sessions.values() {
+            open.service.cancel_receive(session);
+        }
+        for (session, (task, row)) in open.send_tasks {
+            task.abort();
+            let finished = matches!(
+                lock(&state.sends).get(&session),
+                Some(SendView::Done { .. } | SendView::Failed { .. })
+            );
+            if !finished {
+                let _ = library.transfer_update(
+                    &row,
+                    &TransferUpdate {
+                        state: Some(TransferRowState::Cancelled),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+        lock(&state.sends).clear();
+        *lock(&state.close_requested) = false;
+        // Partial downloads stay for resuming; with none left the store goes.
+        let wipe = library
+            .resumable_transfers()
+            .map(|r| r.is_empty())
+            .unwrap_or(false);
+        open.service.close(wipe).await;
+        closed.await;
+        if wipe && let Some(dir) = base {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+        drop(slot);
+    }
 }
 
 /// A receive stopped by us (closing, pausing): resumable if it got that far.
@@ -530,7 +585,11 @@ fn pause_row(library: &Library, state: &TransferState, id: &str) {
         _ => (0, 0),
     };
     *view = if resumable {
-        ReceiveView::Paused { bytes, total }
+        ReceiveView::Paused {
+            bytes,
+            total,
+            reason: None,
+        }
     } else {
         ReceiveView::Failed {
             error: TransferErrorCode::Cancelled,
@@ -829,6 +888,10 @@ async fn track_send(
     }
 }
 
+fn error_from_name(name: &str) -> Option<TransferErrorCode> {
+    serde_json::from_value(serde_json::Value::String(name.to_owned())).ok()
+}
+
 fn error_name(e: TransferErrorCode) -> String {
     serde_json::to_value(e)
         .ok()
@@ -1052,6 +1115,7 @@ pub async fn transfer_receive_status(
             ReceiveView::Paused {
                 bytes: row.done_bytes,
                 total: row.total_bytes,
+                reason: row.error.as_deref().and_then(error_from_name),
             }
         }
         TransferRowState::Cancelled => ReceiveView::Failed {
@@ -1266,7 +1330,11 @@ async fn track_receive<R: Runtime>(
                         .map(|r| (r.done_bytes, r.total_bytes))
                         .unwrap_or((0, 0));
                     (
-                        ReceiveView::Paused { bytes, total },
+                        ReceiveView::Paused {
+                            bytes,
+                            total,
+                            reason: Some(code),
+                        },
                         TransferRowState::Interrupted,
                     )
                 } else {
@@ -1707,6 +1775,79 @@ mod tests {
         assert!(state.service().await.is_err());
     }
 
+    /// The Transfer screen closes and reopens on every visibility change. A close
+    /// still shutting down must not delete the store of the endpoint opened
+    /// meanwhile: every fetch into it then failed at byte 0 ("paused", forever).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_open_during_a_close_keeps_its_store() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let library = Arc::new(Library::open(dir.path().join("app")).expect("library"));
+        let base = dir.path().join("transfer");
+        let state = Arc::new(TransferState::default());
+        let local = (Network::LocalOnly, NetworkView::LocalOnly);
+        state
+            .open_at(
+                &library,
+                &base,
+                local.clone(),
+                async { SecretKey::generate() },
+                async {},
+            )
+            .await
+            .expect("first open");
+
+        // The close stops right after the endpoint is closed, before its cleanup.
+        let (release, held) = tokio::sync::oneshot::channel::<()>();
+        let closing = tokio::spawn({
+            let (state, library, base) = (Arc::clone(&state), Arc::clone(&library), base.clone());
+            async move {
+                state
+                    .close_at(&library, Some(base), async {
+                        let _ = held.await;
+                    })
+                    .await;
+            }
+        });
+        // Until the close has taken the endpoint (it holds the lock, or the slot is empty).
+        for _ in 0..500 {
+            if state.open.try_lock().map(|o| o.is_none()).unwrap_or(true) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        // The screen comes back meanwhile.
+        let reopening = tokio::spawn({
+            let (state, library, base, local) = (
+                Arc::clone(&state),
+                Arc::clone(&library),
+                base.clone(),
+                local.clone(),
+            );
+            async move {
+                state
+                    .open_at(
+                        &library,
+                        &base,
+                        local,
+                        async { SecretKey::generate() },
+                        async {},
+                    )
+                    .await
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let _ = release.send(());
+        closing.await.expect("close");
+        reopening.await.expect("reopen task").expect("reopen");
+
+        let service = state.service().await.expect("an open endpoint");
+        assert!(
+            service.store_dir().join("blobs.db").exists(),
+            "the open endpoint's store was deleted by the close before it"
+        );
+        state.close_at(&library, Some(base), async {}).await;
+    }
+
     #[test]
     fn manifest_names_are_safe() {
         assert_eq!(sanitize_name("a/b\\c:d.pdf"), "a_b_c_d.pdf");
@@ -1719,5 +1860,10 @@ mod tests {
     fn error_names_are_camel_case() {
         assert_eq!(error_name(TransferErrorCode::AlreadyUsed), "alreadyUsed");
         assert_eq!(error_name(TransferErrorCode::InvalidLink), "invalidLink");
+        assert_eq!(
+            error_from_name("unreachable"),
+            Some(TransferErrorCode::Unreachable)
+        );
+        assert_eq!(error_from_name("nonsense"), None);
     }
 }

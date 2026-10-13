@@ -519,3 +519,41 @@ async fn a_library_move_carries_tags_signatures_and_settings_and_skips_what_is_t
     b.close(true).await;
     Ok(())
 }
+
+/// A receiver whose store directory is gone (deleted under the open endpoint,
+/// or a full disk) cannot write any blob: that is a storage failure, which the
+/// app shows as one, not an interruption it offers to resume forever.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_receiver_without_its_store_fails_with_storage() -> Result {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_test_writer()
+        .try_init();
+    let dir = tempfile::tempdir()?;
+    let sender = service(dir.path(), "a", key(), LIFETIME).await?;
+    let receiver = service(dir.path(), "b", key(), LIFETIME).await?;
+    let a = write(dir.path(), "a.pdf", 300_000, 9)?;
+    let (sid, ticket) = sender
+        .offer(vec![OfferItem {
+            title: "a".into(),
+            name: "a.pdf".into(),
+            path: a,
+            history: vec![],
+            ..Default::default()
+        }])
+        .await?;
+    std::fs::remove_dir_all(receiver.store_dir())?;
+    let rid = receiver.receive(ticket, dir.path().join("in"))?;
+    send_code(&sender, &sid).await?;
+    sender.decide(&sid, true)?;
+    let end = receive_end(&receiver, &rid).await?;
+    assert_eq!(
+        end,
+        ReceiveState::Failed {
+            error: TransferError::Storage
+        }
+    );
+    sender.close(true).await;
+    receiver.close(true).await;
+    Ok(())
+}

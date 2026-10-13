@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError, type ReceiveView, type SendView } from "../../lib/api";
 import { cleanLink, formatCode, formatCountdown, percent } from "./format";
-import { createTransferStore, type TransferApi, type TransferDeps } from "./transferStore";
+import { RESUME_ATTEMPTS_BEFORE_NEW_CODE, createTransferStore, type TransferApi, type TransferDeps } from "./transferStore";
 
 const LINK = "selis://transfer/selisabc";
 const PEER = "a".repeat(64);
@@ -77,6 +77,62 @@ describe("transfer store", () => {
     expect(api.transferReceive).toHaveBeenCalledWith(LINK);
     expect(store.getState().tab).toBe("receive");
     expect(store.getState().receiveId).toBe("r1");
+  });
+
+  it("counts failed resumes, then a new code drops the paused receive", async () => {
+    const paused: ReceiveView = { kind: "paused", bytes: 0, total: 0, reason: "unreachable" };
+    const api = fakeApi({ transferReceiveStatus: vi.fn((): Promise<ReceiveView> => Promise.resolve(paused)) });
+    const { store, flush } = harness(api);
+    await store.getState().open();
+    await store.getState().receiveLink(LINK);
+    await flush();
+    expect(store.getState().receive).toEqual(paused);
+    expect(store.getState().resumeAttempts).toBe(0);
+    for (let i = 1; i <= RESUME_ATTEMPTS_BEFORE_NEW_CODE; i += 1) {
+      await store.getState().resume("r1");
+      // Feedback at once: connecting, then the reason again.
+      expect(store.getState().receive?.kind).toBe("connecting");
+      await flush();
+      expect(store.getState().receive).toEqual(paused);
+      expect(store.getState().resumeAttempts).toBe(i);
+    }
+    await store.getState().newCode();
+    expect(api.transferCancelReceive).toHaveBeenCalledWith("r1");
+    expect(store.getState()).toMatchObject({ receiveId: null, receive: null, resumeAttempts: 0, tab: "receive" });
+  });
+
+  it("a resume of another paused transfer starts its own count", async () => {
+    const api = fakeApi();
+    const { store } = harness(api);
+    await store.getState().open();
+    await store.getState().resume("a");
+    await store.getState().resume("a");
+    expect(store.getState().resumeAttempts).toBe(2);
+    await store.getState().resume("b");
+    expect(store.getState().resumeAttempts).toBe(1);
+  });
+
+  it("renews an expired offer for the same documents and drops the old ticket", async () => {
+    const api = fakeApi();
+    const { store } = harness(api);
+    await store.getState().open();
+    await store.getState().offerDocuments(["d1", "d2"], true);
+    await store.getState().renewOffer();
+    expect(api.transferCancelSend).toHaveBeenCalledWith("s1");
+    expect(api.transferOffer).toHaveBeenCalledTimes(2);
+    expect(api.transferOffer).toHaveBeenLastCalledWith(["d1", "d2"], true);
+    expect(store.getState().send).toEqual({ kind: "waitingForReceiver" });
+  });
+
+  it("renews an expired library move as a move", async () => {
+    const api = fakeApi();
+    const { store } = harness(api);
+    await store.getState().open();
+    await store.getState().moveOffer();
+    await store.getState().renewOffer();
+    expect(api.transferMoveOffer).toHaveBeenCalledTimes(2);
+    expect(api.transferOffer).not.toHaveBeenCalled();
+    expect(store.getState().moving).toBe(true);
   });
 
   it("refuses a link that is not one without calling Rust", async () => {

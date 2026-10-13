@@ -4,11 +4,14 @@
  * (`<screen>-<theme>.png`); Greek, the translation, is the second set
  * (`<screen>-el-<theme>.png`): long Greek labels must fit too.
  */
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
 import el from "../src/i18n/el.json" with { type: "json" };
 import en from "../src/i18n/en.json" with { type: "json" };
 import { addToLibrary, firstPageRendered, importFixture, presetSettings, thumbnailsLoaded } from "./helpers";
 
+const LINK = readFileSync(fileURLToPath(import.meta.resolve("@selis/fixtures/transfer/link.txt")), "utf8").trim();
 const THEMES = ["light", "dark", "sepia"] as const;
 const LANGS = ["en", "el"] as const;
 type Lang = (typeof LANGS)[number];
@@ -356,6 +359,45 @@ for (const lang of LANGS) {
         await expect(page.getByTestId("transfer-viewfinder")).toBeVisible();
         await settle(page);
         await expect(page).toHaveScreenshot(shot("transfer-receive"));
+      });
+
+      test(`transfer problems (${theme})`, async ({ page }) => {
+        const hook = (name: string, ...args: unknown[]) =>
+          page.evaluate(
+            ({ name, args }) => {
+              const hooks = (window as unknown as { __selisTest: { transfer: Record<string, (...a: unknown[]) => void> } })
+                .__selisTest.transfer;
+              hooks[name]?.(...args);
+            },
+            { name, args },
+          );
+        await page.goto("/");
+        await addToLibrary(page, "greek.pdf", c.greek);
+        await page.getByRole("navigation").getByRole("button", { name: ui(lang, "tabs.transfer") }).click();
+        await page.getByTestId("transfer-doc").first().click();
+        await page.getByTestId("transfer-send-start").click();
+        await expect(page.getByTestId("transfer-qr")).toBeVisible();
+        await hook("expireOffers");
+        await expect(page.getByTestId("transfer-offer-expired")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("transfer-expired"));
+
+        await page.getByTestId("transfer-send-cancel").click();
+        await page.getByRole("tab", { name: ui(lang, "transfer.tabReceive") }).click();
+        await hook("failReceive", "unreachable");
+        await hook("failResumes", "unreachable");
+        await page.getByTestId("transfer-paste").click();
+        await page.getByTestId("transfer-paste-input").fill(LINK);
+        await page.getByTestId("transfer-paste-submit").click();
+        await hook("senderConfirms");
+        await expect(page.getByTestId("transfer-paused-reason")).toBeVisible();
+        for (const n of ["1", "2", "3"]) {
+          await page.getByTestId("transfer-resume").click();
+          await expect(page.getByTestId("transfer-resume-attempts")).toContainText(n);
+        }
+        await expect(page.getByTestId("transfer-new-code")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("transfer-paused"));
       });
 
       test(`transfer devices and move (${theme})`, async ({ page }) => {

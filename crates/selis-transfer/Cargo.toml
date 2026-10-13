@@ -25,11 +25,14 @@ blake3.workspace = true
 getrandom = "0.4"
 data-encoding = "2"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+tracing = "0.1.44"
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+# Dev peer logs (`RUST_LOG`).
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["env-filter", "fmt", "ansi"] }
 serde_json.workspace = true
 anyhow = "1"
 tempfile.workspace = true

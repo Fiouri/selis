@@ -76,6 +76,9 @@ Tier 1 — every change (`npm run verify:tier1` runs all of it):
 - `npm test` (vitest: engine with real PDFium WASM, fixtures, ui tokens, app)
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo test --workspace`, `cargo deny check`
+- Transfer diagnostics (debug builds): `adb shell setprop debug.selis.rust_log
+  warn,iroh=debug,iroh_blobs=debug,selis_transfer=trace`, restart the app, read
+  `adb shell run-as com.anywecon.selis cat cache/logs/rust.log`; the dev peer takes `RUST_LOG`.
 - If a Rust command signature changes: `cargo test -p selis-app export_bindings` and commit
   `lib/ipc/bindings.ts`.
 
@@ -102,6 +105,10 @@ Tier 2 — end of every feature:
   `PRE_RUN="…/transfer.sh pre"` and `POST_RUN="…/transfer.sh post"` (cold start opens no socket; the
   host dev peer sends a fixture through a `selis://` link; it lands in the library; leaving the
   Transfer screen leaves no socket; needs `cargo build --release -p selis-transfer --example selis-peer`).
+  And `transfer-recover.yaml` with `PRE_RUN="…/transfer.sh pre-recover"` and
+  `POST_RUN="…/transfer.sh post-recover"` (debug build: the peer drops out mid-transfer; the paused
+  card gives the reason, counts failed resumes, then "Get a new code"; an offered code expires after
+  15 s via `debug.selis.ticket_lifetime` and "New code" replaces it; nothing left, no socket).
   And `pack.yaml` with `PRE_RUN="…/pack.sh pre"` and `POST_RUN="…/pack.sh check"` (.selispack: plain
   pack by "Open with" from Files, protected pack by the picker after a wrong passphrase, tampered
   pack refused; library holds exactly the three fixtures, no leftovers, packs untouched).

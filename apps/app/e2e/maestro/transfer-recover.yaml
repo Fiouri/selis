@@ -1,0 +1,85 @@
+# Transfer problems on Android, with no dead end (debug build: run-as, debug.selis.* switches).
+# Run with PRE_RUN="…/transfer.sh pre-recover" and POST_RUN="…/transfer.sh post-recover" (run.sh).
+# PRE_RUN starts the dev peer sending a 200 MB file that drops out once data flows, and opens
+# its selis:// link. Receive: the transfer pauses with the reason; every Resume fails (the
+# sender is gone) and says so; after three the card leads with "Get a new code", which goes
+# back to scanning. Send: offered codes expire after 15 s here; the expired card makes a
+# new code for the same document in one tap. POST_RUN: nothing left behind, no socket.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Transfer recovers from a vanished sender and an expired code
+---
+- extendedWaitUntil:
+    visible:
+      id: "transfer-screen"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "transfer-receive-paused"
+    timeout: 120000
+- assertVisible:
+    id: "transfer-paused-reason"
+- assertNotVisible:
+    id: "transfer-new-code"
+- tapOn:
+    id: "transfer-resume"
+- extendedWaitUntil:
+    visible: "1 attempt failed"
+    timeout: 90000
+- assertVisible: "Sender not reachable — ask for a new code."
+- tapOn:
+    id: "transfer-resume"
+- extendedWaitUntil:
+    visible: "2 attempts failed"
+    timeout: 90000
+- tapOn:
+    id: "transfer-resume"
+- extendedWaitUntil:
+    visible: "3 attempts failed"
+    timeout: 90000
+- tapOn:
+    id: "transfer-new-code"
+- extendedWaitUntil:
+    visible:
+      id: "transfer-scan"
+    timeout: 10000
+- assertNotVisible:
+    id: "transfer-receive-paused"
+
+# Send: a document first (the library was cleared).
+- tapOn: "Library"
+- tapOn: "Import PDF"
+- tapOn: "greek.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+- back
+- tapOn: "Transfer"
+- tapOn: "Send"
+- tapOn:
+    id: "transfer-doc"
+- tapOn:
+    id: "transfer-send-start"
+- extendedWaitUntil:
+    visible:
+      id: "transfer-qr"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "transfer-offer-expired"
+    timeout: 60000
+- assertVisible: "This code has expired"
+- tapOn:
+    id: "transfer-new-code"
+- extendedWaitUntil:
+    visible:
+      id: "transfer-qr"
+    timeout: 20000
+- assertVisible:
+    id: "transfer-expires"
+- tapOn:
+    id: "transfer-send-cancel"
+# Leaving the Transfer screen closes the endpoint (checked by POST_RUN).
+- tapOn: "Settings"
+- assertVisible:
+    id: "settings-screen"

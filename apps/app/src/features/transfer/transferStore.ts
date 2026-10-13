@@ -95,6 +95,8 @@ export type TransferState = {
   receivingOn: boolean;
   /** Name of the trusted device the current receive comes from. */
   incomingFrom: string | null;
+  /** Resumes tried for the current receive (a paused card after one means it failed). */
+  resumeAttempts: number;
 
   open: () => Promise<void>;
   setIncomingLink: (link: string) => void;
@@ -104,11 +106,15 @@ export type TransferState = {
   decide: (confirm: boolean) => Promise<void>;
   cancelSend: () => Promise<void>;
   resetSend: () => void;
+  /** The code ran out: a fresh one for the same documents (or the same move). */
+  renewOffer: () => Promise<void>;
   receiveLink: (input: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
   discard: (id: string) => Promise<void>;
   cancelReceive: () => Promise<void>;
   resetReceive: () => void;
+  /** Gives up on the current receive and goes back to scanning a new code. */
+  newCode: () => Promise<void>;
   /** Android's daily foreground-service limit: stop receives, keep them resumable. */
   pauseAll: () => Promise<void>;
   loadTrusted: () => Promise<void>;
@@ -121,6 +127,9 @@ export type TransferState = {
   movePush: (device: TrustedDevice) => Promise<void>;
   setReceiving: (on: boolean) => Promise<void>;
 };
+
+/** Failed resumes after which the paused card leads with "Get a new code". */
+export const RESUME_ATTEMPTS_BEFORE_NEW_CODE = 3;
 
 /** How often a running transfer is looked at. */
 export const POLL_MS = 400;
@@ -169,6 +178,8 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
   let notifying = false;
   let askedNotifications = false;
   let ticks = 0;
+  /** What the current QR code offers, so an expired one can be renewed. */
+  let lastOffer: { ids: string[]; includeHistory: boolean } | null = null;
 
   const store = createStore<TransferState>()((set, get) => {
     const schedule = () => {
@@ -295,6 +306,7 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
       moveSummary: null,
       receivingOn: false,
       incomingFrom: null,
+      resumeAttempts: 0,
 
       open: async () => {
         if (get().opening) return;
@@ -345,6 +357,7 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
         set({ preparing: true, sendProblem: null });
         try {
           const offer = await deps.api.transferOffer(ids, includeHistory);
+          lastOffer = { ids, includeHistory };
           set({ offer, push: null, moving: false, send: { kind: "waitingForReceiver" }, preparing: false });
           schedule();
         } catch (err) {
@@ -375,6 +388,18 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
 
       resetSend: () => set({ offer: null, push: null, moving: false, send: null, sendProblem: null }),
 
+      renewOffer: async () => {
+        const { offer, moving } = get();
+        const again = lastOffer;
+        if (offer) await deps.api.transferCancelSend(offer.sessionId).catch(() => undefined);
+        set({ offer: null, send: null, sendProblem: null });
+        if (moving) {
+          await get().moveOffer();
+        } else if (again) {
+          await get().offerDocuments(again.ids, again.includeHistory);
+        }
+      },
+
       receiveLink: async (input) => {
         set({ tab: "receive", receiveProblem: null });
         const link = cleanLink(input);
@@ -383,7 +408,7 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
           return;
         }
         if (receiveRunning(get().receive)) return;
-        set({ receive: { kind: "connecting" }, receiveId: null });
+        set({ receive: { kind: "connecting" }, receiveId: null, resumeAttempts: 0 });
         try {
           const id = await deps.api.transferReceive(link);
           set({ receiveId: id });
@@ -394,7 +419,8 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
       },
 
       resume: async (id) => {
-        set({ tab: "receive", receiveProblem: null, receiveId: id, receive: { kind: "connecting" } });
+        const attempts = get().receiveId === id ? get().resumeAttempts + 1 : 1;
+        set({ tab: "receive", receiveProblem: null, receiveId: id, receive: { kind: "connecting" }, resumeAttempts: attempts });
         try {
           await deps.api.transferResume(id);
           schedule();
@@ -406,20 +432,25 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
 
       discard: async (id) => {
         await deps.api.transferCancelReceive(id).catch(() => undefined);
-        if (get().receiveId === id) set({ receiveId: null, receive: null });
+        if (get().receiveId === id) set({ receiveId: null, receive: null, resumeAttempts: 0 });
         await loadResumable();
       },
 
       cancelReceive: async () => {
         const id = get().receiveId;
-        set({ receiveId: null, receive: null, receiveProblem: null });
+        set({ receiveId: null, receive: null, receiveProblem: null, resumeAttempts: 0 });
         if (id) await deps.api.transferCancelReceive(id).catch(() => undefined);
         await notify();
         await loadResumable();
       },
 
+      newCode: async () => {
+        await get().cancelReceive();
+        set({ tab: "receive", incomingFrom: null });
+      },
+
       resetReceive: () => {
-        set({ receiveId: null, receive: null, receiveProblem: null, incomingFrom: null });
+        set({ receiveId: null, receive: null, receiveProblem: null, incomingFrom: null, resumeAttempts: 0 });
         schedule();
       },
 

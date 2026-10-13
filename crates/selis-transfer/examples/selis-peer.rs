@@ -1,7 +1,7 @@
 //! Dev peer (never bundled): sends to or receives from the Selis app over the
 //! real protocol, from a terminal.
 //!
-//!   selis-peer send <file.pdf>... [net] [--yes] [--keep] [--lifetime <secs>] [--key <file>] [--store <dir>]
+//!   selis-peer send <file.pdf>... [net] [--yes] [--keep] [--lifetime <secs>] [--renew] [--drop-after-accept] [--qr-png <file>] [--key <file>] [--store <dir>]
 //!   selis-peer receive <selis://transfer/…> [net] [--out <dir>] [--key <file>] [--store <dir>]
 //!   selis-peer hash <file>...   (BLAKE3, as the library names files)
 //!   net: --local-only | --relay-only | --relay <url>
@@ -9,13 +9,18 @@
 //! `send` prints the QR code and the link; when the app scans it, both show the
 //! code and this asks to confirm (or confirms at once with `--yes`). `--keep` stays
 //! up after the transfer (to try the used ticket again); `--lifetime` shortens
-//! the ticket's validity (expiry tests).
+//! the ticket's validity (expiry tests). Without either, an expired ticket is
+//! replaced by a fresh one until a transfer completes (or Ctrl+C); `--renew`
+//! renews even with `--lifetime`. `--drop-after-accept` exits as soon as data
+//! flows (a sender that vanishes mid-transfer: the receiver pauses, then cannot resume). `--qr-png`
+//! also writes each ticket's QR code as a PNG and opens it in the image viewer.
+//! `RUST_LOG` (e.g. `iroh=debug,iroh_blobs=debug,selis_transfer=trace`) logs to stderr.
 use std::{path::PathBuf, time::Duration};
 
 use iroh::SecretKey;
 use selis_transfer::{
-    Network, OfferItem, ReceiveState, SendState, ServiceConfig, TransferService, TransferTicket,
-    code::display, qr,
+    Network, OfferItem, ReceiveState, SendState, ServiceConfig, TransferError, TransferService,
+    TransferTicket, code::display, qr,
 };
 
 struct Args {
@@ -26,6 +31,9 @@ struct Args {
     yes: bool,
     keep: bool,
     lifetime: Option<u64>,
+    renew: bool,
+    drop_after_accept: bool,
+    qr_png: Option<PathBuf>,
     key: Option<PathBuf>,
     store: PathBuf,
     out: PathBuf,
@@ -43,7 +51,8 @@ fn args() -> anyhow::Result<Args> {
         None,
         PathBuf::from("."),
     );
-    let (mut keep, mut lifetime) = (false, None);
+    let (mut keep, mut lifetime, mut renew, mut qr_png) = (false, None, false, None);
+    let mut drop_after_accept = false;
     while let Some(a) = it.next() {
         match a.as_str() {
             "--local-only" => network = Network::LocalOnly,
@@ -52,6 +61,9 @@ fn args() -> anyhow::Result<Args> {
             "--yes" => yes = true,
             "--keep" => keep = true,
             "--lifetime" => lifetime = it.next().and_then(|v| v.parse().ok()),
+            "--renew" => renew = true,
+            "--drop-after-accept" => drop_after_accept = true,
+            "--qr-png" => qr_png = it.next().map(PathBuf::from),
             "--key" => key = it.next().map(PathBuf::from),
             "--store" => store = it.next().map(PathBuf::from),
             "--out" => out = it.next().map(PathBuf::from).unwrap_or(out),
@@ -68,6 +80,9 @@ fn args() -> anyhow::Result<Args> {
         yes,
         keep,
         lifetime,
+        renew,
+        drop_after_accept,
+        qr_png,
         key,
         store,
         out,
@@ -112,6 +127,10 @@ async fn ask(question: &str) -> bool {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .init();
     let a = args()?;
     if a.cmd == "hash" {
         // BLAKE3 of files (what the library names them by), without any network.
@@ -160,12 +179,9 @@ async fn send(service: &TransferService, a: &Args) -> anyhow::Result<()> {
             })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
-    let (id, ticket) = service.offer(items).await?;
-    let link = ticket.to_link();
-    if let Some(code) = qr::terminal(&link) {
-        println!("{code}");
-    }
-    println!("LINK {link}");
+    // Expiry and reuse tests want the ticket to stay as it is.
+    let renew = a.renew || (a.lifetime.is_none() && !a.keep);
+    let mut id = offer(service, &items, a).await?;
     let mut last = String::new();
     loop {
         let state = service.send_state(&id);
@@ -175,6 +191,10 @@ async fn send(service: &TransferService, a: &Args) -> anyhow::Result<()> {
                 println!("code {}", display(&code));
                 let ok = a.yes || ask("Same code on the phone? Send").await;
                 service.decide(&id, ok)?;
+            }
+            Some(SendState::Sending { bytes, .. }) if a.drop_after_accept && bytes > 0 => {
+                println!("dropping out at {} MB", bytes / 1_000_000);
+                std::process::exit(0);
             }
             Some(SendState::Sending {
                 bytes,
@@ -193,6 +213,14 @@ async fn send(service: &TransferService, a: &Args) -> anyhow::Result<()> {
                 if !a.keep {
                     return Ok(());
                 }
+            }
+            Some(SendState::Failed {
+                error: TransferError::Expired,
+            }) if renew => {
+                println!("the link expired; a fresh one follows");
+                id = offer(service, &items, a).await?;
+                last.clear();
+                continue;
             }
             Some(SendState::Failed { error }) if line != last => {
                 println!("failed: {error}");
@@ -264,4 +292,116 @@ async fn receive(service: &TransferService, a: &Args) -> anyhow::Result<()> {
         last = line;
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
+}
+
+/// Offers `items` under a fresh ticket and shows it: QR code and link on the
+/// terminal and, with `--qr-png`, a PNG opened in the image viewer.
+async fn offer(service: &TransferService, items: &[OfferItem], a: &Args) -> anyhow::Result<String> {
+    let (id, ticket) = service.offer(items.to_vec()).await?;
+    let link = ticket.to_link();
+    if let Some(code) = qr::terminal(&link) {
+        println!("{code}");
+    }
+    println!("LINK {link}");
+    if let Some(path) = &a.qr_png {
+        let modules =
+            qr::matrix(&link).ok_or_else(|| anyhow::anyhow!("link too long for a QR code"))?;
+        let image = png(&modules);
+        // A viewer may still hold the previous one (Windows maps open files): use a new name.
+        let written = match std::fs::write(path, &image) {
+            Ok(()) => path.clone(),
+            Err(_) => {
+                let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("qr");
+                let next = path.with_file_name(format!("{stem}-{}.png", &id[..8.min(id.len())]));
+                std::fs::write(&next, &image)?;
+                next
+            }
+        };
+        println!("QR {}", written.display());
+        show(&written);
+    }
+    Ok(id)
+}
+
+/// Opens `path` in the platform's viewer (best effort: the PNG is there either way).
+fn show(path: &std::path::Path) {
+    let spawned = if cfg!(windows) {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", ""])
+            .arg(path)
+            .spawn()
+    } else if cfg!(target_os = "macos") {
+        std::process::Command::new("open").arg(path).spawn()
+    } else {
+        std::process::Command::new("xdg-open").arg(path).spawn()
+    };
+    if let Err(e) = spawned {
+        eprintln!("could not open {}: {e}", path.display());
+    }
+}
+
+/// A grayscale PNG of QR modules (`#` dark, one row per line): 10 px per module,
+/// 4-module quiet zone, black on white. Deflate "stored" blocks keep it dependency-free.
+fn png(modules: &str) -> Vec<u8> {
+    const SCALE: usize = 10;
+    const QUIET: usize = 4;
+    let rows: Vec<&[u8]> = modules.lines().map(str::as_bytes).collect();
+    let n = rows.len();
+    let side = (n + 2 * QUIET) * SCALE;
+    let mut raw = Vec::with_capacity((side + 1) * side);
+    for y in 0..side {
+        raw.push(0); // filter: none
+        for x in 0..side {
+            let (my, mx) = (
+                (y / SCALE).wrapping_sub(QUIET),
+                (x / SCALE).wrapping_sub(QUIET),
+            );
+            let dark = rows.get(my).and_then(|r| r.get(mx)) == Some(&b'#');
+            raw.push(if dark { 0 } else { 255 });
+        }
+    }
+    let mut z = vec![0x78, 0x01];
+    let mut chunks = raw.chunks(65_535).peekable();
+    while let Some(block) = chunks.next() {
+        let len = u16::try_from(block.len()).unwrap_or(u16::MAX);
+        z.push(u8::from(chunks.peek().is_none()));
+        z.extend_from_slice(&len.to_le_bytes());
+        z.extend_from_slice(&(!len).to_le_bytes());
+        z.extend_from_slice(block);
+    }
+    let (mut s1, mut s2) = (1u32, 0u32);
+    for b in &raw {
+        s1 = (s1 + u32::from(*b)) % 65_521;
+        s2 = (s2 + s1) % 65_521;
+    }
+    z.extend_from_slice(&((s2 << 16) | s1).to_be_bytes());
+    let side = u32::try_from(side).unwrap_or(u32::MAX);
+    let mut ihdr = Vec::with_capacity(13);
+    ihdr.extend_from_slice(&side.to_be_bytes());
+    ihdr.extend_from_slice(&side.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 0, 0, 0, 0]); // 8-bit grayscale
+    let mut out = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    for (kind, data) in [(b"IHDR", ihdr.as_slice()), (b"IDAT", &z), (b"IEND", &[])] {
+        out.extend_from_slice(&u32::try_from(data.len()).unwrap_or(u32::MAX).to_be_bytes());
+        let start = out.len();
+        out.extend_from_slice(kind);
+        out.extend_from_slice(data);
+        out.extend_from_slice(&crc32(&out[start..]).to_be_bytes());
+    }
+    out
+}
+
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for b in bytes {
+        crc ^= u32::from(*b);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 {
+                (crc >> 1) ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
 }

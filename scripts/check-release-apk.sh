@@ -14,6 +14,8 @@
 #   4. Native libs: no "SELIS_DEBUG_FORCE_RELAY" marker: the transfer testing aid
 #      (all traffic through the relay) exists in debug builds only
 #      (commands/transfer.rs, ADR 0010).
+#   5. Native libs: no "debug.selis." system property names: the debug-only Rust
+#      log file and the short-ticket test switch (debug_log.rs).
 # Needs unzip and aapt2 ($ANDROID_HOME/build-tools/<newest>).
 set -euo pipefail
 
@@ -60,6 +62,9 @@ while IFS= read -r -d '' so; do
   fi
   if grep -q -a 'SELIS_DEBUG_FORCE_RELAY' "$so"; then
     fail "$name contains the debug-only transfer \"force relay\" option"
+  fi
+  if grep -q -a 'debug\.selis\.' "$so"; then
+    fail "$name reads debug-only debug.selis.* properties (Rust log, short tickets)"
   fi
 done < <(find "$work/lib" -name '*.so' -type f -print0)
 
