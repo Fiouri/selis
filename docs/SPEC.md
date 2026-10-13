@@ -209,6 +209,7 @@ Mobile-first. Κάθε phase κλείνει μόνο όταν περάσει τ�
 4. **P3 — Transfer**
    - iroh send/receive, QR, κωδικός επιβεβαίωσης, trusted devices, μετακόμιση βιβλιοθήκης, `.selispack` import/export.
    - AC: μεταφορά 200 MB σε ίδιο Wi-Fi και μέσω relay, resume μετά από διακοπή, ίδιο BLAKE3 στα δύο άκρα.
+   - **Κατάσταση: done (2026-10-14).** AC στο S23 + AVD (`docs/spike-p3.md`)· χειροκίνητη σάρωση QR με την κάμερα του S23: direct (LAN), 50 MB σε 1,41 s ≈ 35,5 MB/s, ίδιο BLAKE3 (`docs/spike-p0.md`, «P3 close-out»). Η μεταφορά εκτός LAN σε πραγματική συσκευή μεταφέρθηκε στο gate του P5.
 5. **P4 — Power tools**
    - Scan με κάμερα (edge detection, perspective, φίλτρα) → PDF.
    - OCR (Tesseract el + en) → searchable PDF.
@@ -216,6 +217,7 @@ Mobile-first. Κάθε phase κλείνει μόνο όταν περάσει τ�
    - Images → PDF, export σελίδας ως PNG/JPEG.
 6. **P5 — Release 1.0**
    - **Gate (υποχρεωτικό, πριν από κάθε store release):** μέτρηση σε πραγματική mid-range Android με `scripts/measure-device.sh` (1000 σελίδες: πρώτη σελίδα < 1 s, πλήρες scroll χωρίς crash, μνήμη WebView < 600 MB) και επανάληψη του Maestro suite σε αυτήν. Αποτελέσματα στο `docs/spike-p0.md`.
+   - **Gate (υποχρεωτικό, πριν από κάθε store release):** μεταφορά εκτός LAN σε πραγματική συσκευή (δεδομένα κινητής, hotspot άλλου κινητού ή απομονωμένο guest Wi-Fi), 200 MB: αναφορά διαδρομής direct ή relay, MB/s, BLAKE3 και στα δύο άκρα. Η διαδρομή relay καθαυτή καλύπτεται ήδη από το forced-relay AC του P3a (`docs/spike-p3.md`). Αποτελέσματα στο `docs/spike-p0.md`.
    - Mobile 1.0: Google Play, F-Droid, App Store, signed APK στο GitHub. Store listings en (πρωτότυπο) + el (μετάφραση), screenshots πρώτα στα αγγλικά, privacy pages, website με badges.
 
 **P6 — Desktop 1.0:** πλήρες DesktopShell (sidebar, inspector, command palette, keyboard shortcuts, tabs), drag & drop, file associations, signed installers (Windows, macOS, Linux), winget, Microsoft Store, Flathub, opt-in updater.
