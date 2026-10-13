@@ -8,11 +8,17 @@
 #        (crates/selis-core/examples/selispack.rs), push them to Download/selis-fixtures,
 #        clear Selis and open Files in that folder.
 # check: app data holds exactly the three fixtures (BLAKE3 as on the host), no staging
-#        or import copies are left, and the packs in Download/ are byte-identical.
+#        or import copies are left, the packs in Download/ are byte-identical, and the plain
+#        pack the flow saved waits in cache/share until Selis restarts, then is gone.
 # Needs a debuggable build (run-as). Prerequisite: ./push-fixtures.sh <serial>.
+#
+# measure-pre:   (pack-measure.yaml) 50 one-page PDFs of ~6 MB in a protected pack (~300 MB,
+#                made once in .tmp/p3-follow), pushed to Download/selis-measure; Selis cleared.
+# measure-times: the import and export durations of the newest pack-measure run, from
+#                Maestro's debug output (.tmp/maestro); then the pack is removed from the device.
 set -euo pipefail
-mode="${1:?usage: pack.sh pre|check <serial>}"
-serial="${2:?usage: pack.sh pre|check <serial>}"
+mode="${1:?usage: pack.sh pre|check|measure-pre|measure-times <serial>}"
+serial="${2:?usage: pack.sh pre|check|measure-pre|measure-times <serial>}"
 export MSYS_NO_PATHCONV=1
 
 app=com.anywecon.selis
@@ -58,7 +64,37 @@ case "$mode" in
       b="$(adb -s "$serial" shell sha256sum "$remote/$f.selispack" | cut -d' ' -f1 | tr -d '\r')"
       [ "$a" = "$b" ] || { echo "$f.selispack changed on the device"; exit 1; }
     done
-    echo "library: exactly the 3 fixtures (BLAKE3 match), tampered pack added nothing, no leftovers, packs untouched"
+    shared="$(sh_app 'ls cache/share 2>/dev/null' | grep -c '\.selispack$' || true)"
+    if [ "$shared" != 1 ]; then
+      echo "expected the saved pack in cache/share, found $shared"
+      exit 1
+    fi
+    adb -s "$serial" shell am force-stop "$app"
+    adb -s "$serial" shell am start -W -n "$app/.MainActivity" >/dev/null
+    sleep 3
+    shared="$(sh_app 'ls cache/share 2>/dev/null' | grep -c '\.selispack$' || true)"
+    if [ "$shared" != 0 ]; then
+      echo "the saved pack is still in cache/share after a restart"
+      exit 1
+    fi
+    echo "library: exactly the 3 fixtures (BLAKE3 match), tampered pack added nothing, no leftovers, packs untouched, saved pack gone after restart"
+    ;;
+  measure-pre)
+    work="$root/.tmp/p3-follow"
+    if [ ! -f "$work/packs/protected.selispack" ]; then
+      node "$(win "$here/make-measure-pdfs.ts")" "$(win "$work/docs")" 50 6000000
+      # shellcheck disable=SC2046
+      (cd "$root" && cargo run -q --release -p selis-core --example selispack -- make "$(win "$work/packs")"         "correct horse" $(for f in "$work"/docs/*.pdf; do win "$f"; done))
+    fi
+    adb -s "$serial" shell rm -rf /sdcard/Download/selis-measure
+    adb -s "$serial" push "$(win "$work/packs/protected.selispack")" /sdcard/Download/selis-measure/measure-protected.selispack >/dev/null
+    # The picker's search reads MediaStore: index the new file.
+    adb -s "$serial" shell content call --uri content://media/external/file --method scan_volume --arg external_primary >/dev/null 2>&1 || true
+    adb -s "$serial" shell pm clear "$app" >/dev/null
+    ;;
+  measure-times)
+    node "$(win "$here/pack-measure-times.ts")" "$(win "$root/.tmp/maestro/.maestro/tests")"
+    adb -s "$serial" shell rm -rf /sdcard/Download/selis-measure
     ;;
   *)
     echo "unknown mode $mode"

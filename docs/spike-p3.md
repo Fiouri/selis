@@ -132,3 +132,31 @@ Maestro `pack.yaml` (Open with from Files, picker + passphrase, tampered pack) p
 Found on the devices: the import result appeared below the fold of the Receive tab (now it
 replaces the scanner), and file managers label `.selispack` as `application/octet-stream`, so
 "Open with" needs that filter too (ADR 0012).
+
+## `.selispack` with a passphrase in a release build (2026-10-14)
+
+The P3c times above are debug builds. Release-like build this time (release profile + the
+`measure` feature, debug-signed), driven by Maestro: `pack-measure.yaml` with
+`PRE_RUN="…/pack.sh measure-pre"` (a protected pack of 50 one-page PDFs, 6 MB each with a random
+stream, **300.1 MB**, made on the host and pushed to Download/) and `POST_RUN="…/pack.sh
+measure-times"`, which reads Maestro's `commands.json`: each time runs from the **start** of the
+tap that begins the work ("Open" in the passphrase sheet; "Create file" for the whole library
+with a passphrase) to the end of the wait for its result ("Added from the file"; "File with 50
+documents ready", shown once the share sheet has the pack). These are upper bounds: the tap
+itself (finding the element, then waiting for the screen to settle) is inside them.
+
+| Device | Import (Argon2id once + decrypt + check + add 50) | Export (whole library, passphrase) | Notes |
+| --- | --- | --- | --- |
+| Galaxy S23 | **≤ 6.2 s**, ≤ 6.2 s (taps 3.2 s) | **≤ 4.4 s**, ≤ 4.3 s (taps 2.4–2.5 s) | two runs |
+| AVD `selis-midrange-api36` | ≤ 38.3 s, ≤ 33.6 s, ≤ 40.9 s (taps 5.7–7.2 s) | ≤ 14.3 s, ≤ 23.8 s | runs 1 and 3 complete; run 2 failed on a stray tap after the import |
+
+The S23 import is far below the 30 s budget, so no profiling or change was needed (Argon2id
+already runs once per pack, in `decrypt` before the first segment; the copies use 64 KB buffers
+or `BufReader`/`BufWriter`). One AVD run logged an ANR while the share sheet closed: the main
+thread waited for a frame, the WebView's GPU thread was blocked in `qemu_pipe_read` (the
+emulator's host-GPU pipe) with 72 s of kernel time — the emulator's renderer, not app code; it
+did not recur in the next two runs.
+
+UX note for P4/P6: "Save as file…" sits below the document list on the Send tab, so with 50
+documents it takes a long scroll to reach (Maestro needs `scrollUntilVisible`). The P4 "Tools"
+entry should offer it without the list.

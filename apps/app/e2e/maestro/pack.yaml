@@ -103,3 +103,21 @@ name: Selis pack open with, passphrase, tamper
 - tapOn: "Library"
 # Titles come from the pack (the file names), not from the PDF metadata.
 - assertVisible: "Open greek"
+
+# Save the library as a plain (unencrypted) file: it waits in the app cache for the receiving
+# app; POST_RUN checks it is there, restarts Selis and checks it is gone.
+- tapOn: "Transfer"
+- tapOn: "Send"
+- scrollUntilVisible:
+    element:
+      id: "pack-export-open"
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: "pack-export-open"
+- tapOn: "Create file"
+- extendedWaitUntil:
+    visible: "File with 3 documents ready"
+    timeout: 60000
+# The share sheet is open over the app: close it without sending anywhere.
+- back
