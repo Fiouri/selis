@@ -5,9 +5,10 @@
  *
  * - `nextPick(token | null)`: what the next "Open a .selispack file" picks;
  * - `make({ docs, passphrase, damaged })`: registers a pack, returns its token;
- * - `lastExport()`: the token of the last exported pack (round trips).
+ * - `lastExport()`: the token of the last exported pack (round trips);
+ * - `cancelNextSave()`: the next export's save dialog is cancelled (desktop).
  */
-import type { CommandError, ImportOutcome, PackImportView, PackKind, PackSummary } from "./ipc";
+import type { CommandError, ImportOutcome, PackExportView, PackImportView, PackKind, PackSummary } from "./ipc";
 
 const MAGIC = "SELISPK\u0000";
 
@@ -36,6 +37,7 @@ export const PACK_COMMANDS = new Set(["pack_kind", "pack_export", "pack_import",
 export function createMockPack(deps: Deps) {
   let nextPick: string | null = null;
   let lastExport: string | null = null;
+  let cancelSave = false;
 
   const encode = (pack: MockPack) => new File([MAGIC + JSON.stringify(pack)], "pack.selispack");
 
@@ -59,6 +61,9 @@ export function createMockPack(deps: Deps) {
         }),
       ),
     lastExport: () => lastExport,
+    cancelNextSave: () => {
+      cancelSave = true;
+    },
   };
 
   const handle = async (cmd: string, args: Record<string, unknown>): Promise<unknown> => {
@@ -73,7 +78,7 @@ export function createMockPack(deps: Deps) {
         return kind;
       }
       case "pack_export":
-        return deps.runOnce(cmd, String(args.requestId), async () => {
+        return deps.runOnce(cmd, String(args.requestId), async (): Promise<PackExportView> => {
           const ids = (args.documentIds as string[] | null) ?? deps.allDocumentIds();
           if (ids.length === 0) deps.fail("invalidArgument", "nothing to pack");
           const passphrase = (args.passphrase as string | null) ?? null;
@@ -81,6 +86,10 @@ export function createMockPack(deps: Deps) {
           const docs = await Promise.all(
             ids.map(async (id) => ({ name: `${deps.title(id)}.pdf`, bytes: toBase64(await deps.documentBytes(id)) })),
           );
+          if (cancelSave) {
+            cancelSave = false;
+            return { status: "cancelled" };
+          }
           lastExport = deps.register(encode({ passphrase, docs }));
           const summary: PackSummary = {
             documents: ids.length,
@@ -88,7 +97,7 @@ export function createMockPack(deps: Deps) {
             bytes: docs.reduce((n, d) => n + d.bytes.length, 0),
             encrypted: passphrase !== null,
           };
-          return summary;
+          return { status: "shared", summary };
         });
       case "pack_import":
         return deps.runOnce(cmd, String(args.requestId), async (): Promise<PackImportView> => {

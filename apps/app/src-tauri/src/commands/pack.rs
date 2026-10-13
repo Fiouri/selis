@@ -44,6 +44,16 @@ pub enum PackImportView {
     Refused { problem: PackProblem },
 }
 
+/// What became of an export.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum PackExportView {
+    /// Handed to the share sheet (Android) or saved where the user chose.
+    Shared { summary: PackSummary },
+    /// The save dialog was cancelled: the pack was deleted, nothing was written.
+    Cancelled,
+}
+
 fn problem(e: &selis_core::Error) -> Option<PackProblem> {
     match e {
         selis_core::Error::Pack(p) => Some(match p {
@@ -149,7 +159,7 @@ pub async fn pack_export<R: Runtime>(
     document_ids: Option<Vec<String>>,
     include_history: bool,
     passphrase: Option<String>,
-) -> CommandResult<PackSummary> {
+) -> CommandResult<PackExportView> {
     let library = Arc::clone(&library);
     results
         .run_once(&request_id, "pack_export", async move {
@@ -177,8 +187,11 @@ pub async fn pack_export<R: Runtime>(
             // (Android: the receiving app reads it later; it goes at the next start or export.)
             #[cfg(not(target_os = "android"))]
             let _ = std::fs::remove_file(&dest);
-            shared?;
-            Ok(summary)
+            Ok(if shared? {
+                PackExportView::Shared { summary }
+            } else {
+                PackExportView::Cancelled
+            })
         })
         .await
 }
@@ -310,24 +323,24 @@ mod tests {
 
     fn names(dir: &std::path::Path) -> Vec<String> {
         let mut v: Vec<String> = std::fs::read_dir(dir)
-            .unwrap()
-            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .expect("read the folder")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
             .collect();
         v.sort();
         v
     }
 
     fn folder() -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().expect("temp dir");
         for name in [
             "Selis 2026-10-13.selispack",
             "Selis 2026-10-14.selispack",
             ".import-1a2b.selispack",
             "Report.pdf",
         ] {
-            std::fs::write(dir.path().join(name), b"x").unwrap();
+            std::fs::write(dir.path().join(name), b"x").expect("write");
         }
-        std::fs::create_dir(dir.path().join("nested.selispack")).unwrap();
+        std::fs::create_dir(dir.path().join("nested.selispack")).expect("mkdir");
         dir
     }
 
@@ -350,7 +363,7 @@ mod tests {
 
     #[test]
     fn a_missing_share_folder_is_nothing_to_sweep() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().expect("temp dir");
         assert_eq!(sweep_packs(&dir.path().join("share"), Sweep::Startup), 0);
     }
 }

@@ -258,6 +258,7 @@ export type {
   IncomingView,
   LibrarySummary,
   OfferView,
+  PackExportView,
   PackImportView,
   PackKind,
   PackProblem,

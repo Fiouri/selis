@@ -88,12 +88,13 @@ mod platform {
     }
 
     /// Shares a file already written to the share folder (`cache/share`).
+    /// Always `true`: the share sheet does not say whether something was picked.
     pub async fn share_file<R: Runtime>(
         app: &AppHandle<R>,
         path: &std::path::Path,
         name: &str,
         mime: &str,
-    ) -> CommandResult<()> {
+    ) -> CommandResult<bool> {
         let handle = app
             .try_state::<ShareHandle<R>>()
             .ok_or_else(|| CommandError::new(ErrorCode::Unsupported, "share plugin not loaded"))?;
@@ -109,7 +110,7 @@ mod platform {
                 },
             )
             .await
-            .map(|_| ())
+            .map(|_| true)
             .map_err(|e| CommandError::new(ErrorCode::Io, format!("share: {e}")))
     }
 }
@@ -131,13 +132,14 @@ mod platform {
         ))
     }
 
-    /// No share sheet here: the system "save as" dialog, then a copy.
+    /// No share sheet here: the system "save as" dialog, then a copy. `false`
+    /// when the dialog was cancelled (nothing written).
     pub async fn share_file<R: Runtime>(
         app: &AppHandle<R>,
         path: &std::path::Path,
         name: &str,
         _mime: &str,
-    ) -> CommandResult<()> {
+    ) -> CommandResult<bool> {
         use tauri_plugin_dialog::DialogExt;
         let app = app.clone();
         let source = path.to_path_buf();
@@ -149,13 +151,13 @@ mod platform {
                 .set_file_name(&name)
                 .blocking_save_file()
             else {
-                return Ok(());
+                return Ok(false);
             };
             let target = target
                 .into_path()
                 .map_err(|e| CommandError::new(ErrorCode::Unsupported, e.to_string()))?;
             std::fs::copy(&source, &target)
-                .map(|_| ())
+                .map(|_| true)
                 .map_err(|e| CommandError::new(ErrorCode::Io, e.to_string()))
         })
         .await

@@ -113,8 +113,9 @@ export const usePack = create<PackState>()((set, get) => ({
     if (get().exportState.phase === "working") return;
     set({ exportState: { phase: "working" } });
     try {
-      const summary = await api.packExport(documentIds, includeHistory, passphrase);
-      set({ exportState: { phase: "done", summary } });
+      const result = await api.packExport(documentIds, includeHistory, passphrase);
+      // A cancelled save dialog (desktop) wrote nothing: back to the choices as they were.
+      set({ exportState: result.status === "shared" ? { phase: "done", summary: result.summary } : { phase: "idle" } });
     } catch (err) {
       set({ exportState: { phase: "failed" } });
       if (!(err instanceof ApiError)) throw err;
