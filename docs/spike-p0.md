@@ -6,7 +6,7 @@ Fixture: `packages/fixtures` → `large-1000.pdf` (1000 A4 pages, text + vector 
 Gate (docs/SPEC.md, P0): first page visible **< 1 s**, scroll top → bottom **without crash**,
 WebView memory **< 600 MB**.
 
-## P0 status (2026-10-10): DONE — except one item
+## P0 status (2026-10-10): DONE — open items are P5 (release) gates
 
 | P0 item | Status |
 | --- | --- |
@@ -19,8 +19,26 @@ WebView memory **< 600 MB**.
 | Fixtures corpus, CI (ubuntu / Android / iOS simulator / Windows) green, repo docs + ADRs | done |
 | Spike gate on emulators (2 GB, 3 GB mid-range proxy) and Galaxy S23 | done (pass) |
 | **Spike gate on a real mid-range Android device** | **deferred: mandatory P5 (release) gate** — phases P0–P4 close on the Galaxy S23 + AVD `selis-midrange-api36` (device policy, docs/SPEC.md, 2026-10-12) |
+| **Non-LAN transfer on a real device** (P3 step 0b) | **deferred: mandatory P5 (release) gate** — see "P3 close-out" |
 
 P1 starts only after the UI mockups exist (docs/SPEC.md, "UI/UX design system → Διαδικασία").
+
+## P3 close-out — QR scan on a real device (2026-10-14)
+
+Manual check before closing P3 (docs/SPEC.md): the Galaxy S23 (debug build of `main` after
+PR #38) scans, with its camera on the Receive tab, the QR that the host dev peer
+(`selis-peer send --qr-png`, release, auto-renewing ticket) shows on the monitor. Payload: a
+fresh 50 MB PDF (`%PDF-` header + random bytes). Times from the peer's timestamped log.
+
+| Step | Network | Route | Time / speed | Integrity |
+| --- | --- | --- | --- | --- |
+| 0a | S23 and host on the same Wi‑Fi | direct (`Lan`) | 50 MB in **1.41 s ≈ 35.5 MB/s** (data phase; 1.8 s from the code shown) | BLAKE3 `aafca076…48909892` equal on both ends (library file name = host hash), SHA-256 equal, transfer inbox empty |
+| 0b | S23 off the LAN, 200 MB | – | **deferred: open P5 (release) gate** — the S23 has no mobile data (see "Still open") | – |
+
+The first 0a attempt (2026-10-13) stopped at byte 0 on every Resume: a close of the Transfer
+endpoint deleted the blob store of the endpoint reopened meanwhile. Fixed in PR #38 (with the
+paused-card reason, "Get a new code" after three failed resumes and "New code" on an expired QR);
+this run is the re-check. **P3: done.**
 
 ## Known issues
 
@@ -253,6 +271,11 @@ when the WebView is older than **111** instead of a blank screen (`MainActivity.
 
 ## Still open (owner action)
 
+- **Non-LAN transfer on a real device** — **a mandatory P5 (release) gate**, deferred from P3
+  step 0b because the S23 has no mobile data: mobile data, another phone's hotspot or an isolated
+  guest Wi‑Fi, 200 MB; report the direct vs relay path, MB/s and BLAKE3 on both ends. The relay
+  path itself is already covered by the P3a forced-relay AC (docs/spike-p3.md: 200 MB at
+  1.0 MB/s both ways on the S23 and the AVD, BLAKE3 ✓).
 - **Real mid-range physical device** — not yet measured; **a mandatory P5 (release) gate**
   (device policy 2026-10-12: until then phases close on the Galaxy S23 + `selis-midrange-api36`). The 3 GB emulator approximates the
   memory budget but not a slower CPU/GPU or thermal throttling; its cold-open first page
