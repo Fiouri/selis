@@ -111,7 +111,8 @@ Tier 2 — end of every feature:
   60 s via `debug.selis.ticket_lifetime` and "New code" replaces it; nothing left, no socket).
   And `pack.yaml` with `PRE_RUN="…/pack.sh pre"` and `POST_RUN="…/pack.sh check"` (.selispack: plain
   pack by "Open with" from Files, protected pack by the picker after a wrong passphrase, tampered
-  pack refused; library holds exactly the three fixtures, no leftovers, packs untouched).
+  pack refused; library holds exactly the three fixtures, no leftovers, packs untouched; a plain
+  pack saved from the Send tab waits in `cache/share` and is gone after a restart).
   run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro
@@ -127,7 +128,9 @@ Transfer measurements (P3, docs/spike-p3.md): `node scripts/measure-transfer.ts 
 --scenario recv|send|resume|expired|reuse|cold|seed|move|trusted|pack [--serial2 <s>] [--relay]
 [--clear] [--clear2]` drives the app over the WebView DevTools (debug or `measure` build) against the
 host dev peer (or a second device) and prints route, MB/s, RSS delta, hashes; `pack` is the
-.selispack round trip (plain and protected, rerun no-op, tamper refused).
+.selispack round trip (plain and protected, rerun no-op, tamper refused). Passphrase pack timing
+(50 documents, 300 MB, release `measure` build): `pack-measure.yaml` with `PRE_RUN="…/pack.sh
+measure-pre"` and `POST_RUN="…/pack.sh measure-times"` (docs/spike-p3.md).
 
 Performance gate (docs/spike-p0.md): 1000-page fixture — first page < 1 s, full scroll without
 crash, WebView memory < 600 MB (`adb shell dumpsys meminfo com.anywecon.selis` + renderer).
