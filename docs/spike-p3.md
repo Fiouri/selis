@@ -108,3 +108,27 @@ Found on the devices: a **ticket looked expired** when the sender's clock was 1.
 receiver's (the check refused expiries more than 10 minutes in the future by the receiver's
 clock). The receiver now allows 5 minutes of clock difference either way; the sender, whose
 clock set the expiry, enforces it exactly.
+
+## P3c — `.selispack` round trip (2026-10-13)
+
+Debug builds (`run-as` moves the pack between the devices; unoptimized Rust except Argon2,
+BLAKE2 and BLAKE3, so the encrypted times are pessimistic). The S23 was filled from a pack of
+the same 50 PDFs made on the host (`packseed`: 301 MB imported in 9.7 s), then tags, favorites,
+a signature, a setting and two versions were added (`scripts/measure-transfer.ts --scenario
+packseed`, then `--scenario pack` in each direction with `--clear2`).
+
+| | S23 → AVD | AVD → S23 |
+| --- | --- | --- |
+| Plain: export / import | 2.2 s / 7.2 s (301 MB, 53 files) | 3.7 s / 5.7 s |
+| Passphrase: export / import | 83.5 s / 46.5 s | 45.3 s / 83.9 s |
+| Wrong passphrase | refused "wrong passphrase" | refused "wrong passphrase" |
+| Libraries compared (both packs) | documents, BLAKE3, tags, favorites, signature, theme, summary equal | equal |
+| Same pack again | 0 added, 50 already there, library unchanged | same |
+| One byte flipped mid-file | refused "damaged" (plain: BLAKE3; passphrase: AEAD), library unchanged | same |
+| Receiver RSS delta | +9 MB | +4 MB plain, +71 MB passphrase |
+| Left in cache / staging | nothing | nothing |
+
+Maestro `pack.yaml` (Open with from Files, picker + passphrase, tampered pack) passes on both.
+Found on the devices: the import result appeared below the fold of the Receive tab (now it
+replaces the scanner), and file managers label `.selispack` as `application/octet-stream`, so
+"Open with" needs that filter too (ADR 0012).

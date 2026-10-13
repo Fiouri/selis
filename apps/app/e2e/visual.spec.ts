@@ -394,7 +394,9 @@ for (const lang of LANGS) {
         await page.getByTestId("pack-passphrase-again").fill("correct hors");
         await expect(page.getByTestId("pack-mismatch")).toBeVisible();
         await settle(page);
-        await expect(page).toHaveScreenshot(shot("pack-export"));
+        // The bottom-anchored sheet has a fractional height: one field's borders land on
+        // either side of a pixel boundary from run to run (~700 px of 1-px shift).
+        await expect(page).toHaveScreenshot(shot("pack-export"), { maxDiffPixelRatio: 0.004 });
         await page.getByTestId("pack-passphrase-again").fill("correct horse");
         await page.getByTestId("pack-export-create").click();
         await expect(page.getByTestId("pack-export-sheet")).toHaveCount(0);
