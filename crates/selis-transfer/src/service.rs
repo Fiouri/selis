@@ -12,6 +12,15 @@
 //! Receiving: `receive` connects, shows the code, waits for the sender, then
 //! fetches with BLAKE3 verification per chunk into the store (partial data
 //! survives an interruption: `resume` continues it) and exports the files.
+//! Blobs the app already has (same BLAKE3, `ServiceConfig::have`) are not
+//! fetched at all.
+//!
+//! Trusted devices (ADR 0014): `push` sends to a device that trusts this one and
+//! has its Receive screen open, without QR code or code. The sender dials it on
+//! ALPN `selis/push/1` and hands over an ordinary ticket pointing back to itself;
+//! the receiver accepts only from a trusted device, only while receiving, only a
+//! ticket for that same device, and then connects back as for any ticket. The
+//! sender skips the code only for the device it invited, and only if it trusts it.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -47,10 +56,15 @@ use tokio::{sync::oneshot, task::JoinHandle};
 use crate::{
     ALPN,
     code::confirmation_code,
-    manifest::{Manifest, ManifestItem, ManifestVersion},
+    manifest::{LibraryExtras, Manifest, ManifestItem, ManifestSignature, ManifestVersion},
     ticket::{MAX_TICKET_ADDRS, TICKET_LIFETIME_SECS, Token, TransferTicket},
-    wire::{self, RejectReason, ToReceiver, ToSender},
+    wire::{self, PushRefusal, PushRequest, PushResponse, RejectReason, ToReceiver, ToSender},
 };
+
+/// ALPN of the trusted-device protocol (ping, push invitation).
+pub const PUSH_ALPN: &[u8] = b"selis/push/1";
+/// How long a ping or a push invitation may take.
+const PUSH_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// How long the sender has to confirm the code once it is shown.
 pub const CONFIRM_TIMEOUT: Duration = Duration::from_secs(180);
@@ -82,6 +96,21 @@ pub struct ServiceConfig {
     pub force_relay: bool,
     /// How long a new ticket stays usable (at most [`TICKET_LIFETIME_SECS`]).
     pub ticket_lifetime: Duration,
+    /// Blobs the receiving app already has (its library file), never fetched again.
+    pub have: Option<Have>,
+}
+
+/// Looks up a blob the app already stores: its file, if any.
+#[derive(Clone)]
+pub struct Have(pub Arc<HaveFn>);
+
+/// `hash` → the app's file with that content, if it has one.
+pub type HaveFn = dyn Fn(&Hash) -> Option<PathBuf> + Send + Sync;
+
+impl std::fmt::Debug for Have {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Have(..)")
+    }
 }
 
 impl ServiceConfig {
@@ -92,6 +121,7 @@ impl ServiceConfig {
             network,
             force_relay: false,
             ticket_lifetime: Duration::from_secs(TICKET_LIFETIME_SECS),
+            have: None,
         }
     }
 }
@@ -143,6 +173,10 @@ pub enum TransferError {
     Storage,
     #[error("cancelled")]
     Cancelled,
+    /// A trusted-device send: the other device does not trust this one, or its
+    /// Receive screen is not open.
+    #[error("the other device is not ready to receive")]
+    NotReady,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -192,6 +226,8 @@ pub enum ReceiveState {
     #[serde(rename_all = "camelCase")]
     Done {
         items: Vec<ReceivedItem>,
+        /// A library move: signatures and settings.
+        library: Option<ReceivedLibrary>,
     },
     #[serde(rename_all = "camelCase")]
     Failed {
@@ -199,7 +235,25 @@ pub enum ReceiveState {
     },
 }
 
-/// A received document: its file (exported from the store) and its history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceivedLibrary {
+    pub signatures: Vec<ReceivedSignature>,
+    pub settings: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceivedSignature {
+    pub id: String,
+    pub kind: String,
+    pub path: PathBuf,
+    pub blake3: String,
+    pub created_at: i64,
+}
+
+/// A received document: its file (exported from the store, or the app's own
+/// copy when it already had it) and its history.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceivedItem {
@@ -210,6 +264,8 @@ pub struct ReceivedItem {
     pub size: u64,
     /// Earlier versions, oldest first.
     pub history: Vec<ReceivedVersion>,
+    pub tags: Vec<String>,
+    pub favorite: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -252,12 +308,30 @@ impl ResumeInfo {
 }
 
 /// A document on offer: its file and, optionally, its earlier versions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct OfferItem {
     pub title: String,
     pub name: String,
     pub path: PathBuf,
     pub history: Vec<OfferVersion>,
+    /// Library move only.
+    pub tags: Vec<String>,
+    pub favorite: bool,
+}
+
+/// What a library move adds to the documents.
+#[derive(Debug, Clone, Default)]
+pub struct OfferLibrary {
+    pub signatures: Vec<OfferSignature>,
+    pub settings: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OfferSignature {
+    pub id: String,
+    pub kind: String,
+    pub path: PathBuf,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -393,6 +467,8 @@ struct SendSession {
     state: SendState,
     peer: Option<EndpointId>,
     decision: Option<oneshot::Sender<bool>>,
+    /// A push to this trusted device: it may skip the code.
+    trusted_for: Option<EndpointId>,
     _tags: Vec<TempTag>,
 }
 
@@ -400,6 +476,8 @@ struct ReceiveSession {
     state: ReceiveState,
     resume: Option<ResumeInfo>,
     task: Option<JoinHandle<()>>,
+    /// Started by a trusted device's push (not yet taken by the app).
+    pushed_by: Option<EndpointId>,
 }
 
 struct Inner {
@@ -410,6 +488,14 @@ struct Inner {
     receives: Mutex<HashMap<SessionId, ReceiveSession>>,
     network: Network,
     ticket_lifetime: u64,
+    have: Option<Have>,
+    trusted: Mutex<HashSet<EndpointId>>,
+    /// The Receive screen is open: trusted devices may push.
+    accepting: std::sync::atomic::AtomicBool,
+    /// Where pushed receives export their files.
+    push_dest: Mutex<Option<PathBuf>>,
+    /// Pushed receives the app has not taken yet: (session, sender).
+    incoming: Mutex<Vec<(SessionId, EndpointId)>>,
 }
 
 pub struct TransferService {
@@ -420,6 +506,9 @@ pub struct TransferService {
 
 #[derive(Debug, Clone)]
 struct ControlProtocol(Arc<Inner>);
+
+#[derive(Debug, Clone)]
+struct PushProtocol(Arc<Inner>);
 
 impl std::fmt::Debug for Inner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -467,11 +556,17 @@ impl TransferService {
             receives: Mutex::new(HashMap::new()),
             network: config.network,
             ticket_lifetime: config.ticket_lifetime.as_secs().min(TICKET_LIFETIME_SECS),
+            have: config.have,
+            trusted: Mutex::new(HashSet::new()),
+            accepting: std::sync::atomic::AtomicBool::new(false),
+            push_dest: Mutex::new(None),
+            incoming: Mutex::new(Vec::new()),
         });
         let blobs = BlobsProtocol::new(&store, Some(gate.events()));
         let router = Router::builder(endpoint)
             .accept(iroh_blobs::ALPN, blobs)
             .accept(ALPN, ControlProtocol(Arc::clone(&inner)))
+            .accept(PUSH_ALPN, PushProtocol(Arc::clone(&inner)))
             .spawn();
         Ok(Self {
             inner,
@@ -488,6 +583,17 @@ impl TransferService {
     pub async fn offer(
         &self,
         items: Vec<OfferItem>,
+    ) -> Result<(SessionId, TransferTicket), ServiceError> {
+        self.offer_with(items, None, None).await
+    }
+
+    /// Offers documents and, for a library move, signatures and settings.
+    /// `trusted_for`: a push to that device (it may skip the code).
+    pub async fn offer_with(
+        &self,
+        items: Vec<OfferItem>,
+        library: Option<OfferLibrary>,
+        trusted_for: Option<EndpointId>,
     ) -> Result<(SessionId, TransferTicket), ServiceError> {
         if items.is_empty() {
             return Err(ServiceError::Invalid("nothing to send"));
@@ -531,11 +637,32 @@ impl TransferService {
                 size,
                 blake3: tag.hash(),
                 history,
+                tags: item.tags,
+                favorite: item.favorite,
             });
             entries.push((entries.len().to_string(), tag.hash()));
             tags.push(tag);
         }
-        let manifest = Manifest::new(manifest_items);
+        let mut manifest = Manifest::new(manifest_items);
+        if let Some(library) = library {
+            let mut signatures = Vec::new();
+            for s in library.signatures {
+                let (tag, size) = import(s.path).await?;
+                signatures.push(ManifestSignature {
+                    id: s.id,
+                    kind: s.kind,
+                    size,
+                    blake3: tag.hash(),
+                    created_at: s.created_at,
+                });
+                entries.push((entries.len().to_string(), tag.hash()));
+                tags.push(tag);
+            }
+            manifest.library = Some(LibraryExtras {
+                signatures,
+                settings: library.settings,
+            });
+        }
         manifest
             .validate()
             .map_err(|_| ServiceError::Invalid("documents cannot be offered"))?;
@@ -587,10 +714,103 @@ impl TransferService {
                 state: SendState::WaitingForReceiver,
                 peer: None,
                 decision: None,
+                trusted_for,
                 _tags: tags,
             },
         );
         Ok((id, ticket))
+    }
+
+    /// The devices this one trusts (they may push here; pushes to them skip the code).
+    pub fn set_trusted(&self, ids: impl IntoIterator<Item = EndpointId>) {
+        *lock(&self.inner.trusted) = ids.into_iter().collect();
+    }
+
+    /// The Receive screen is open (`Some(dest)`) or closed: trusted devices may
+    /// push only while it is open; their files go to `dest`.
+    pub fn set_receiving(&self, dest: Option<PathBuf>) {
+        let dest = dest.map(|d| std::path::absolute(&d).unwrap_or(d));
+        self.inner
+            .accepting
+            .store(dest.is_some(), std::sync::atomic::Ordering::SeqCst);
+        *lock(&self.inner.push_dest) = dest;
+    }
+
+    /// Receives started by trusted devices since the last call: (session, sender).
+    pub fn take_incoming(&self) -> Vec<(SessionId, EndpointId)> {
+        std::mem::take(&mut *lock(&self.inner.incoming))
+    }
+
+    /// Whether a trusted device is reachable, and whether its Receive screen is open.
+    pub async fn ping(&self, target: EndpointId) -> Result<bool, TransferError> {
+        match self.push_request(target, &PushRequest::Ping).await? {
+            PushResponse::Pong { receiving } => Ok(receiving),
+            PushResponse::Refused { .. } => Err(TransferError::NotReady),
+            PushResponse::Accepted => Err(TransferError::Protocol),
+        }
+    }
+
+    /// Sends to a trusted device whose Receive screen is open: no QR code, no code.
+    pub async fn push(
+        &self,
+        target: EndpointId,
+        items: Vec<OfferItem>,
+        library: Option<OfferLibrary>,
+    ) -> Result<SessionId, ServiceError> {
+        let (id, ticket) = self.offer_with(items, library, Some(target)).await?;
+        let invite = PushRequest::Invite {
+            ticket: ticket.to_link(),
+        };
+        let answer = self.push_request(target, &invite).await;
+        let failed = match answer {
+            Ok(PushResponse::Accepted) => None,
+            Ok(PushResponse::Refused { .. }) => Some(TransferError::NotReady),
+            Ok(PushResponse::Pong { .. }) => Some(TransferError::Protocol),
+            Err(e) => Some(e),
+        };
+        if let Some(error) = failed
+            && let Some(s) = lock(&self.inner.sends).get_mut(&id)
+        {
+            // The ticket is not usable by anyone else.
+            s.used = true;
+            s.state = SendState::Failed { error };
+        }
+        Ok(id)
+    }
+
+    async fn push_request(
+        &self,
+        target: EndpointId,
+        request: &PushRequest,
+    ) -> Result<PushResponse, TransferError> {
+        let conn = tokio::time::timeout(
+            PUSH_TIMEOUT,
+            self.inner
+                .endpoint
+                .connect(EndpointAddr::new(target), PUSH_ALPN),
+        )
+        .await
+        .map_err(|_| TransferError::Unreachable)?
+        .map_err(|_| TransferError::Unreachable)?;
+        let exchange = async {
+            let (mut tx, mut rx) = conn
+                .open_bi()
+                .await
+                .map_err(|_| TransferError::Unreachable)?;
+            wire::send(&mut tx, request)
+                .await
+                .map_err(|_| TransferError::Interrupted)?;
+            let answer: PushResponse = wire::recv(&mut rx)
+                .await
+                .map_err(|_| TransferError::NotReady)?;
+            let _ = tx.finish();
+            Ok::<_, TransferError>(answer)
+        };
+        let answer = tokio::time::timeout(PUSH_TIMEOUT, exchange)
+            .await
+            .map_err(|_| TransferError::Unreachable)?;
+        conn.close(0u32.into(), b"done");
+        answer
     }
 
     pub fn send_state(&self, id: &str) -> Option<SendState> {
@@ -648,37 +868,21 @@ impl TransferService {
     }
 
     fn spawn_receive(&self, start: Start, dest: PathBuf) -> SessionId {
-        // The store exports only to absolute paths.
-        let dest = std::path::absolute(&dest).unwrap_or(dest);
-        let id = new_session_id();
-        lock(&self.inner.receives).insert(
-            id.clone(),
-            ReceiveSession {
-                state: ReceiveState::Connecting,
-                resume: None,
-                task: None,
-            },
-        );
-        let inner = Arc::clone(&self.inner);
-        let sid = id.clone();
-        let task = tokio::spawn(async move {
-            let result = receive_task(&inner, &sid, start, &dest).await;
-            let mut receives = lock(&inner.receives);
-            if let Some(r) = receives.get_mut(&sid) {
-                r.state = match result {
-                    Ok(items) => ReceiveState::Done { items },
-                    Err(error) => ReceiveState::Failed { error },
-                };
-            }
-        });
-        if let Some(r) = lock(&self.inner.receives).get_mut(&id) {
-            r.task = Some(task);
-        }
-        id
+        spawn_receive(&self.inner, start, dest, None)
     }
 
     pub fn receive_state(&self, id: &str) -> Option<ReceiveState> {
         lock(&self.inner.receives).get(id).map(|r| r.state.clone())
+    }
+
+    /// The device a send went to (known once it connected).
+    pub fn send_peer(&self, id: &str) -> Option<EndpointId> {
+        lock(&self.inner.sends).get(id).and_then(|s| s.peer)
+    }
+
+    /// The trusted device that pushed this receive, if it was a push.
+    pub fn pushed_by(&self, id: &str) -> Option<EndpointId> {
+        lock(&self.inner.receives).get(id).and_then(|r| r.pushed_by)
     }
 
     /// What to keep to resume this receive later (known once the sender confirmed).
@@ -729,10 +933,65 @@ impl TransferService {
         }
     }
 
+    /// Whether the store holds `hash` completely (tests: "was it fetched?").
+    #[doc(hidden)]
+    pub async fn blob_status_for_test(&self, hash: Hash) -> Option<bool> {
+        match self.inner.store.blobs().status(hash).await {
+            Ok(BlobStatus::Complete { .. }) => Some(true),
+            Ok(_) => Some(false),
+            Err(_) => None,
+        }
+    }
+
     /// Where the blob store lives (partial downloads until finished).
     pub fn store_dir(&self) -> &Path {
         &self.store_dir
     }
+}
+
+fn spawn_receive(
+    inner: &Arc<Inner>,
+    start: Start,
+    dest: PathBuf,
+    pushed_by: Option<EndpointId>,
+) -> SessionId {
+    // The store exports only to absolute paths.
+    let dest = std::path::absolute(&dest).unwrap_or(dest);
+    let id = new_session_id();
+    // Pushes share the Receive screen's folder: each gets its own.
+    let dest = if pushed_by.is_some() {
+        dest.join(&id)
+    } else {
+        dest
+    };
+    lock(&inner.receives).insert(
+        id.clone(),
+        ReceiveSession {
+            state: ReceiveState::Connecting,
+            resume: None,
+            task: None,
+            pushed_by,
+        },
+    );
+    let task_inner = Arc::clone(inner);
+    let sid = id.clone();
+    let task = tokio::spawn(async move {
+        let result = receive_task(&task_inner, &sid, start, &dest).await;
+        let mut receives = lock(&task_inner.receives);
+        if let Some(r) = receives.get_mut(&sid) {
+            r.state = match result {
+                Ok((items, library)) => ReceiveState::Done { items, library },
+                Err(error) => ReceiveState::Failed { error },
+            };
+        }
+    });
+    if let Some(r) = lock(&inner.receives).get_mut(&id) {
+        r.task = Some(task);
+    }
+    if let Some(peer) = pushed_by {
+        lock(&inner.incoming).push((id.clone(), peer));
+    }
+    id
 }
 
 enum Start {
@@ -762,7 +1021,7 @@ async fn receive_task(
     id: &str,
     start: Start,
     dest: &Path,
-) -> Result<Vec<ReceivedItem>, TransferError> {
+) -> Result<(Vec<ReceivedItem>, Option<ReceivedLibrary>), TransferError> {
     let (addr, collection) = match &start {
         Start::Ticket(t) => (t.addr.clone(), t.collection),
         Start::Resume(r) => (r.addr.clone(), r.collection),
@@ -828,72 +1087,93 @@ async fn receive_task(
         });
     }
 
-    // The payload, verified per chunk; what an earlier attempt stored is not fetched again.
+    // The payload, blob by blob, each verified per chunk. Blobs the app already
+    // has are skipped; what an earlier attempt stored is not fetched again.
     let total = manifest.total_bytes();
-    let blobs = tokio::time::timeout(
-        CONNECT_TIMEOUT,
-        inner.endpoint.connect(addr, iroh_blobs::ALPN),
-    )
-    .await
-    .map_err(|_| TransferError::Unreachable)?
-    .map_err(|_| TransferError::Unreachable)?;
-    let content = HashAndFormat::hash_seq(collection);
-    let local = inner
-        .store
-        .remote()
-        .local(content)
-        .await
-        .map(|l| l.local_bytes())
-        .unwrap_or(0);
-    let mut stream = inner.store.remote().fetch(blobs.clone(), content).stream();
-    let mut last = tokio::time::Instant::now() - PROGRESS_EVERY;
-    while let Some(item) = stream.next().await {
-        match item {
-            GetProgressItem::Progress(n) => {
-                let bytes = local.saturating_add(n).min(total);
-                set_receive(
-                    inner,
-                    id,
-                    ReceiveState::Receiving {
-                        bytes,
-                        total,
-                        route: route_of(&blobs),
-                    },
-                );
-                if last.elapsed() >= PROGRESS_EVERY {
-                    last = tokio::time::Instant::now();
-                    let _ = wire::send(&mut tx, &ToSender::Progress { bytes }).await;
-                }
+    let mut known: HashMap<Hash, PathBuf> = HashMap::new();
+    if let Some(have) = &inner.have {
+        for (hash, _) in manifest.blobs() {
+            if let Some(path) = (have.0)(&hash) {
+                known.insert(hash, path);
             }
-            GetProgressItem::Done(_) => break,
-            GetProgressItem::Error(_) => return Err(TransferError::Interrupted),
         }
     }
-
-    // Everything the manifest names must be in the collection, complete, at its size.
-    set_receive(inner, id, ReceiveState::Verifying);
-    let coll = Collection::load(collection, &*inner.store)
-        .await
-        .map_err(|_| TransferError::Mismatch)?;
-    let in_collection: HashSet<Hash> = coll.iter().map(|(_, h)| *h).collect();
-    let check = |hash: Hash, size: u64| {
-        let store = inner.store.clone();
-        let present = in_collection.contains(&hash);
-        async move {
-            if !present {
-                return Err(TransferError::Mismatch);
-            }
-            match store.blobs().status(hash).await {
-                Ok(BlobStatus::Complete { size: s }) if s == size => Ok(()),
-                _ => Err(TransferError::Mismatch),
-            }
+    let mut done: u64 = 0;
+    let mut missing = Vec::new();
+    for (hash, size) in manifest.blobs() {
+        let complete = matches!(
+            inner.store.blobs().status(hash).await,
+            Ok(BlobStatus::Complete { size: s }) if s == size
+        );
+        if known.contains_key(&hash) || complete {
+            done = done.saturating_add(size);
+        } else {
+            missing.push((hash, size));
         }
-    };
+    }
+    let mut route = Route::Unknown;
+    if !missing.is_empty() {
+        let blobs = tokio::time::timeout(
+            CONNECT_TIMEOUT,
+            inner.endpoint.connect(addr, iroh_blobs::ALPN),
+        )
+        .await
+        .map_err(|_| TransferError::Unreachable)?
+        .map_err(|_| TransferError::Unreachable)?;
+        let mut last = tokio::time::Instant::now() - PROGRESS_EVERY;
+        for (hash, size) in missing {
+            let content = HashAndFormat::raw(hash);
+            let partial = inner
+                .store
+                .remote()
+                .local(content)
+                .await
+                .map(|l| l.local_bytes())
+                .unwrap_or(0);
+            let mut stream = inner.store.remote().fetch(blobs.clone(), content).stream();
+            while let Some(item) = stream.next().await {
+                match item {
+                    GetProgressItem::Progress(n) => {
+                        let bytes = done.saturating_add(partial).saturating_add(n).min(total);
+                        route = route_of(&blobs);
+                        set_receive(
+                            inner,
+                            id,
+                            ReceiveState::Receiving {
+                                bytes,
+                                total,
+                                route,
+                            },
+                        );
+                        if last.elapsed() >= PROGRESS_EVERY {
+                            last = tokio::time::Instant::now();
+                            let _ = wire::send(&mut tx, &ToSender::Progress { bytes }).await;
+                        }
+                    }
+                    GetProgressItem::Done(_) => break,
+                    GetProgressItem::Error(_) => return Err(TransferError::Interrupted),
+                }
+            }
+            match inner.store.blobs().status(hash).await {
+                Ok(BlobStatus::Complete { size: s }) if s == size => {}
+                _ => return Err(TransferError::Mismatch),
+            }
+            done = done.saturating_add(size);
+        }
+    }
+    let _ = route;
+
+    // Every blob is known or complete at its stated size.
+    set_receive(inner, id, ReceiveState::Verifying);
     std::fs::create_dir_all(dest).map_err(|_| TransferError::Storage)?;
-    let export = |hash: Hash| {
+    let export = |hash: Hash, ext: &'static str| {
         let store = inner.store.clone();
-        let path = dest.join(format!("{hash}.pdf"));
+        let known = known.get(&hash).cloned();
+        let path = dest.join(format!("{hash}.{ext}"));
         async move {
+            if let Some(path) = known {
+                return Ok(path);
+            }
             if !path.exists() {
                 let part = path.with_extension("part");
                 store
@@ -908,12 +1188,10 @@ async fn receive_task(
     };
     let mut items = Vec::new();
     for item in &manifest.items {
-        check(item.blake3, item.size).await?;
         let mut history = Vec::new();
         for v in &item.history {
-            check(v.blake3, v.size).await?;
             history.push(ReceivedVersion {
-                path: export(v.blake3).await?,
+                path: export(v.blake3, "pdf").await?,
                 blake3: v.blake3.to_hex().to_string(),
                 size: v.size,
                 created_at: v.created_at,
@@ -922,17 +1200,38 @@ async fn receive_task(
         items.push(ReceivedItem {
             title: item.title.clone(),
             name: item.name.clone(),
-            path: export(item.blake3).await?,
+            path: export(item.blake3, "pdf").await?,
             blake3: item.blake3.to_hex().to_string(),
             size: item.size,
             history,
+            tags: item.tags.clone(),
+            favorite: item.favorite,
         });
     }
+    let library = match &manifest.library {
+        None => None,
+        Some(extras) => {
+            let mut signatures = Vec::new();
+            for s in &extras.signatures {
+                signatures.push(ReceivedSignature {
+                    id: s.id.clone(),
+                    kind: s.kind.clone(),
+                    path: export(s.blake3, "png").await?,
+                    blake3: s.blake3.to_hex().to_string(),
+                    created_at: s.created_at,
+                });
+            }
+            Some(ReceivedLibrary {
+                signatures,
+                settings: extras.settings.clone(),
+            })
+        }
+    };
     let _ = wire::send(&mut tx, &ToSender::Done { ok: true }).await;
     let _ = tx.finish();
     // Give the sender a moment to read Done before the connection goes.
     let _ = tokio::time::timeout(Duration::from_secs(2), conn.closed()).await;
-    Ok(items)
+    Ok((items, library))
 }
 
 /// Sends the last message of a conversation and lets the peer read it before
@@ -1027,25 +1326,41 @@ impl ControlProtocol {
                     )
                     .await;
                 }
-                let code = confirmation_code(&conn, &token, self.0.endpoint.id(), peer);
-                let (decided, decision) = oneshot::channel();
-                if let Some(s) = lock(&self.0.sends).get_mut(&id) {
-                    s.state = SendState::Confirm { code };
-                    s.decision = Some(decided);
-                }
-                wire::send(&mut tx, &ToReceiver::CodeShown).await?;
-                let confirmed = matches!(
-                    tokio::time::timeout(CONFIRM_TIMEOUT, decision).await,
-                    Ok(Ok(true))
-                );
-                if !confirmed {
-                    self.set(
-                        &id,
-                        SendState::Failed {
-                            error: TransferError::Declined,
+                // A push to a trusted device: the device it was sent to (and only
+                // that one) connects back without the code, if still trusted here.
+                let pushed_to = lock(&self.0.sends).get(&id).and_then(|s| s.trusted_for);
+                if pushed_to == Some(peer) && lock(&self.0.trusted).contains(&peer) {
+                    // Straight to Accepted below.
+                } else if pushed_to.is_some() {
+                    return send_final(
+                        &conn,
+                        &mut tx,
+                        &ToReceiver::Rejected {
+                            reason: RejectReason::UnknownTicket,
                         },
+                    )
+                    .await;
+                } else {
+                    let code = confirmation_code(&conn, &token, self.0.endpoint.id(), peer);
+                    let (decided, decision) = oneshot::channel();
+                    if let Some(s) = lock(&self.0.sends).get_mut(&id) {
+                        s.state = SendState::Confirm { code };
+                        s.decision = Some(decided);
+                    }
+                    wire::send(&mut tx, &ToReceiver::CodeShown).await?;
+                    let confirmed = matches!(
+                        tokio::time::timeout(CONFIRM_TIMEOUT, decision).await,
+                        Ok(Ok(true))
                     );
-                    return send_final(&conn, &mut tx, &ToReceiver::Declined).await;
+                    if !confirmed {
+                        self.set(
+                            &id,
+                            SendState::Failed {
+                                error: TransferError::Declined,
+                            },
+                        );
+                        return send_final(&conn, &mut tx, &ToReceiver::Declined).await;
+                    }
                 }
                 id
             }
@@ -1121,6 +1436,63 @@ impl ControlProtocol {
                 }
             }
         }
+    }
+}
+
+impl PushProtocol {
+    async fn serve(&self, conn: Connection) -> Result<(), wire::WireError> {
+        let peer = conn.remote_id();
+        let (mut tx, mut rx) = conn
+            .accept_bi()
+            .await
+            .map_err(|e| wire::WireError::Io(e.to_string()))?;
+        let request: PushRequest = wire::recv(&mut rx).await?;
+        let trusted = lock(&self.0.trusted).contains(&peer);
+        let receiving = self.0.accepting.load(std::sync::atomic::Ordering::SeqCst);
+        let answer = if !trusted {
+            // Nothing about this device is revealed to an unknown one.
+            PushResponse::Refused {
+                reason: PushRefusal::NotTrusted,
+            }
+        } else {
+            match request {
+                PushRequest::Ping => PushResponse::Pong { receiving },
+                PushRequest::Invite { .. } if !receiving => PushResponse::Refused {
+                    reason: PushRefusal::NotReceiving,
+                },
+                PushRequest::Invite { ticket } => match TransferTicket::parse(&ticket) {
+                    // Only a ticket of the inviting device itself, still valid.
+                    Ok(t) if t.addr.id == peer && t.is_valid_at(now_secs()) => {
+                        match lock(&self.0.push_dest).clone() {
+                            Some(dest) => {
+                                spawn_receive(&self.0, Start::Ticket(t), dest, Some(peer));
+                                PushResponse::Accepted
+                            }
+                            None => PushResponse::Refused {
+                                reason: PushRefusal::NotReceiving,
+                            },
+                        }
+                    }
+                    _ => PushResponse::Refused {
+                        reason: PushRefusal::Invalid,
+                    },
+                },
+            }
+        };
+        wire::send(&mut tx, &answer).await?;
+        let _ = tx.finish();
+        let _ = tokio::time::timeout(Duration::from_secs(5), conn.closed()).await;
+        Ok(())
+    }
+}
+
+impl ProtocolHandler for PushProtocol {
+    async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
+        let result = self.serve(connection.clone()).await;
+        if result.is_err() {
+            connection.close(1u32.into(), b"protocol error");
+        }
+        result.map_err(AcceptError::from_err)
     }
 }
 

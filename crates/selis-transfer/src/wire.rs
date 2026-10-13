@@ -49,6 +49,34 @@ pub enum RejectReason {
     UnknownSession,
 }
 
+/// Trusted devices (ALPN `selis/push/1`, ADR 0014): first message of the dialer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PushRequest {
+    /// Is the device there, and is its Receive screen open?
+    Ping,
+    /// Fetch these documents from me: an ordinary ticket of the dialing device.
+    Invite { ticket: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PushResponse {
+    Pong {
+        receiving: bool,
+    },
+    /// The receive has started (the device connects back with the ticket).
+    Accepted,
+    Refused {
+        reason: PushRefusal,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PushRefusal {
+    NotTrusted,
+    NotReceiving,
+    Invalid,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum WireError {
     #[error("connection: {0}")]

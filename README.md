@@ -24,8 +24,7 @@ Available now (P0):
 - Fast viewer for large documents (1000+ pages): virtualized scrolling and pinch-zoom.
 - English and Greek (English by default; Greek in Settings → Language), light / dark / sepia themes.
 
-Planned (see [docs/SPEC.md](docs/SPEC.md)): OCR, scanning, trusted devices, library move and
-`.selispack` export.
+Planned (see [docs/SPEC.md](docs/SPEC.md)): OCR, scanning and `.selispack` export.
 
 ## Transfer (device to device, no account)
 
@@ -38,6 +37,11 @@ Send documents straight to your other device:
 3. Both screens show the same 6-digit code. The sender confirms only if it matches.
 4. The documents arrive verified (BLAKE3) in the other library, labelled "received". An
    interrupted transfer resumes where it stopped, even after the app was closed.
+
+After a transfer you can **save the device**: next time it is one tap (no QR code) while the
+other device has its Receive tab open. **Move whole library** (Send tab) sends everything —
+documents with versions, tags, favorites, signatures and settings — to a new phone; documents it
+already has are skipped, so running it again changes nothing.
 
 Devices connect directly when they can (same Wi‑Fi, or across networks), otherwise through an
 encrypted relay. Settings › Transfer: **Local network only** (no relay, no address lookup) or your

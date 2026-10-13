@@ -9,8 +9,10 @@ import { useNavigation } from "../../state/navigation";
 import { ALL_DOCUMENTS } from "../library/libraryStore";
 import { useDocuments } from "../library/queries";
 import { formatBytes, formatCountdown } from "./format";
-import { Card, CodeBlock, Problem, Progress } from "./parts";
-import { type TransferProblem, useTransfer } from "./transferStore";
+import { MoveLibrary } from "./MoveLibrary";
+import { Busy, Card, CodeBlock, Problem, Progress } from "./parts";
+import { type Push, type TransferProblem, useTransfer } from "./transferStore";
+import { SaveDevice, TrustedDevices } from "./TrustedDevices";
 
 /** Seconds until `expiresAt` (unix seconds), ticking. */
 function useSecondsLeft(expiresAt: number | null): number {
@@ -23,25 +25,43 @@ function useSecondsLeft(expiresAt: number | null): number {
   return expiresAt === null ? 0 : expiresAt - now / 1000;
 }
 
-/** Send tab: choose documents → QR code + link → same code on both → progress. */
+/**
+ * Send tab: choose documents → QR code + link → same code on both → progress;
+ * or one tap on a saved device that is ready (no QR code, no code).
+ */
 export function SendPanel() {
   const offer = useTransfer((s) => s.offer);
+  const push = useTransfer((s) => s.push);
   const send = useTransfer((s) => s.send);
-  if (!offer || !send) return <ChooseDocuments />;
+  if ((!offer && !push) || !send) return <ChooseDocuments />;
+  const count = offer?.docCount ?? push?.docCount ?? 0;
   switch (send.kind) {
     case "waitingForReceiver":
-      return <OfferCard offer={offer} />;
+      return offer ? <OfferCard offer={offer} /> : <PushWaiting push={push} />;
     case "confirm":
       return <ConfirmCard code={send.code} />;
     case "sending":
-      return <SendingCard bytes={send.bytes} total={send.total} route={send.route} />;
+      return <SendingCard bytes={send.bytes} total={send.total} route={send.route} push={push} />;
     case "interrupted":
-      return <SendingCard bytes={send.bytes} total={send.total} interrupted />;
+      return <SendingCard bytes={send.bytes} total={send.total} interrupted push={push} />;
     case "done":
-      return <DoneCard count={offer.docCount} />;
+      return <DoneCard count={count} peer={send.trusted ? null : send.peer} />;
     case "failed":
       return <FailedCard problem={send.error} />;
   }
+}
+
+function PushWaiting({ push }: { push: Push | null }) {
+  const { t } = useTranslation();
+  const cancelSend = useTransfer((s) => s.cancelSend);
+  return (
+    <Card testId="transfer-push-waiting">
+      <Busy label={t("transfer.trust.waitingFor", { name: push?.deviceName ?? "" })} testId="transfer-push-busy" />
+      <Button variant="secondary" className="w-full" onClick={() => void cancelSend()} data-testid="transfer-send-cancel">
+        {t("transfer.cancel")}
+      </Button>
+    </Card>
+  );
 }
 
 function ChooseDocuments() {
@@ -51,6 +71,7 @@ function ChooseDocuments() {
   const preparing = useTransfer((s) => s.preparing);
   const problem = useTransfer((s) => s.sendProblem);
   const offerDocuments = useTransfer((s) => s.offerDocuments);
+  const pushTo = useTransfer((s) => s.pushTo);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [history, setHistory] = useState(false);
   const historyLabel = useId();
@@ -113,6 +134,11 @@ function ChooseDocuments() {
         <Switch checked={history} onChange={setHistory} labelledBy={historyLabel} testId="transfer-history" />
       </div>
       {problem ? <Problem problem={problem} testId="transfer-send-problem" /> : null}
+      <TrustedDevices
+        canSend={chosen.length > 0 && !preparing}
+        onSend={(device) => void pushTo(device, chosen.map((d) => d.id), history)}
+        testId="transfer-trusted"
+      />
       <Button
         disabled={chosen.length === 0 || preparing}
         onClick={() => void offerDocuments(chosen.map((d) => d.id), history)}
@@ -126,6 +152,7 @@ function ChooseDocuments() {
               })
             : t("transfer.send.start")}
       </Button>
+      <MoveLibrary />
     </div>
   );
 }
@@ -235,17 +262,20 @@ function SendingCard({
   total,
   route,
   interrupted = false,
+  push,
 }: {
   bytes: number;
   total: number;
   route?: RouteView;
   interrupted?: boolean;
+  push: Push | null;
 }) {
   const { t } = useTranslation();
   const cancelSend = useTransfer((s) => s.cancelSend);
+  const label = push ? t("transfer.trust.sendingTo", { name: push.deviceName }) : t("transfer.send.sending");
   return (
     <Card testId="transfer-sending">
-      <Progress label={t("transfer.send.sending")} bytes={bytes} total={total} {...(route ? { route } : {})} testId="transfer-send-progress" />
+      <Progress label={label} bytes={bytes} total={total} {...(route ? { route } : {})} testId="transfer-send-progress" />
       {interrupted ? (
         <p className="text-center text-md text-neutral-11" role="status" data-testid="transfer-send-interrupted">
           {t("transfer.send.interrupted")}
@@ -258,7 +288,7 @@ function SendingCard({
   );
 }
 
-function DoneCard({ count }: { count: number }) {
+function DoneCard({ count, peer }: { count: number; peer: string | null }) {
   const { t } = useTranslation();
   const resetSend = useTransfer((s) => s.resetSend);
   return (
@@ -268,6 +298,7 @@ function DoneCard({ count }: { count: number }) {
       </span>
       <h2 className="text-[17px] font-semibold text-neutral-12">{t("transfer.send.doneTitle")}</h2>
       <p className="text-center text-md text-neutral-11">{t("transfer.send.doneBody", { count })}</p>
+      {peer ? <SaveDevice peer={peer} /> : null}
       <Button variant="secondary" className="w-full" onClick={resetSend} data-testid="transfer-send-again">
         {t("transfer.send.again")}
       </Button>

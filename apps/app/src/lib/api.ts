@@ -172,6 +172,34 @@ export const api = {
     unwrap(ipc().short("transfer_notifications", () => commands.transferNotifications(), { timeoutMs: 120_000, retry: false })),
   transferDebugForceRelay: (on: boolean) =>
     unwrap(ipc().short("transfer_debug_force_relay", () => commands.transferDebugForceRelay(on), READ)),
+  // Trusted devices and library move (P3b).
+  transferReceiving: (on: boolean) =>
+    unwrap(ipc().short("transfer_receiving", () => commands.transferReceiving(on), READ)),
+  transferIncoming: () => unwrap(ipc().short("transfer_incoming", () => commands.transferIncoming(), WRITE)),
+  transferTrusted: () => unwrap(ipc().short("transfer_trusted", () => commands.transferTrusted(), READ)),
+  // Saving again renames: safe to repeat.
+  transferTrust: (endpointId: string, name: string) =>
+    unwrap(ipc().short("transfer_trust", () => commands.transferTrust(endpointId, name), READ)),
+  transferUntrust: (endpointId: string) =>
+    unwrap(ipc().short("transfer_untrust", () => commands.transferUntrust(endpointId), READ)),
+  transferPing: (endpointId: string) =>
+    unwrap(ipc().short("transfer_ping", () => commands.transferPing(endpointId), NETWORK)),
+  transferPush: (endpointId: string, documentIds: string[], includeHistory: boolean) =>
+    unwrap(
+      ipc().long(
+        "transfer_push",
+        (requestId) => commands.transferPush(requestId, endpointId, documentIds, includeHistory),
+        OFFER,
+      ),
+    ),
+  transferMoveSummary: () =>
+    unwrap(ipc().short("transfer_move_summary", () => commands.transferMoveSummary(), READ)),
+  transferMoveOffer: () =>
+    unwrap(ipc().long("transfer_move_offer", (requestId) => commands.transferMoveOffer(requestId), OFFER)),
+  transferMovePush: (endpointId: string) =>
+    unwrap(
+      ipc().long("transfer_move_push", (requestId) => commands.transferMovePush(requestId, endpointId), OFFER),
+    ),
   pendingTransferLink: () => unwrap(ipc().short("pending_transfer_link", () => commands.pendingTransferLink(), READ)),
   dismissTransferLink: (link: string) =>
     unwrap(ipc().short("dismiss_transfer_link", () => commands.dismissTransferLink(link), READ)),
@@ -214,14 +242,18 @@ export type {
   LibrarySort,
   LibraryView,
   LocalePref,
+  IncomingView,
+  LibrarySummary,
   OfferView,
   PendingOpen,
+  PingView,
   ReceiveView,
   ResumableView,
   RouteView,
   SendView,
   TransferErrorCode,
   TransferInfo,
+  TrustedDevice,
   PickedImage,
   SavedVersion,
   Settings,

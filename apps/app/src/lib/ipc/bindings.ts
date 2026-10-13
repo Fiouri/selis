@@ -179,6 +179,28 @@ export const commands = {
 	 *  transfer notification; `true` when notifications can be shown.
 	 */
 	transferNotifications: () => typedError<boolean, CommandError>(__TAURI_INVOKE("transfer_notifications")),
+	/**  The Receive tab is open (`true`) or not: trusted devices may push only while it is. */
+	transferReceiving: (on: boolean) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_receiving", { on })),
+	/**
+	 *  Receives started by trusted devices since the last call; each is tracked
+	 *  like a scanned one (`transfer_receive_status`).
+	 */
+	transferIncoming: () => typedError<IncomingView[], CommandError>(__TAURI_INVOKE("transfer_incoming")),
+	transferTrusted: () => typedError<TrustedDevice[], CommandError>(__TAURI_INVOKE("transfer_trusted")),
+	/**  Saves the device of a finished transfer (or renames a saved one). */
+	transferTrust: (endpointId: string, name: string) => typedError<TrustedDevice, CommandError>(__TAURI_INVOKE("transfer_trust", { endpointId, name })),
+	/**  Removes trust at once: no more pushes from it, sends to it need a code again. */
+	transferUntrust: (endpointId: string) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_untrust", { endpointId })),
+	/**  Whether a trusted device is reachable and ready (Receive tab open, trusts us). */
+	transferPing: (endpointId: string) => typedError<PingView, CommandError>(__TAURI_INVOKE("transfer_ping", { endpointId })),
+	/**  Sends documents to a trusted device with its Receive tab open: no QR code, no code. */
+	transferPush: (requestId: string, endpointId: string, documentIds: string[], includeHistory: boolean) => typedError<string, CommandError>(__TAURI_INVOKE("transfer_push", { requestId, endpointId, documentIds, includeHistory })),
+	/**  What a library move would send (the dry run shown before it starts). */
+	transferMoveSummary: () => typedError<LibrarySummary, CommandError>(__TAURI_INVOKE("transfer_move_summary")),
+	/**  Offers the whole library (QR code + link), for a new phone. */
+	transferMoveOffer: (requestId: string) => typedError<OfferView, CommandError>(__TAURI_INVOKE("transfer_move_offer", { requestId })),
+	/**  Moves the whole library to a trusted device with its Receive tab open. */
+	transferMovePush: (requestId: string, endpointId: string) => typedError<string, CommandError>(__TAURI_INVOKE("transfer_move_push", { requestId, endpointId })),
 	/**  Debug builds only: all traffic through the relay (applies at the next open). */
 	transferDebugForceRelay: (on: boolean) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_debug_force_relay", { on })),
 	/**
@@ -254,6 +276,12 @@ export type ImportOutcome = {
 	duplicate: boolean,
 };
 
+/**  A receive a trusted device started (its Receive tab shows it). */
+export type IncomingView = {
+	id: string,
+	deviceName: string | null,
+};
+
 /**  Which documents a library listing contains. */
 export type LibraryFilter = "all" | "favorites" | "received" | 
 /**  Opened at least once (the Recent tab). */
@@ -277,6 +305,16 @@ export type LibrarySort =
 "size" | 
 /**  Most recently opened first (the Recent tab). */
 "lastOpened";
+
+/**  What a library move would send (shown before it starts). */
+export type LibrarySummary = {
+	documents: number,
+	/**  Versions other than each document's current one. */
+	versions: number,
+	tags: number,
+	signatures: number,
+	bytes: number,
+};
 
 export type LibraryView = "grid" | "list";
 
@@ -322,9 +360,21 @@ export type PickedImage = { status: "picked"; mime: string;
 /**  Base64 of the file (the Android IPC carries JSON only). */
 data: string } | { status: "cancelled" };
 
+export type PingView = {
+	online: boolean,
+	/**  Its Receive tab is open and it trusts this device: a send can start. */
+	ready: boolean,
+};
+
 export type ReceiveView = { kind: "connecting" } | { kind: "confirm"; code: string } | { kind: "receiving"; bytes: number; total: number; route: RouteView } | { kind: "verifying" } | 
 /**  Adding the documents to the library. */
-{ kind: "saving" } | { kind: "done"; documentIds: string[]; duplicates: number } | 
+{ kind: "saving" } | { kind: "done"; documentIds: string[]; duplicates: number; 
+/**  Signatures added (library move). */
+signatures: number; 
+/**  A library move (settings applied too). */
+moved: boolean; 
+/**  The sending device (hex id) and whether it is already trusted. */
+peer: string | null; trusted: boolean } | 
 /**
  *  Stopped mid-way (connection lost, app stopped, Android's daily limit):
  *  `transfer_resume` continues without fetching again what arrived.
@@ -351,7 +401,9 @@ export type SavedVersion = {
 
 export type SendView = { kind: "waitingForReceiver" } | { kind: "confirm"; code: string } | { kind: "sending"; bytes: number; total: number; route: RouteView } | 
 /**  The receiver dropped; it can come back while this screen stays open. */
-{ kind: "interrupted"; bytes: number; total: number } | { kind: "done" } | { kind: "failed"; error: TransferErrorCode };
+{ kind: "interrupted"; bytes: number; total: number } | 
+/**  `peer`: the device that received (hex id); `trusted`: already saved. */
+{ kind: "done"; peer: string | null; trusted: boolean } | { kind: "failed"; error: TransferErrorCode };
 
 export type Settings = {
 	locale: LocalePref,
@@ -427,7 +479,9 @@ export type ThemePref = "system" | "light" | "dark" | "sepia";
 
 export type TransferErrorCode = "expired" | "alreadyUsed" | "unknown" | "declined" | "unreachable" | "interrupted" | "mismatch" | "protocol" | "storage" | "cancelled" | 
 /**  Not a Selis transfer link. */
-"invalidLink";
+"invalidLink" | 
+/**  A trusted device that does not trust this one, or whose Receive tab is closed. */
+"notReady";
 
 export type TransferInfo = {
 	/**  This device's id as other devices see it (hex). */
@@ -435,6 +489,14 @@ export type TransferInfo = {
 	network: NetworkView,
 	/**  A debug build (the "force relay" testing aid is available). */
 	debug: boolean,
+};
+
+export type TrustedDevice = {
+	/**  The device's endpoint id (64 hex characters). */
+	endpointId: string,
+	name: string,
+	addedAt: number,
+	lastSeenAt: number | null,
 };
 
 /**  How a version came to be. */

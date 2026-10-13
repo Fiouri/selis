@@ -13,6 +13,12 @@
  *   expired  a ticket that lived 3 s is refused by the device (local expiry check)
  *   reuse    --serial receives, then --serial2 tries the same link: refused (single use)
  *   cold     the link arrives as a `selis://` intent on a cold start (camera-app path)
+ *   seed     this computer sends every PDF in `--dir` to the device, then tags, favorites,
+ *            a signature, a setting and extra versions are added there (library move input)
+ *   move     --serial moves its whole library to --serial2 (QR flow), then moves it again:
+ *            the second move must add nothing; libraries are compared document by document
+ *   trusted  after a move, both devices save each other, then --serial sends a document to
+ *            --serial2 with one tap while its Receive tab is open
  * `--relay`: this computer has no direct paths (relay only), so the traffic goes through the relay.
  * `--clear`: wipe Selis' data on the device first (library, transfer store, device key).
  *
@@ -34,7 +40,17 @@ const env = { ...process.env, MSYS_NO_PATHCONV: "1" };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const execFileAsync = promisify(execFile);
 
-type Options = { serial: string; serial2: string | null; scenario: string; relay: boolean; clear: boolean; file: string };
+type Options = {
+  serial: string;
+  serial2: string | null;
+  scenario: string;
+  relay: boolean;
+  clear: boolean;
+  /** Wipe --serial2 first (move: an empty receiving library). */
+  clear2: boolean;
+  file: string;
+  dir: string | null;
+};
 
 function parseArgs(argv: readonly string[]): Options {
   const get = (name: string) => {
@@ -50,6 +66,8 @@ function parseArgs(argv: readonly string[]): Options {
     scenario,
     relay: argv.includes("--relay"),
     clear: argv.includes("--clear"),
+    clear2: argv.includes("--clear2"),
+    dir: get("--dir"),
     file: resolve(get("--file") ?? join(root, ".tmp", "p3", "big-200mb.pdf")),
   };
 }
@@ -148,15 +166,27 @@ async function waitFor<T>(what: string, probe: () => Promise<T | undefined | nul
   }
 }
 
+/** One local port per device (two devices are driven at once in move / trusted). */
+const ports = new Map<string, number>();
+function portOf(serial: string): number {
+  let port = ports.get(serial);
+  if (port === undefined) {
+    port = CDP_PORT + ports.size;
+    ports.set(serial, port);
+  }
+  return port;
+}
+
 async function connect(serial: string, timeoutMs = 30_000): Promise<Cdp> {
   const deadline = Date.now() + timeoutMs;
+  const port = portOf(serial);
   for (;;) {
     try {
       const pid = adb(serial, ["shell", "pidof", PKG]).trim();
       const socket = new RegExp(`@(webview_devtools_remote_${pid})`).exec(adb(serial, ["shell", "cat", "/proc/net/unix"]))?.[1];
       if (pid && socket) {
-        adb(serial, ["forward", `tcp:${CDP_PORT}`, `localabstract:${socket}`]);
-        const response = await fetch(`http://127.0.0.1:${CDP_PORT}/json`);
+        adb(serial, ["forward", `tcp:${port}`, `localabstract:${socket}`]);
+        const response = await fetch(`http://127.0.0.1:${port}/json`);
         const targets = (await response.json()) as Array<{ type: string; webSocketDebuggerUrl: string }>;
         const page = targets.find((t) => t.type === "page");
         if (page) {
@@ -393,6 +423,133 @@ async function scenarioSend(o: Options, cdp: Cdp): Promise<Result> {
   };
 }
 
+/** Calls an app command through the WebView (the IPC the UI uses). */
+async function invoke<T>(cdp: Cdp, cmd: string, args: Record<string, unknown> = {}): Promise<T> {
+  const value = await cdp.evaluate<T>(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(cmd)}, ${JSON.stringify(args)})`);
+  return value as T;
+}
+
+type Doc = { id: string; title: string; blake3: string; favorite: boolean; tagIds: string[] };
+type Tag = { id: string; name: string };
+type Summary = { documents: number; versions: number; tags: number; signatures: number; bytes: number };
+
+/** Everything a move must carry, comparable across devices. */
+async function snapshot(cdp: Cdp): Promise<{ summary: Summary; docs: string[]; signatures: string[]; theme: string }> {
+  const docs = await invoke<Doc[]>(cdp, "list_documents", { query: { search: "", filter: "all", tagId: null, sort: "name" } });
+  const tags = await invoke<Tag[]>(cdp, "list_tags");
+  const name = new Map(tags.map((t) => [t.id, t.name]));
+  const summary = await invoke<Summary>(cdp, "transfer_move_summary");
+  const signatures = (await invoke<Array<{ id: string }>>(cdp, "list_signatures")).map((s) => s.id).sort();
+  const settings = await invoke<{ theme: string }>(cdp, "get_settings");
+  return {
+    summary,
+    docs: docs
+      .map((d) => `${d.blake3} ${d.favorite ? "★" : "-"} ${d.tagIds.map((t) => name.get(t)).sort().join(",")}`)
+      .sort(),
+    signatures,
+    theme: settings.theme,
+  };
+}
+
+/** A 1×1 PNG (a stand-in signature image). */
+const PNG_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
+
+async function seed(o: Options, cdp: Cdp): Promise<Result> {
+  if (!o.dir) throw new Error("--dir needed");
+  const dir = resolve(o.dir);
+  const { readdirSync } = await import("node:fs");
+  const files = readdirSync(dir).filter((f) => f.toLowerCase().endsWith(".pdf")).map((f) => join(dir, f));
+  await openTransfer(cdp, "receive");
+  const sender = new Peer(["send", ...files]);
+  const link = (await sender.waitLine(/^LINK /, 120_000)).line.slice(5);
+  const t0 = Date.now();
+  await pasteLink(cdp, link);
+  const code = await waitFor("code", () => cdp.evaluate<string>(`${q("transfer-receive-code")}?.textContent || null`), 120_000);
+  const peerCode = (await sender.waitLine(/^code /, 60_000)).line.slice(5);
+  if (digits(code) !== digits(peerCode)) throw new Error("codes differ");
+  sender.confirm(true);
+  await waitFor("seed received", () => cdp.evaluate<boolean>(`!!${q("transfer-receive-done")}`), 30 * 60_000);
+  const seconds = (Date.now() - t0) / 1000;
+  sender.kill();
+  // What a library holds besides files: tags, favorites, a signature, a setting, versions.
+  const docs = await invoke<Doc[]>(cdp, "list_documents", { query: { search: "", filter: "all", tagId: null, sort: "name" } });
+  const work = await invoke<Tag>(cdp, "create_tag", { name: "Work" });
+  const home = await invoke<Tag>(cdp, "create_tag", { name: "Σπίτι" });
+  for (const [i, d] of docs.entries()) {
+    const tagIds = [...(i < 10 ? [work.id] : []), ...(i >= 5 && i < 15 ? [home.id] : [])];
+    if (tagIds.length) await invoke(cdp, "set_document_tags", { documentId: d.id, tagIds });
+    if (i % 17 === 0) await invoke(cdp, "set_favorite", { id: d.id, favorite: true });
+  }
+  await invoke(cdp, "save_signature", { id: "0190aaaa-seed-sign", kind: "drawn", png: PNG_B64 });
+  await invoke(cdp, "update_settings", {
+    patch: {
+      locale: null,
+      theme: "sepia",
+      librarySort: null,
+      libraryView: null,
+      nightMode: null,
+      localOnly: null,
+      relayUrl: null,
+      versionsPerDocument: null,
+      historyLimitMb: null,
+      appLock: null,
+    },
+  });
+  // Two documents get a second version (a small edited copy).
+  for (const d of docs.slice(0, 2)) {
+    const pdf = `%PDF-1.7\n% edited ${d.id}\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n%%EOF\n`;
+    const data = Buffer.from(pdf).toString("base64");
+    const uploadId = `seed-${d.id}`;
+    await invoke(cdp, "upload_chunk", { uploadId, offset: 0, data });
+    await invoke(cdp, "commit_working_copy", {
+      uploadId,
+      documentId: d.id,
+      baseBlake3: d.blake3,
+      sizeBytes: Buffer.from(data, "base64").length,
+    });
+    await invoke(cdp, "save_version", { requestId: `seed-v-${d.id}`, documentId: d.id, label: "manual" });
+  }
+  const after = await snapshot(cdp);
+  return { files: files.length, seconds, summary: after.summary };
+}
+
+/** --serial moves its library to --serial2 through the QR flow; returns the receiver's done view. */
+async function moveOnce(a: Cdp, b: Cdp, serialB: string): Promise<{ seconds: number; done: unknown; rssDeltaMb: number }> {
+  await openTransfer(a, "send");
+  await click(a, "transfer-move-open");
+  await waitFor("move summary", () => a.evaluate<boolean>(`!!${q("transfer-move-summary")}`), 30_000);
+  await click(a, "transfer-move-qr");
+  const link = await waitFor("move link", () => a.evaluate<string>(`${q("transfer-qr")}?.dataset.link || null`), 300_000);
+  await openTransfer(b, "receive");
+  const baseline = (await rssMb(serialB)) ?? 0;
+  const sampler = new RssSampler(serialB);
+  sampler.start();
+  const t0 = Date.now();
+  await pasteLink(b, link);
+  const codeB = await waitFor("code on receiver", () => b.evaluate<string>(`${q("transfer-receive-code")}?.textContent || null`), 120_000);
+  const codeA = await waitFor("code on sender", () => a.evaluate<string>(`${q("transfer-send-code")}?.textContent || null`), 120_000);
+  if (digits(codeA) !== digits(codeB)) throw new Error(`codes differ: ${codeA} / ${codeB}`);
+  await click(a, "transfer-confirm");
+  await waitFor(
+    "move received",
+    async () => {
+      const failed = await b.evaluate<string | null>(`${q("transfer-receive-problem")}?.dataset.problem ?? null`);
+      if (failed) throw new Error(`move failed: ${failed}`);
+      return b.evaluate<boolean>(`!!${q("transfer-receive-done")}`);
+    },
+    60 * 60_000,
+  );
+  const seconds = (Date.now() - t0) / 1000;
+  const peak = await sampler.stop();
+  const done = await b.evaluate<unknown>(`({
+    count: ${q("transfer-receive-count")}?.textContent ?? null,
+    duplicates: ${q("transfer-receive-duplicates")}?.textContent ?? null,
+    moved: !!${q("transfer-receive-moved")},
+  })`);
+  return { seconds, done, rssDeltaMb: peak - baseline };
+}
+
 async function main(): Promise<number> {
   const o = parseArgs(process.argv.slice(2));
   mkdirSync(scratch, { recursive: true });
@@ -477,6 +634,64 @@ async function main(): Promise<number> {
         adb(o.serial2, ["forward", "--remove-all"]);
         sender.kill();
         result = { refused: problem === "alreadyUsed", problem };
+        break;
+      }
+      case "seed":
+        result = await seed(o, cdp);
+        break;
+      case "move": {
+        if (!o.serial2) throw new Error("--serial2 needed");
+        if (o.clear2) {
+          adb(o.serial2, ["shell", "pm", "clear", PKG]);
+          adb(o.serial2, ["shell", "pm", "grant", PKG, "android.permission.POST_NOTIFICATIONS"]);
+        }
+        launch(o.serial2);
+        const b = await connect(o.serial2, 60_000);
+        const before = await snapshot(cdp);
+        const first = await moveOnce(cdp, b, o.serial2);
+        const afterFirst = await snapshot(b);
+        // A second move: everything is already there.
+        await click(cdp, "transfer-send-again");
+        await click(b, "transfer-receive-again");
+        const second = await moveOnce(cdp, b, o.serial2);
+        const afterSecond = await snapshot(b);
+        b.close();
+        const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+        result = {
+          documents: before.summary.documents,
+          sender: before.summary,
+          receiver: afterFirst.summary,
+          first,
+          second,
+          docsMatch: same(before.docs, afterFirst.docs),
+          signaturesMatch: same(before.signatures, afterFirst.signatures),
+          settingsMatch: before.theme === afterFirst.theme,
+          summariesMatch: same(before.summary, afterFirst.summary),
+          rerunNoOp: same(afterFirst, afterSecond),
+        };
+        break;
+      }
+      case "trusted": {
+        if (!o.serial2) throw new Error("--serial2 needed");
+        // Both devices still show the done cards of the last move.
+        launch(o.serial2);
+        const b = await connect(o.serial2, 60_000);
+        const devA = await invoke<{ deviceId: string }>(cdp, "transfer_open");
+        const devB = await invoke<{ deviceId: string }>(b, "transfer_open");
+        await invoke(cdp, "transfer_trust", { endpointId: devB.deviceId, name: "AVD" });
+        await invoke(b, "transfer_trust", { endpointId: devA.deviceId, name: "S23" });
+        await openTransfer(b, "receive");
+        await openTransfer(cdp, "send");
+        await waitFor("trusted row ready", () => cdp.evaluate<boolean>(`document.querySelector('[data-testid="trusted-device"][data-status="ready"]') !== null`), 90_000);
+        await cdp.evaluate(`(document.querySelector('[data-testid="transfer-doc"]').click(), true)`);
+        const t0 = Date.now();
+        await click(cdp, "trusted-send");
+        const from = await waitFor("push arrives", () => b.evaluate<string>(`${q("transfer-from")}?.textContent || (${q("transfer-receive-done")} ? "done" : null)`), 120_000);
+        await waitFor("push received", () => b.evaluate<boolean>(`!!${q("transfer-receive-done")}`), 10 * 60_000);
+        await waitFor("sender done", () => cdp.evaluate<boolean>(`!!${q("transfer-send-done")}`), 60_000);
+        const codeShown = await cdp.evaluate<boolean>(`!!${q("transfer-send-code")}`);
+        result = { seconds: (Date.now() - t0) / 1000, from, codeAsked: codeShown };
+        b.close();
         break;
       }
       case "cold": {

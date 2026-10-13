@@ -4,6 +4,7 @@ import { cleanLink, formatCode, formatCountdown, percent } from "./format";
 import { createTransferStore, type TransferApi, type TransferDeps } from "./transferStore";
 
 const LINK = "selis://transfer/selisabc";
+const PEER = "a".repeat(64);
 
 function fakeApi(overrides: Partial<TransferApi> = {}): TransferApi {
   return {
@@ -24,6 +25,18 @@ function fakeApi(overrides: Partial<TransferApi> = {}): TransferApi {
     transferForeground: vi.fn(() => Promise.resolve(null)),
     transferForegroundStop: vi.fn(() => Promise.resolve(null)),
     transferNotifications: vi.fn(() => Promise.resolve(true)),
+    transferReceiving: vi.fn(() => Promise.resolve(null)),
+    transferIncoming: vi.fn(() => Promise.resolve([])),
+    transferTrusted: vi.fn(() => Promise.resolve([])),
+    transferTrust: vi.fn((endpointId: string, name: string) => Promise.resolve({ endpointId, name, addedAt: 1, lastSeenAt: null })),
+    transferUntrust: vi.fn(() => Promise.resolve(null)),
+    transferPing: vi.fn(() => Promise.resolve({ online: true, ready: true })),
+    transferPush: vi.fn(() => Promise.resolve("p1")),
+    transferMoveSummary: vi.fn(() => Promise.resolve({ documents: 2, versions: 1, tags: 1, signatures: 0, bytes: 10 })),
+    transferMoveOffer: vi.fn(() =>
+      Promise.resolve({ sessionId: "m1", link: LINK, qrSvg: "<svg/>", docCount: 2, totalBytes: 10, expiresAt: 1e10 }),
+    ),
+    transferMovePush: vi.fn(() => Promise.resolve("mp1")),
     ...overrides,
   };
 }
@@ -90,9 +103,11 @@ describe("transfer store", () => {
     const views: SendView[] = [
       { kind: "confirm", code: "482913" },
       { kind: "sending", bytes: 5, total: 10, route: "lan" },
-      { kind: "done" },
+      { kind: "done", peer: PEER, trusted: false },
     ];
-    const api = fakeApi({ transferSendStatus: vi.fn((): Promise<SendView> => Promise.resolve(views.shift() ?? { kind: "done" })) });
+    const api = fakeApi({
+      transferSendStatus: vi.fn((): Promise<SendView> => Promise.resolve(views.shift() ?? { kind: "done", peer: PEER, trusted: false })),
+    });
     const { store, flush, timers } = harness(api);
     await store.getState().open();
     await store.getState().offerDocuments(["a", "b"], true);
@@ -103,7 +118,11 @@ describe("transfer store", () => {
     expect(api.transferDecide).toHaveBeenCalledWith("s1", true);
     await flush();
     await flush();
-    expect(store.getState().send).toEqual({ kind: "done" });
+    expect(store.getState().send).toEqual({ kind: "done", peer: PEER, trusted: false });
+    // "Save this device" marks it trusted on the done card.
+    expect(await store.getState().saveDevice(PEER, "Laptop")).toBe(true);
+    expect(api.transferTrust).toHaveBeenCalledWith(PEER, "Laptop");
+    expect(store.getState().send).toEqual({ kind: "done", peer: PEER, trusted: true });
     expect(api.transferForeground).toHaveBeenCalled();
     expect(api.transferForegroundStop).toHaveBeenCalled();
     // Finished: no more polling.
@@ -114,7 +133,7 @@ describe("transfer store", () => {
     const views: ReceiveView[] = [
       { kind: "confirm", code: "111222" },
       { kind: "receiving", bytes: 1, total: 2, route: "relay" },
-      { kind: "done", documentIds: ["x"], duplicates: 0 },
+      { kind: "done", documentIds: ["x"], duplicates: 0, signatures: 0, moved: false, peer: PEER, trusted: true },
     ];
     const api = fakeApi({ transferReceiveStatus: vi.fn((): Promise<ReceiveView> => Promise.resolve(views.shift() ?? { kind: "connecting" })) });
     const { store, flush, received } = harness(api);
@@ -124,9 +143,57 @@ describe("transfer store", () => {
     await flush();
     await flush();
     await flush();
-    expect(store.getState().receive).toEqual({ kind: "done", documentIds: ["x"], duplicates: 0 });
+    expect(store.getState().receive).toEqual({
+      kind: "done",
+      documentIds: ["x"],
+      duplicates: 0,
+      signatures: 0,
+      moved: false,
+      peer: PEER,
+      trusted: true,
+    });
     expect(received).toEqual([["x"]]);
     expect(api.transferResumable).toHaveBeenCalledTimes(2);
+  });
+
+  it("pushes to a trusted device and picks up a push while the Receive tab is open", async () => {
+    let incoming = [{ id: "r9", deviceName: "Laptop" }];
+    const api = fakeApi({
+      transferTrusted: vi.fn(() => Promise.resolve([{ endpointId: PEER, name: "Laptop", addedAt: 1, lastSeenAt: null }])),
+      transferIncoming: vi.fn(() => {
+        const out = incoming;
+        incoming = [];
+        return Promise.resolve(out);
+      }),
+    });
+    const { store, flush } = harness(api);
+    await store.getState().open();
+    expect(store.getState().trusted).toHaveLength(1);
+    await store.getState().pingTrusted();
+    expect(store.getState().pings[PEER]).toEqual({ online: true, ready: true });
+    const device = store.getState().trusted[0];
+    if (!device) throw new Error("no device");
+    await store.getState().pushTo(device, ["a"], false);
+    expect(api.transferPush).toHaveBeenCalledWith(PEER, ["a"], false);
+    expect(store.getState().push?.deviceName).toBe("Laptop");
+
+    store.getState().resetSend();
+    await store.getState().setReceiving(true);
+    expect(api.transferReceiving).toHaveBeenCalledWith(true);
+    for (let i = 0; i < 4; i += 1) await flush();
+    expect(store.getState().receiveId).toBe("r9");
+    expect(store.getState().incomingFrom).toBe("Laptop");
+  });
+
+  it("previews and offers a library move", async () => {
+    const api = fakeApi();
+    const { store } = harness(api);
+    await store.getState().open();
+    await store.getState().loadMoveSummary();
+    expect(store.getState().moveSummary?.documents).toBe(2);
+    await store.getState().moveOffer();
+    expect(store.getState().moving).toBe(true);
+    expect(store.getState().offer?.sessionId).toBe("m1");
   });
 
   it("asks Rust to close but keeps a running send visible", async () => {

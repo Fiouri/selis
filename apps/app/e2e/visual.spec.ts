@@ -358,6 +358,31 @@ for (const lang of LANGS) {
         await expect(page).toHaveScreenshot(shot("transfer-receive"));
       });
 
+      test(`transfer devices and move (${theme})`, async ({ page }) => {
+        await page.goto("/");
+        await addToLibrary(page, "greek.pdf", c.greek);
+        const deviceNames: [string, string] =
+          lang === "en" ? ["Maria's laptop", "Office tablet"] : ["Λάπτοπ της Μαρίας", "Tablet γραφείου"];
+        await page.evaluate((names) => {
+          type Device = { id: string; name: string; online: boolean; ready: boolean };
+          const hooks = (window as unknown as { __selisTest: { transfer: { devices: (l: Device[]) => void } } }).__selisTest
+            .transfer;
+          hooks.devices([
+            { id: "1".repeat(64), name: names[0], online: true, ready: true },
+            { id: "2".repeat(64), name: names[1], online: false, ready: false },
+          ]);
+        }, deviceNames);
+        await page.getByRole("navigation").getByRole("button", { name: ui(lang, "tabs.transfer") }).click();
+        await page.getByTestId("transfer-doc").first().click();
+        await expect(page.locator('[data-testid="trusted-device"][data-status="offline"]')).toHaveCount(1);
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("transfer-devices"), { fullPage: true });
+        await page.getByTestId("transfer-move-open").click();
+        await expect(page.getByTestId("transfer-move-summary")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("transfer-move"));
+      });
+
       test(`recent (${theme})`, async ({ page }) => {
         await page.goto("/");
         await stockLibrary(page, lang);

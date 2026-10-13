@@ -156,7 +156,7 @@ async fn send(service: &TransferService, a: &Args) -> anyhow::Result<()> {
                 title,
                 name,
                 path,
-                history: vec![],
+                ..Default::default()
             })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
@@ -243,7 +243,7 @@ async fn receive(service: &TransferService, a: &Args) -> anyhow::Result<()> {
                     rss()
                 );
             }
-            Some(ReceiveState::Done { items }) => {
+            Some(ReceiveState::Done { items, .. }) => {
                 let secs = started.elapsed().as_secs_f64();
                 for i in items {
                     println!(

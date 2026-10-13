@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-transfer-untrust"
+description = "Enables the transfer_untrust command without any pre-configured scope."
+commands.allow = ["transfer_untrust"]
+
+[[permission]]
+identifier = "deny-transfer-untrust"
+description = "Denies the transfer_untrust command without any pre-configured scope."
+commands.deny = ["transfer_untrust"]

@@ -20,6 +20,8 @@ pub const TICKET_LIFETIME_SECS: u64 = 10 * 60;
 pub const MAX_TICKET_CHARS: usize = 2048;
 /// Most direct addresses kept in a ticket (more only makes the QR code denser).
 pub const MAX_TICKET_ADDRS: usize = 16;
+/// How far apart two devices' clocks may be (receiver-side expiry check).
+pub const CLOCK_SKEW_SECS: u64 = 5 * 60;
 /// Link scheme and path prefix of the paste fallback.
 pub const LINK_PREFIX: &str = "selis://transfer/";
 
@@ -97,9 +99,14 @@ impl TransferTicket {
         Self::decode_string(body).map_err(|_| TicketError::Malformed)
     }
 
-    /// Whether the ticket can still be used at `now` (unix seconds).
+    /// Whether the ticket may still be used at `now` (unix seconds), by this
+    /// device's clock. Two phones' clocks differ by seconds or minutes, so the
+    /// receiver allows [`CLOCK_SKEW_SECS`] either way and refuses only what is
+    /// clearly expired or claims an impossible lifetime; the sender, whose clock
+    /// set the expiry, enforces it exactly.
     pub fn is_valid_at(&self, now: u64) -> bool {
-        now < self.expires_at && self.expires_at <= now.saturating_add(TICKET_LIFETIME_SECS)
+        now < self.expires_at.saturating_add(CLOCK_SKEW_SECS)
+            && self.expires_at <= now.saturating_add(TICKET_LIFETIME_SECS + CLOCK_SKEW_SECS)
     }
 }
 
@@ -163,13 +170,20 @@ mod tests {
     }
 
     #[test]
-    fn expires() {
+    fn expires_allowing_for_clock_differences() {
         let t = ticket();
         assert!(t.is_valid_at(1_000));
-        assert!(!t.is_valid_at(t.expires_at));
-        // A ticket claiming to live longer than a ticket can (clock games) is refused.
+        // The sender's clock may be behind ours: a little past expiry still goes
+        // to the sender, which decides.
+        assert!(t.is_valid_at(t.expires_at + CLOCK_SKEW_SECS - 1));
+        assert!(!t.is_valid_at(t.expires_at + CLOCK_SKEW_SECS));
+        // …or ahead of ours (seen between two phones).
+        let mut ahead = t.clone();
+        ahead.expires_at = 1_000 + TICKET_LIFETIME_SECS + 90;
+        assert!(ahead.is_valid_at(1_000));
+        // A lifetime no ticket can have is refused.
         let mut long = t.clone();
-        long.expires_at = 1_000 + TICKET_LIFETIME_SECS + 60;
+        long.expires_at = 1_000 + TICKET_LIFETIME_SECS + CLOCK_SKEW_SECS + 1;
         assert!(!long.is_valid_at(1_000));
     }
 }

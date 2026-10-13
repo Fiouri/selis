@@ -485,6 +485,17 @@ export function installMockIpc(): void {
     importBytes: (name, bytes) =>
       importDocument(registerMockFile(new File([new Uint8Array(bytes)], name, { type: "application/pdf" })), name),
     localOnly: () => loadSettings().localOnly,
+    allDocumentIds: () => listDocuments({ search: "", filter: "all", tagId: null, sort: "recent" }).map((d) => d.id),
+    summary: () => {
+      const all = listDocuments({ search: "", filter: "all", tagId: null, sort: "recent" });
+      return {
+        documents: all.length,
+        versions: all.reduce((n, d) => n + Math.max(0, versionCount(d.id) - 1), 0),
+        tags: tags.size,
+        signatures: signatures.size,
+        bytes: all.reduce((n, d) => n + d.sizeBytes, 0),
+      };
+    },
   });
   (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.transfer = transfer.hooks;
   mockIPC(async (cmd, payload) => {

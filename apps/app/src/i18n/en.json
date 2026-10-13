@@ -167,7 +167,8 @@
       "storage": "The files couldn’t be read or saved. Check the free space.",
       "cancelled": "Cancelled.",
       "invalidLink": "That isn’t a Selis transfer link.",
-      "openFailed": "Transfer couldn’t start. Try again."
+      "openFailed": "Transfer couldn’t start. Try again.",
+      "notReady": "The other device isn't ready. Open Selis › Transfer › Receive on it, and check that it saved this device."
     },
     "notify": {
       "channel": "Transfers",
@@ -178,6 +179,46 @@
     "debug": {
       "forceRelay": "Force relay (debug build)",
       "forceRelayHelp": "Applies the next time this screen opens."
+    },
+    "trust": {
+      "sectionTitle": "Your devices",
+      "sectionHelp": "Send with one tap, no QR code. Open Receive on the other device first.",
+      "ready": "Ready",
+      "online": "Online · open Receive on it",
+      "offline": "Not reachable",
+      "checking": "Checking…",
+      "send": "Send",
+      "sendTo": "Send to {name}",
+      "remove": "Remove",
+      "removeLabel": "Remove {name}",
+      "removeTitle": "Remove {name}?",
+      "removeBody": "It will need a QR code and the confirmation code again, and can no longer send here without them.",
+      "save": "Save this device",
+      "saveTitle": "Save this device",
+      "saveHelp": "Next time, send to it with one tap. It can also send here while your Receive tab is open.",
+      "nameLabel": "Device name",
+      "defaultName": "My other device",
+      "saveConfirm": "Save",
+      "saved": "Device saved",
+      "sendingTo": "Sending to {name}",
+      "waitingFor": "Waiting for {name}…",
+      "from": "From {name}",
+      "receiveHint": "Your saved devices can send here while this tab is open."
+    },
+    "move": {
+      "open": "Move whole library…",
+      "title": "Move your library",
+      "body": "Everything goes: documents with their versions, tags, favorites, signatures and settings. This device's key stays here.",
+      "documents": "{count, plural, one {# document} other {# documents}}",
+      "versions": "{count, plural, one {# earlier version} other {# earlier versions}}",
+      "tags": "{count, plural, one {# tag} other {# tags}}",
+      "signatures": "{count, plural, one {# signature} other {# signatures}}",
+      "size": "{size} in total",
+      "repeatNote": "Documents the other device already has are skipped.",
+      "qr": "Show QR code",
+      "toDevice": "Move to {name}",
+      "empty": "Your library is empty.",
+      "movedBody": "Signatures and settings came along."
     }
   },
   "settings": {

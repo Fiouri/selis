@@ -78,6 +78,8 @@ fn manifest_parser_never_panics_and_round_trips() {
         size: 10,
         blake3: Hash::new(b"a"),
         history: vec![],
+        tags: vec!["Work".into()],
+        favorite: true,
     }])
     .to_bytes();
     let mut rng = Rng(0xfeed_beef);

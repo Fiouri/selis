@@ -12,6 +12,13 @@
 //! `transfers` table and continues with `transfer_resume`, also after the app
 //! was killed.
 //!
+//! Trusted devices (P3b, ADR 0014): after a transfer the user may save the
+//! other device; then it can send here without QR code while the Receive tab is
+//! open (`transfer_receiving`, `transfer_incoming`), and sends to it skip the
+//! code (`transfer_push`). A library move (`transfer_move_*`) sends every
+//! document with its versions, tags and favorite flag, the saved signatures and
+//! the settings — never the device key — deduplicated by BLAKE3 on arrival.
+//!
 //! Long-running commands take a request id (ADR 0005).
 
 use std::collections::HashMap;
@@ -20,11 +27,13 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use selis_core::{
-    Library, ReceivedDocument, ReceivedFile, TransferDirection, TransferRowState, TransferUpdate,
+    Library, LibraryQuery, LibrarySummary, ReceivedDocument, ReceivedFile, TransferDirection,
+    TransferRowState, TransferUpdate, TrustedDevice,
 };
 use selis_transfer::{
-    Network, OfferItem, OfferVersion, ReceiveState, ResumeInfo, Route, SendState, ServiceConfig,
-    TransferError, TransferService, TransferTicket, qr,
+    EndpointId, Have, Network, OfferItem, OfferLibrary, OfferSignature, OfferVersion, ReceiveState,
+    ResumeInfo, Route, SendState, ServiceConfig, TransferError, TransferService, TransferTicket,
+    qr,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -55,6 +64,8 @@ pub enum TransferErrorCode {
     Cancelled,
     /// Not a Selis transfer link.
     InvalidLink,
+    /// A trusted device that does not trust this one, or whose Receive tab is closed.
+    NotReady,
 }
 
 impl From<TransferError> for TransferErrorCode {
@@ -70,6 +81,7 @@ impl From<TransferError> for TransferErrorCode {
             TransferError::Protocol => Self::Protocol,
             TransferError::Storage => Self::Storage,
             TransferError::Cancelled => Self::Cancelled,
+            TransferError::NotReady => Self::NotReady,
         }
     }
 }
@@ -118,7 +130,12 @@ pub enum SendView {
         #[specta(type = specta_typescript::Number)]
         total: u64,
     },
-    Done,
+    /// `peer`: the device that received (hex id); `trusted`: already saved.
+    #[serde(rename_all = "camelCase")]
+    Done {
+        peer: Option<String>,
+        trusted: bool,
+    },
     #[serde(rename_all = "camelCase")]
     Failed {
         error: TransferErrorCode,
@@ -148,6 +165,13 @@ pub enum ReceiveView {
     Done {
         document_ids: Vec<String>,
         duplicates: u32,
+        /// Signatures added (library move).
+        signatures: u32,
+        /// A library move (settings applied too).
+        moved: bool,
+        /// The sending device (hex id) and whether it is already trusted.
+        peer: Option<String>,
+        trusted: bool,
     },
     /// Stopped mid-way (connection lost, app stopped, Android's daily limit):
     /// `transfer_resume` continues without fetching again what arrived.
@@ -209,6 +233,22 @@ pub struct OfferView {
     /// Unix seconds after which the code is refused.
     #[specta(type = specta_typescript::Number)]
     pub expires_at: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PingView {
+    pub online: bool,
+    /// Its Receive tab is open and it trusts this device: a send can start.
+    pub ready: bool,
+}
+
+/// A receive a trusted device started (its Receive tab shows it).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct IncomingView {
+    pub id: String,
+    pub device_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -376,8 +416,14 @@ pub async fn transfer_open<R: Runtime>(
     };
     #[cfg(not(debug_assertions))]
     let force_relay = false;
+    // Files the library already has (same BLAKE3) are never fetched again.
+    let lib = Arc::clone(&library);
+    let have = Have(Arc::new(move |hash: &selis_transfer::Hash| {
+        lib.file_with_hash(&hash.to_hex())
+    }));
     let config = ServiceConfig {
         force_relay,
+        have: Some(have),
         ..ServiceConfig::new(key, base.join("store"), network)
     };
     #[cfg(target_os = "android")]
@@ -385,6 +431,7 @@ pub async fn transfer_open<R: Runtime>(
     let service = TransferService::start(config)
         .await
         .map_err(|e| err(ErrorCode::Io, e.to_string()))?;
+    service.set_trusted(trusted_ids(&library));
     let info = TransferInfo {
         device_id: service.endpoint_id().to_string(),
         network: view,
@@ -435,7 +482,7 @@ async fn close_now<R: Runtime>(app: &AppHandle<R>, state: &TransferState, librar
         task.abort();
         let finished = matches!(
             lock(&state.sends).get(&session),
-            Some(SendView::Done | SendView::Failed { .. })
+            Some(SendView::Done { .. } | SendView::Failed { .. })
         );
         if !finished {
             let _ = library.transfer_update(
@@ -550,26 +597,7 @@ async fn offer(
         return Err(err(ErrorCode::InvalidArgument, "choose documents to send"));
     }
     let service = state.service().await?;
-    let mut items = Vec::new();
-    let mut total: u64 = 0;
-    for id in &document_ids {
-        let out = library.outgoing(id, include_history)?;
-        let title = out.title.trim().to_owned();
-        let name = format!("{}.pdf", if title.is_empty() { "document" } else { &title });
-        for path in std::iter::once(&out.current).chain(out.history.iter().map(|(p, _)| p)) {
-            total += std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-        }
-        items.push(OfferItem {
-            title,
-            name: sanitize_name(&name),
-            path: out.current,
-            history: out
-                .history
-                .into_iter()
-                .map(|(path, created_at)| OfferVersion { path, created_at })
-                .collect(),
-        });
-    }
+    let (items, total) = offer_items(&library, &document_ids, include_history, false)?;
     let doc_count = u32::try_from(items.len()).unwrap_or(u32::MAX);
     let (session_id, ticket) = service
         .offer(items)
@@ -607,6 +635,83 @@ async fn offer(
     })
 }
 
+/// The documents as offered: current file, optionally history, and for a
+/// library move their tags and favorite flag. Returns them with the bytes to send.
+fn offer_items(
+    library: &Library,
+    document_ids: &[String],
+    include_history: bool,
+    with_metadata: bool,
+) -> CommandResult<(Vec<OfferItem>, u64)> {
+    let mut items = Vec::new();
+    let mut total: u64 = 0;
+    for id in document_ids {
+        let out = library.outgoing(id, include_history)?;
+        let title = out.title.trim().to_owned();
+        let name = format!("{}.pdf", if title.is_empty() { "document" } else { &title });
+        for path in std::iter::once(&out.current).chain(out.history.iter().map(|(p, _)| p)) {
+            total += std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        }
+        let (tags, favorite) = if with_metadata {
+            (
+                library.document_tag_names(id)?,
+                library.get_document(id)?.favorite,
+            )
+        } else {
+            (vec![], false)
+        };
+        items.push(OfferItem {
+            title,
+            name: sanitize_name(&name),
+            path: out.current,
+            history: out
+                .history
+                .into_iter()
+                .map(|(path, created_at)| OfferVersion { path, created_at })
+                .collect(),
+            tags,
+            favorite,
+        });
+    }
+    Ok((items, total))
+}
+
+/// Everything a library move carries besides the documents.
+fn library_extras(library: &Library) -> CommandResult<OfferLibrary> {
+    let signatures = library
+        .list_signatures()?
+        .into_iter()
+        .map(|s| OfferSignature {
+            id: s.id,
+            kind: s.kind.as_str().to_owned(),
+            path: PathBuf::from(s.path),
+            created_at: s.created_at,
+        })
+        .collect();
+    let settings = library.settings()?.into_iter().collect();
+    Ok(OfferLibrary {
+        signatures,
+        settings,
+    })
+}
+
+fn all_document_ids(library: &Library) -> CommandResult<Vec<String>> {
+    Ok(library
+        .list_documents(&LibraryQuery::default())?
+        .into_iter()
+        .map(|d| d.id)
+        .collect())
+}
+
+fn trusted_ids(library: &Library) -> Vec<EndpointId> {
+    library
+        .trusted_devices()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|d| d.endpoint_id.parse().ok())
+        .collect()
+}
+
 /// File names in the manifest: no path separators or control characters.
 fn sanitize_name(name: &str) -> String {
     let cleaned: String = name
@@ -641,7 +746,10 @@ fn send_view(s: SendState) -> SendView {
             route: route.into(),
         },
         SendState::Interrupted { bytes, total } => SendView::Interrupted { bytes, total },
-        SendState::Done => SendView::Done,
+        SendState::Done => SendView::Done {
+            peer: None,
+            trusted: false,
+        },
         SendState::Failed { error } => SendView::Failed {
             error: error.into(),
         },
@@ -669,9 +777,24 @@ async fn track_send(
             lock(&state.sends).remove(&session);
             return;
         };
-        let view = send_view(s);
+        let mut view = send_view(s);
+        if let SendView::Done { peer, trusted } = &mut view
+            && let Some(id) = service.send_peer(&session)
+        {
+            let hex = id.to_string();
+            *trusted = library.trusted_device(&hex).ok().flatten().is_some();
+            let _ = library.touch_trusted_device(&hex);
+            let _ = library.transfer_update(
+                &row,
+                &TransferUpdate {
+                    peer: Some(hex.clone()),
+                    ..Default::default()
+                },
+            );
+            *peer = Some(hex);
+        }
         let finished = match &view {
-            SendView::Done => Some((TransferRowState::Done, None)),
+            SendView::Done { .. } => Some((TransferRowState::Done, None)),
             SendView::Failed { error } => Some((
                 if *error == TransferErrorCode::Cancelled {
                     TransferRowState::Cancelled
@@ -917,6 +1040,13 @@ pub async fn transfer_receive_status(
         TransferRowState::Done => ReceiveView::Done {
             document_ids: vec![],
             duplicates: 0,
+            signatures: 0,
+            moved: false,
+            trusted: row
+                .peer
+                .as_deref()
+                .is_some_and(|p| library.trusted_device(p).ok().flatten().is_some()),
+            peer: row.peer.clone(),
         },
         TransferRowState::Active | TransferRowState::Interrupted if row.resume.is_some() => {
             ReceiveView::Paused {
@@ -1021,55 +1151,88 @@ async fn track_receive<R: Runtime>(
             );
         }
         match s {
-            ReceiveState::Done { items } => {
+            ReceiveState::Done {
+                items,
+                library: extras,
+            } => {
                 lock(&state.receives).insert(id.clone(), ReceiveView::Saving);
                 let total: u64 = items.iter().map(|i| i.size).sum();
-                let docs: Vec<ReceivedDocument> = items
-                    .into_iter()
-                    .map(|i| ReceivedDocument {
-                        title: i.title,
-                        current: ReceivedFile {
-                            path: i.path,
-                            blake3: i.blake3,
-                            created_at: None,
-                        },
-                        history: i
-                            .history
-                            .into_iter()
-                            .map(|v| ReceivedFile {
-                                path: v.path,
-                                blake3: v.blake3,
-                                created_at: Some(v.created_at),
-                            })
-                            .collect(),
-                    })
-                    .collect();
                 let lib = Arc::clone(&library);
                 let imported = tauri::async_runtime::spawn_blocking(move || {
                     let mut ids = Vec::new();
                     let mut duplicates = 0u32;
-                    for doc in &docs {
-                        let out = lib.import_received(doc)?;
+                    let count = items.len();
+                    for i in items {
+                        let doc = ReceivedDocument {
+                            title: i.title,
+                            current: ReceivedFile {
+                                path: i.path,
+                                blake3: i.blake3,
+                                created_at: None,
+                            },
+                            history: i
+                                .history
+                                .into_iter()
+                                .map(|v| ReceivedFile {
+                                    path: v.path,
+                                    blake3: v.blake3,
+                                    created_at: Some(v.created_at),
+                                })
+                                .collect(),
+                        };
+                        let out = lib.import_received(&doc)?;
                         if out.duplicate {
                             duplicates += 1;
                         }
+                        lib.apply_received_metadata(&out.document.id, &i.tags, i.favorite)?;
                         ids.push(out.document.id);
                     }
-                    Ok::<_, selis_core::Error>((ids, duplicates, docs.len()))
+                    // A library move: signatures (by id) and settings.
+                    let mut signatures = 0u32;
+                    let moved = extras.is_some();
+                    if let Some(extras) = extras {
+                        for s in &extras.signatures {
+                            if lib.import_received_signature(&s.id, &s.kind, &s.path)? {
+                                signatures += 1;
+                            }
+                        }
+                        if let Ok(patch) = serde_json::from_value::<settings::SettingsPatch>(
+                            serde_json::Value::Object(extras.settings),
+                        ) && let Err(e) = settings::apply_patch(&lib, patch)
+                        {
+                            eprintln!("selis: moved settings not applied: {}", e.message);
+                        }
+                    }
+                    Ok::<_, selis_core::Error>((ids, duplicates, count, signatures, moved))
                 })
                 .await;
                 let _ = std::fs::remove_dir_all(&dest);
+                let peer = service
+                    .pushed_by(&session)
+                    .map(|p| p.to_string())
+                    .or_else(|| library.transfer(&id).ok().flatten().and_then(|r| r.peer));
+                let trusted = peer
+                    .as_deref()
+                    .is_some_and(|p| library.trusted_device(p).ok().flatten().is_some());
+                if let Some(p) = &peer {
+                    let _ = library.touch_trusted_device(p);
+                }
                 let (view, update) = match imported {
-                    Ok(Ok((document_ids, duplicates, count))) => (
+                    Ok(Ok((document_ids, duplicates, count, signatures, moved))) => (
                         ReceiveView::Done {
                             document_ids,
                             duplicates,
+                            signatures,
+                            moved,
+                            peer: peer.clone(),
+                            trusted,
                         },
                         TransferUpdate {
                             state: Some(TransferRowState::Done),
                             doc_count: Some(u32::try_from(count).unwrap_or(u32::MAX)),
                             done_bytes: Some(total),
                             total_bytes: Some(total),
+                            peer,
                             ..Default::default()
                         },
                     ),
@@ -1189,6 +1352,301 @@ pub async fn transfer_foreground_stop<R: Runtime>(app: AppHandle<R>) -> CommandR
     #[cfg(not(target_os = "android"))]
     let _ = app;
     Ok(())
+}
+
+/// Folder for pushed receives (each gets a subfolder named by its session).
+fn push_dir<R: Runtime>(app: &AppHandle<R>) -> CommandResult<PathBuf> {
+    Ok(store_dir(app)?.join("in").join("pushed"))
+}
+
+/// The Receive tab is open (`true`) or not: trusted devices may push only while it is.
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_receiving<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, Arc<TransferState>>,
+    on: bool,
+) -> CommandResult<()> {
+    let service = state.service().await?;
+    service.set_receiving(if on { Some(push_dir(&app)?) } else { None });
+    Ok(())
+}
+
+/// Receives started by trusted devices since the last call; each is tracked
+/// like a scanned one (`transfer_receive_status`).
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_incoming<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, Arc<TransferState>>,
+    library: State<'_, Arc<Library>>,
+) -> CommandResult<Vec<IncomingView>> {
+    let mut open = state.open.lock().await;
+    let o = open.as_mut().ok_or_else(not_open)?;
+    let mut out = Vec::new();
+    for (session, peer) in o.service.take_incoming() {
+        let hex = peer.to_string();
+        let id = library.transfer_start(TransferDirection::Receive)?;
+        library.transfer_update(
+            &id,
+            &TransferUpdate {
+                peer: Some(hex.clone()),
+                ..Default::default()
+            },
+        )?;
+        lock(&state.receives).insert(id.clone(), ReceiveView::Connecting);
+        let dest = push_dir(&app)?.join(&session);
+        let task = tauri::async_runtime::spawn(track_receive(
+            app.clone(),
+            Arc::clone(&state),
+            Arc::clone(&library),
+            Arc::clone(&o.service),
+            session.clone(),
+            id.clone(),
+            dest,
+        ));
+        o.trackers.insert(id.clone(), task);
+        o.sessions.insert(id.clone(), session);
+        out.push(IncomingView {
+            id,
+            device_name: library.trusted_device(&hex)?.map(|d| d.name),
+        });
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_trusted(
+    library: State<'_, Arc<Library>>,
+) -> CommandResult<Vec<TrustedDevice>> {
+    Ok(library.trusted_devices()?)
+}
+
+/// Saves the device of a finished transfer (or renames a saved one).
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_trust(
+    state: State<'_, Arc<TransferState>>,
+    library: State<'_, Arc<Library>>,
+    endpoint_id: String,
+    name: String,
+) -> CommandResult<TrustedDevice> {
+    let device = library.trust_device(&endpoint_id, &name)?;
+    if let Ok(service) = state.service().await {
+        service.set_trusted(trusted_ids(&library));
+    }
+    Ok(device)
+}
+
+/// Removes trust at once: no more pushes from it, sends to it need a code again.
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_untrust(
+    state: State<'_, Arc<TransferState>>,
+    library: State<'_, Arc<Library>>,
+    endpoint_id: String,
+) -> CommandResult<()> {
+    library.untrust_device(&endpoint_id)?;
+    if let Ok(service) = state.service().await {
+        service.set_trusted(trusted_ids(&library));
+    }
+    Ok(())
+}
+
+fn parse_device(endpoint_id: &str) -> CommandResult<EndpointId> {
+    endpoint_id
+        .parse()
+        .map_err(|_| err(ErrorCode::InvalidArgument, "device id"))
+}
+
+/// Whether a trusted device is reachable and ready (Receive tab open, trusts us).
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_ping(
+    state: State<'_, Arc<TransferState>>,
+    library: State<'_, Arc<Library>>,
+    endpoint_id: String,
+) -> CommandResult<PingView> {
+    let target = parse_device(&endpoint_id)?;
+    if library.trusted_device(&endpoint_id)?.is_none() {
+        return Err(err(ErrorCode::NotFound, "not a trusted device"));
+    }
+    let service = state.service().await?;
+    Ok(match service.ping(target).await {
+        Ok(receiving) => PingView {
+            online: true,
+            ready: receiving,
+        },
+        Err(TransferError::NotReady) => PingView {
+            online: true,
+            ready: false,
+        },
+        Err(_) => PingView {
+            online: false,
+            ready: false,
+        },
+    })
+}
+
+/// Sends documents to a trusted device with its Receive tab open: no QR code, no code.
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_push(
+    state: State<'_, Arc<TransferState>>,
+    library: State<'_, Arc<Library>>,
+    results: State<'_, Arc<RequestResults>>,
+    request_id: String,
+    endpoint_id: String,
+    document_ids: Vec<String>,
+    include_history: bool,
+) -> CommandResult<String> {
+    let state = Arc::clone(&state);
+    let library = Arc::clone(&library);
+    results
+        .run_once(&request_id, "transfer_push", async move {
+            if document_ids.is_empty() {
+                return Err(err(ErrorCode::InvalidArgument, "choose documents to send"));
+            }
+            let (items, total) = offer_items(&library, &document_ids, include_history, false)?;
+            push(state, library, endpoint_id, items, None, total).await
+        })
+        .await
+}
+
+async fn push(
+    state: Arc<TransferState>,
+    library: Arc<Library>,
+    endpoint_id: String,
+    items: Vec<OfferItem>,
+    extras: Option<OfferLibrary>,
+    total: u64,
+) -> CommandResult<String> {
+    let target = parse_device(&endpoint_id)?;
+    if library.trusted_device(&endpoint_id)?.is_none() {
+        return Err(err(ErrorCode::NotFound, "not a trusted device"));
+    }
+    let service = state.service().await?;
+    let doc_count = u32::try_from(items.len()).unwrap_or(u32::MAX);
+    let session_id = service
+        .push(target, items, extras)
+        .await
+        .map_err(|e| err(ErrorCode::Io, e.to_string()))?;
+    let row = library.transfer_start(TransferDirection::Send)?;
+    library.transfer_update(
+        &row,
+        &TransferUpdate {
+            doc_count: Some(doc_count),
+            total_bytes: Some(total),
+            peer: Some(endpoint_id),
+            ..Default::default()
+        },
+    )?;
+    lock(&state.sends).insert(session_id.clone(), SendView::WaitingForReceiver);
+    let task = tauri::async_runtime::spawn(track_send(
+        Arc::clone(&state),
+        library,
+        service,
+        session_id.clone(),
+        row.clone(),
+    ));
+    if let Some(o) = state.open.lock().await.as_mut() {
+        o.send_tasks.insert(session_id.clone(), (task, row));
+    }
+    Ok(session_id)
+}
+
+/// What a library move would send (the dry run shown before it starts).
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_move_summary(
+    library: State<'_, Arc<Library>>,
+) -> CommandResult<LibrarySummary> {
+    Ok(library.library_summary()?)
+}
+
+/// Offers the whole library (QR code + link), for a new phone.
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_move_offer(
+    state: State<'_, Arc<TransferState>>,
+    library: State<'_, Arc<Library>>,
+    results: State<'_, Arc<RequestResults>>,
+    request_id: String,
+) -> CommandResult<OfferView> {
+    let state = Arc::clone(&state);
+    let library = Arc::clone(&library);
+    results
+        .run_once(&request_id, "transfer_move_offer", async move {
+            let ids = all_document_ids(&library)?;
+            if ids.is_empty() {
+                return Err(err(ErrorCode::InvalidArgument, "the library is empty"));
+            }
+            let service = state.service().await?;
+            let (items, total) = offer_items(&library, &ids, true, true)?;
+            let extras = library_extras(&library)?;
+            let doc_count = u32::try_from(items.len()).unwrap_or(u32::MAX);
+            let (session_id, ticket) = service
+                .offer_with(items, Some(extras), None)
+                .await
+                .map_err(|e| err(ErrorCode::Io, e.to_string()))?;
+            let link = ticket.to_link();
+            let qr_svg = qr::svg(&link).ok_or_else(|| err(ErrorCode::Internal, "QR code"))?;
+            let row = library.transfer_start(TransferDirection::Send)?;
+            library.transfer_update(
+                &row,
+                &TransferUpdate {
+                    doc_count: Some(doc_count),
+                    total_bytes: Some(total),
+                    ..Default::default()
+                },
+            )?;
+            lock(&state.sends).insert(session_id.clone(), SendView::WaitingForReceiver);
+            let task = tauri::async_runtime::spawn(track_send(
+                Arc::clone(&state),
+                library,
+                service,
+                session_id.clone(),
+                row.clone(),
+            ));
+            if let Some(o) = state.open.lock().await.as_mut() {
+                o.send_tasks.insert(session_id.clone(), (task, row));
+            }
+            Ok(OfferView {
+                session_id,
+                link,
+                qr_svg,
+                doc_count,
+                total_bytes: total,
+                expires_at: ticket.expires_at,
+            })
+        })
+        .await
+}
+
+/// Moves the whole library to a trusted device with its Receive tab open.
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_move_push(
+    state: State<'_, Arc<TransferState>>,
+    library: State<'_, Arc<Library>>,
+    results: State<'_, Arc<RequestResults>>,
+    request_id: String,
+    endpoint_id: String,
+) -> CommandResult<String> {
+    let state = Arc::clone(&state);
+    let library = Arc::clone(&library);
+    results
+        .run_once(&request_id, "transfer_move_push", async move {
+            let ids = all_document_ids(&library)?;
+            if ids.is_empty() {
+                return Err(err(ErrorCode::InvalidArgument, "the library is empty"));
+            }
+            let (items, total) = offer_items(&library, &ids, true, true)?;
+            let extras = library_extras(&library)?;
+            push(state, library, endpoint_id, items, Some(extras), total).await
+        })
+        .await
 }
 
 /// Asks for the notification permission (Android 13+) before the first
