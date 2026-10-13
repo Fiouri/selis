@@ -11,7 +11,7 @@
 #   transfer.sh post <serial>             (POST_RUN) the fixture is in the library, the Transfer
 #                                         screen was left so no socket remains, stops the peer
 #   transfer.sh pre-recover <serial>      (PRE_RUN of transfer-recover.yaml, debug build) clears the
-#                                         app, makes offered codes expire after 15 s
+#                                         app, makes offered codes expire after 60 s
 #                                         (debug.selis.ticket_lifetime), starts the dev peer sending a
 #                                         200 MB file that drops out once data flows, opens its link
 #   transfer.sh post-recover <serial>     (POST_RUN) the peer dropped out, nothing was received or
@@ -110,13 +110,15 @@ case "$cmd" in
     fi
     adb_ shell pm clear "$pkg" >/dev/null
     adb_ shell pm grant "$pkg" android.permission.POST_NOTIFICATIONS
-    adb_ shell setprop debug.selis.ticket_lifetime 15
+    adb_ shell setprop debug.selis.ticket_lifetime 60
     rm -rf "$state/store-recover"
+    rm -f "$state/peer-recover.log"
     "$peer" send "$(native "$payload")" --yes --drop-after-accept --store "$(native "$state/store-recover")" > "$state/peer-recover.log" 2>&1 &
     echo $! > "$state/peer.pid"
-    for _ in $(seq 1 60); do grep -q '^LINK ' "$state/peer-recover.log" && break; sleep 1; done
+    # Importing 200 MB into the peer's store takes a while on a busy disk.
+    for _ in $(seq 1 180); do grep -q '^LINK ' "$state/peer-recover.log" && break; sleep 1; done
     link="$(sed -n 's/^LINK //p' "$state/peer-recover.log" | tr -d '\r')"
-    [ -n "$link" ] || { echo "FAIL: the peer printed no link" >&2; cat "$state/peer-recover.log" >&2; exit 1; }
+    [ -n "$link" ] || { echo "FAIL: the peer printed no link" >&2; kill "$(cat "$state/peer.pid")" 2>/dev/null; exit 1; }
     adb_ shell am start -W -a android.intent.action.VIEW -d "'$link'" "$pkg" >/dev/null
     echo "OK: vanishing peer sending, link opened"
     ;;

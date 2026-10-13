@@ -1187,6 +1187,16 @@ fn receive_view(s: &ReceiveState) -> ReceiveView {
     }
 }
 
+/// Whether the receive `id` already has a saved point to continue from (a resume):
+/// failing to reach the sender again then pauses it, instead of dropping what arrived.
+fn has_resume_point(library: &Library, id: &str) -> bool {
+    library
+        .transfer(id)
+        .ok()
+        .flatten()
+        .is_some_and(|r| r.resume.is_some())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn track_receive<R: Runtime>(
     app: AppHandle<R>,
@@ -1197,7 +1207,7 @@ async fn track_receive<R: Runtime>(
     id: String,
     dest: PathBuf,
 ) {
-    let mut resume_saved = false;
+    let mut resume_saved = has_resume_point(&library, &id);
     let mut last_persist = Instant::now();
     loop {
         tokio::time::sleep(POLL).await;
@@ -1846,6 +1856,32 @@ mod tests {
             "the open endpoint's store was deleted by the close before it"
         );
         state.close_at(&library, Some(base), async {}).await;
+    }
+
+    /// A resume that cannot reach the sender stays resumable (it was turned into
+    /// "Nothing was received" and its data deleted: a dead end, seen on the AVD).
+    #[test]
+    fn a_resumed_receive_starts_from_its_saved_point() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let library = Library::open(dir.path().to_path_buf()).expect("library");
+        let id = library
+            .transfer_start(TransferDirection::Receive)
+            .expect("row");
+        assert!(
+            !has_resume_point(&library, &id),
+            "a new receive has nothing to resume"
+        );
+        library
+            .transfer_update(
+                &id,
+                &TransferUpdate {
+                    resume: Some(Some("saved".to_owned())),
+                    ..Default::default()
+                },
+            )
+            .expect("update");
+        assert!(has_resume_point(&library, &id));
+        assert!(!has_resume_point(&library, "no-such-row"));
     }
 
     #[test]

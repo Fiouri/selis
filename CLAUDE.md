@@ -108,7 +108,7 @@ Tier 2 — end of every feature:
   And `transfer-recover.yaml` with `PRE_RUN="…/transfer.sh pre-recover"` and
   `POST_RUN="…/transfer.sh post-recover"` (debug build: the peer drops out mid-transfer; the paused
   card gives the reason, counts failed resumes, then "Get a new code"; an offered code expires after
-  15 s via `debug.selis.ticket_lifetime` and "New code" replaces it; nothing left, no socket).
+  60 s via `debug.selis.ticket_lifetime` and "New code" replaces it; nothing left, no socket).
   And `pack.yaml` with `PRE_RUN="…/pack.sh pre"` and `POST_RUN="…/pack.sh check"` (.selispack: plain
   pack by "Open with" from Files, protected pack by the picker after a wrong passphrase, tampered
   pack refused; library holds exactly the three fixtures, no leftovers, packs untouched).

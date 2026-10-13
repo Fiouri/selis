@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { api } from "../../lib/api";
+import { retryOnStartup } from "../../lib/startupRetry";
 import { useNavigation } from "../../state/navigation";
 import { refreshLibrary } from "../library/queries";
 import { usePack } from "./packStore";
@@ -21,19 +22,23 @@ export function TransferBridge() {
 
   useEffect(() => {
     let disposed = false;
-    const check = async () => {
+    /** `false` when the pending link could not be read (asked again later). */
+    const check = async (): Promise<boolean> => {
       let link: string | null;
       try {
         link = await api.pendingTransferLink();
-      } catch {
-        return;
+      } catch (err) {
+        console.warn(`selis: could not read a transfer link (${String(err)})`);
+        return false;
       }
-      if (!link || disposed) return;
+      if (!link || disposed) return true;
       await api.dismissTransferLink(link).catch(() => undefined);
       useNavigation.getState().selectTab("transfer");
       transferStore().getState().setIncomingLink(link);
+      return true;
     };
-    void check();
+    // A cold start may answer the first calls with an error: the camera app's link waits.
+    const stopRetrying = retryOnStartup(check);
 
     let timer = 0;
     const onVisibility = () => {
@@ -47,6 +52,7 @@ export function TransferBridge() {
     const unsubscribe = onDocumentsReceived(() => refreshLibrary(queryClient));
     usePack.setState({ onImported: () => refreshLibrary(queryClient) });
     return () => {
+      stopRetrying();
       disposed = true;
       window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibility);
