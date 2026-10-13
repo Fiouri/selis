@@ -19,6 +19,8 @@
  *            the second move must add nothing; libraries are compared document by document
  *   trusted  after a move, both devices save each other, then --serial sends a document to
  *            --serial2 with one tap while its Receive tab is open
+ *   packseed fills the device from a pack of every PDF in `--dir` made on this computer, then adds
+ *            tags, favorites, a signature, a setting and versions (as `seed`, without the network)
  *   pack     --serial exports its whole library as a .selispack (plain, then with a passphrase);
  *            --serial2 imports each (wrong passphrase first), again (no-op) and a tampered copy
  *            (refused); libraries are compared as for `move` (`--clear2` empties --serial2 per pack)
@@ -458,24 +460,8 @@ async function snapshot(cdp: Cdp): Promise<{ summary: Summary; docs: string[]; s
 const PNG_B64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
 
-async function seed(o: Options, cdp: Cdp): Promise<Result> {
-  if (!o.dir) throw new Error("--dir needed");
-  const dir = resolve(o.dir);
-  const { readdirSync } = await import("node:fs");
-  const files = readdirSync(dir).filter((f) => f.toLowerCase().endsWith(".pdf")).map((f) => join(dir, f));
-  await openTransfer(cdp, "receive");
-  const sender = new Peer(["send", ...files]);
-  const link = (await sender.waitLine(/^LINK /, 120_000)).line.slice(5);
-  const t0 = Date.now();
-  await pasteLink(cdp, link);
-  const code = await waitFor("code", () => cdp.evaluate<string>(`${q("transfer-receive-code")}?.textContent || null`), 120_000);
-  const peerCode = (await sender.waitLine(/^code /, 60_000)).line.slice(5);
-  if (digits(code) !== digits(peerCode)) throw new Error("codes differ");
-  sender.confirm(true);
-  await waitFor("seed received", () => cdp.evaluate<boolean>(`!!${q("transfer-receive-done")}`), 30 * 60_000);
-  const seconds = (Date.now() - t0) / 1000;
-  sender.kill();
-  // What a library holds besides files: tags, favorites, a signature, a setting, versions.
+/** What a library holds besides files: tags, favorites, a signature, a setting, versions. */
+async function decorate(cdp: Cdp): Promise<void> {
   const docs = await invoke<Doc[]>(cdp, "list_documents", { query: { search: "", filter: "all", tagId: null, sort: "name" } });
   const work = await invoke<Tag>(cdp, "create_tag", { name: "Work" });
   const home = await invoke<Tag>(cdp, "create_tag", { name: "Σπίτι" });
@@ -513,6 +499,26 @@ async function seed(o: Options, cdp: Cdp): Promise<Result> {
     });
     await invoke(cdp, "save_version", { requestId: `seed-v-${d.id}`, documentId: d.id, label: "manual" });
   }
+}
+
+async function seed(o: Options, cdp: Cdp): Promise<Result> {
+  if (!o.dir) throw new Error("--dir needed");
+  const dir = resolve(o.dir);
+  const { readdirSync } = await import("node:fs");
+  const files = readdirSync(dir).filter((f) => f.toLowerCase().endsWith(".pdf")).map((f) => join(dir, f));
+  await openTransfer(cdp, "receive");
+  const sender = new Peer(["send", ...files]);
+  const link = (await sender.waitLine(/^LINK /, 120_000)).line.slice(5);
+  const t0 = Date.now();
+  await pasteLink(cdp, link);
+  const code = await waitFor("code", () => cdp.evaluate<string>(`${q("transfer-receive-code")}?.textContent || null`), 120_000);
+  const peerCode = (await sender.waitLine(/^code /, 60_000)).line.slice(5);
+  if (digits(code) !== digits(peerCode)) throw new Error("codes differ");
+  sender.confirm(true);
+  await waitFor("seed received", () => cdp.evaluate<boolean>(`!!${q("transfer-receive-done")}`), 30 * 60_000);
+  const seconds = (Date.now() - t0) / 1000;
+  sender.kill();
+  await decorate(cdp);
   const after = await snapshot(cdp);
   return { files: files.length, seconds, summary: after.summary };
 }
@@ -557,6 +563,19 @@ type PackImportView =
   | { status: "imported"; documentIds: string[]; duplicates: number; signatures: number; settings: boolean }
   | { status: "refused"; problem: string };
 
+function topActivity(serial: string): string {
+  const out = adb(serial, ["shell", "dumpsys", "activity", "activities"]);
+  return /topResumedActivity=(.*)/.exec(out)?.[1] ?? "";
+}
+
+/** Waits for the share sheet, closes it with Back, and waits until Selis is in front again
+ *  (a backgrounded WebView does not deliver IPC replies). */
+async function dismissShareSheet(serial: string): Promise<void> {
+  await waitFor("share sheet", () => Promise.resolve(topActivity(serial).includes(PKG) ? null : true), 15_000);
+  adb(serial, ["shell", "input", "keyevent", "KEYCODE_BACK"]);
+  await waitFor("Selis in front", () => Promise.resolve(topActivity(serial).includes(PKG) ? true : null), 15_000);
+}
+
 /** The newest pack in the app's share folder, pulled to the host (debug build: run-as). */
 function pullPack(serial: string, to: string): string {
   const name = adb(serial, ["shell", "run-as", PKG, "sh", "-c", "'ls -t cache/share/*.selispack | head -1'"]).trim();
@@ -568,12 +587,37 @@ function pullPack(serial: string, to: string): string {
 
 /** Copies a host file into the app's cache; returns the absolute path the app reads. */
 function pushPrivate(serial: string, from: string, name: string): string {
-  execFileSync("adb", ["-s", serial, "exec-in", "run-as", PKG, "sh", "-c", `'cat > cache/${name}'`], {
+  // One argument: adb on Windows mangles a quoted shell snippet split over several.
+  execFileSync("adb", ["-s", serial, "exec-in", `run-as ${PKG} sh -c 'cat > cache/${name}'`], {
     env,
     input: readFileSync(from),
     maxBuffer: 2 ** 31,
   });
   return `/data/user/0/${PKG}/cache/${name}`;
+}
+
+/** Fills the device from a pack made on this computer (`selispack make` of `--dir`), then decorates it. */
+async function packSeed(o: Options, cdp: Cdp): Promise<Result> {
+  if (!o.dir) throw new Error("--dir needed");
+  const dir = resolve(o.dir);
+  const { readdirSync } = await import("node:fs");
+  const files = readdirSync(dir).filter((f) => f.toLowerCase().endsWith(".pdf")).map((f) => join(dir, f));
+  const out = join(scratch, "seed-pack");
+  rmSync(out, { recursive: true, force: true });
+  execFileSync("cargo", ["run", "-q", "--release", "-p", "selis-core", "--example", "selispack", "--", "make", out, "unused passphrase", ...files], {
+    cwd: root,
+    env,
+    stdio: ["ignore", "ignore", "inherit"],
+  });
+  const source = pushPrivate(o.serial, join(out, "plain.selispack"), "seed.selispack");
+  const t0 = Date.now();
+  const imported = await invoke<PackImportView>(cdp, "pack_import", { requestId: `seed-${t0}`, source, passphrase: null });
+  const seconds = (Date.now() - t0) / 1000;
+  adb(o.serial, ["shell", "run-as", PKG, "rm", "-f", "cache/seed.selispack"]);
+  if (imported.status !== "imported") throw new Error(`seed pack refused: ${imported.problem}`);
+  await decorate(cdp);
+  const after = await snapshot(cdp);
+  return { files: files.length, packMb: statSync(join(out, "plain.selispack")).size / 1e6, importSeconds: seconds, summary: after.summary };
 }
 
 /** --serial exports its whole library as a pack (plain, then protected); --serial2 imports each. */
@@ -598,7 +642,7 @@ async function packRoundTrip(o: Options, a: Cdp, b: Cdp): Promise<Record<string,
       passphrase,
     });
     const exportSeconds = (Date.now() - t0) / 1000;
-    adb(o.serial, ["shell", "input", "keyevent", "KEYCODE_BACK"]); // the share sheet
+    await dismissShareSheet(o.serial);
     const local = join(scratch, `${label}.selispack`);
     const remoteName = pullPack(o.serial, local);
     const size = statSync(local).size;
@@ -645,7 +689,10 @@ async function packRoundTrip(o: Options, a: Cdp, b: Cdp): Promise<Record<string,
       tamperNoChange: same(afterSecond, afterTamper),
       leftovers,
     };
+    adb(o.serial2 ?? "", ["shell", "run-as", PKG, "rm", "-f", "cache/in.selispack", "cache/tampered.selispack"]);
   }
+  // A reconnect above replaced the caller's socket: close ours too, or node never exits.
+  b.close();
   return out;
 }
 
@@ -793,6 +840,9 @@ async function main(): Promise<number> {
         b.close();
         break;
       }
+      case "packseed":
+        result = await packSeed(o, cdp);
+        break;
       case "pack": {
         if (!o.serial2) throw new Error("--serial2 needed");
         launch(o.serial2);
