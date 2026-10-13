@@ -22,9 +22,10 @@
 # 1,800 such copies (34 GB) piled up by P3. Each run.sh gets its own temp dir under
 # .tmp/maestro-tmp/ (so parallel runs on two devices never delete each other's
 # files), emptied after every run and removed on exit. Before every run, dirs of
-# run.sh processes that are gone are removed, and the script stops (exit 3) if any
-# *.apk older than this run is still in .tmp or .tmp/maestro-tmp. Run logs and
-# Maestro debug output older than 7 days are pruned at start.
+# run.sh processes that are gone are removed, and the script stops (exit 3) if an
+# *.apk older than this run is still in .tmp or in this script's own dir (a live
+# parallel run's copies are in use, not left over). Run logs and Maestro debug
+# output older than 7 days are pruned at start.
 set -u
 
 serial="${1:?usage: run.sh <serial> <flow.yaml> [runs]}"
@@ -39,9 +40,8 @@ app_id="$(sed -n 's/^appId:[[:space:]]*//p' "$flow" | head -1 | tr -d '\r')"
 tmp="$root/.tmp"
 out="$tmp/maestro-runs/$(basename "$flow" .yaml)/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$out"
-# Marks the start of this script: an APK not newer than it was left by an earlier run.
-started="$out/.started"
-touch "$started"
+# Touched before every run: an APK not newer than it was left by an earlier run.
+started="$out/.run-start"
 run_tmp="$tmp/maestro-tmp/$$"
 mkdir -p "$run_tmp"
 case "$(uname -s)" in
@@ -84,8 +84,8 @@ prune_old() {
 
 # Removes the temp dirs of run.sh processes that are gone (killed before their
 # exit trap), then fails if an APK older than this run is still around: in .tmp
-# itself (Maestro run without run.sh) or in a live run's dir (it should have
-# emptied it after its run).
+# itself (Maestro run without run.sh) or in this script's dir (not emptied after
+# the previous run).
 check_apks() {
   local dir pid stale
   for dir in "$tmp"/maestro-tmp/*/; do
@@ -94,13 +94,14 @@ check_apks() {
     [ "$pid" = "$$" ] && continue
     kill -0 "$pid" 2>/dev/null || rm -rf "$dir"
   done
+  touch "$started"
   stale="$({
     find "$tmp" -maxdepth 1 -name '*.apk' -type f ! -newer "$started"
-    find "$tmp/maestro-tmp" -mindepth 2 -maxdepth 2 -name '*.apk' -type f ! -newer "$started"
+    find "$run_tmp" -name '*.apk' -type f ! -newer "$started"
   } 2>/dev/null)"
   [ -z "$stale" ] && return 0
   echo "ABORT: APKs left over from an earlier run ($(echo "$stale" | wc -l) files, e.g. $(echo "$stale" | head -1))." >&2
-  echo "Delete them (rm .tmp/*.apk .tmp/maestro-tmp/*/*.apk), then rerun." >&2
+  echo "Delete them, then rerun." >&2
   return 1
 }
 
