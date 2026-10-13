@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as ApiModule from "../../lib/api";
 import type { PackExportView } from "../../lib/api";
 
 const packExport = vi.fn<(ids: string[] | null, history: boolean, passphrase: string | null) => Promise<PackExportView>>();
 
 vi.mock("../../lib/api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../lib/api")>();
+  const actual = await importOriginal<typeof ApiModule>();
   return { ...actual, api: { ...actual.api, packExport } };
 });
 
