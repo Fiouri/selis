@@ -16,6 +16,9 @@ compile in CI but get no UI polish until P6.
   `jni` stays equal to wry's (0.21.1).
 - React 19 + TypeScript 6 (strict) + Vite 8, Tailwind v4, Zustand, TanStack Query, i18next + ICU.
 - PDF engine: EmbedPDF **v2** (PDFium WASM) inside `packages/engine` only, in a Web Worker.
+- PDF file operations: `crates/selis-pdfops` on **qpdf 12.4** (`qpdf` crate `=0.3.7`, vendored,
+  native crypto; ADR 0015). Android builds need LLVM's libclang on the host (bindgen) and go
+  through `npm run tauri` (`scripts/tauri.ts` points bindgen at the NDK clang); static libc++.
 - Rust core: `crates/selis-core` (rusqlite bundled, BLAKE3, atomic writes). IPC types via
   tauri-specta → `apps/app/src/lib/ipc/bindings.ts` (generated; never hand-edit), wrapped by the
   reliability layer `lib/ipc/reliable.ts` (ADR 0005: long-running commands take a `request_id`,
@@ -113,6 +116,10 @@ Tier 2 — end of every feature:
   pack by "Open with" from Files, protected pack by the picker after a wrong passphrase, tampered
   pack refused; library holds exactly the three fixtures, no leftovers, packs untouched; a plain
   pack saved from the Send tab waits in `cache/share` and is gone after a restart).
+  And `tools.yaml` with `PRE_RUN="…/tools.sh pre"` and `POST_RUN="…/tools.sh check"` (P4a: protect,
+  reopen with the password, editing off, remove it (wrong first); compress / optimise / repair the
+  1000-page fixture; every version pulled from the device passes the host's `qpdf --check` and
+  pdf.js, page content streams kept, work folder empty; prints the RSS around the compress).
   run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro
