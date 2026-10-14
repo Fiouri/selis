@@ -65,3 +65,50 @@ Found on the devices: the asset protocol scope did not include the staged photos
 (`work/stage/*.img`), so the grid had no thumbnails and "Create PDF" failed — the mock (blob URLs)
 could not show it. The two photo picker versions differ: the S23's marks a selected photo
 "Selected Photo taken on …", the AVD's does not (`pick-ten-photos.yaml` handles both).
+
+## P4c — document scan (2026-10-14)
+
+### Spike: OpenCV.js (minimal) vs Rust + imageproc → WebAssembly (ADR 0016)
+
+The same algorithm on both (Canny → dilate → outer contours → convex hull → four corners), run in
+the Selis WebView over DevTools (debug build): detection on 30 synthetic 240×320 frames (200
+timed runs), and straighten + black-and-white of a 3000×4000 photo (3 runs, output 8 MP).
+Harness: `.tmp/p4c/bench` (not committed).
+
+| | OpenCV.js 4.12 (core + imgproc, SIMD, `DYNAMIC_EXECUTION=0`) | Rust + imageproc 0.27 (SIMD, opt-level 3) |
+| --- | --- | --- |
+| Size | 5.06 MB JS with the module inlined (1.28 MB gzip) | 133 KB `.wasm` |
+| Load (eval + compile) | 629 ms S23, 865 ms AVD | a few ms |
+| Detection, median / p95 | 1.5 / 1.6 ms S23; 2.5 / 5.8 ms AVD | 6.8 / 7.0 ms S23; 12.1 / 14.2 ms AVD |
+| Straighten + B&W, median | 168 ms S23; 304 ms AVD | 452 ms S23; 867 ms AVD |
+| Pages found | 30 / 30 | 30 / 30 |
+
+OpenCV.js as published needs `'unsafe-eval'` (embind); 4.12 needs patches to build with current
+Emscripten. Rust with opt-level `s` was 10× slower (55 ms per frame on the host): the scan module
+has its own `wasm` profile at opt-level 3. Chosen: Rust (size, start-up, CSP, build).
+
+### Stored sample photos (`packages/fixtures/scan`, `crates/selis-scan/src/samples.rs`)
+
+Six generated photos (letters, tables, a receipt; wood, granite, fabric and a light-grey desk
+that barely differs from the paper; perspective up to a steep 40°-like angle; uneven light;
+blur; noise; JPEG 85) and one capture of the AVD's virtual-scene camera (a TV among furniture).
+After sub-pixel refinement every outline is within 0.8 px of the ground truth (1 % of the
+diagonal allowed) and every straightened page is level within 0.1° (0.3° allowed).
+
+### On the devices (`scan.yaml` + `scan.sh`, debug builds)
+
+Five pages, one camera session before each: live detection runs at its cap of 15 frames a second.
+
+| Device | Detections / s | Detection median / p95 | Longest UI frame gap | Frames over 200 ms | Keep (straighten + encode) | Still |
+| --- | --- | --- | --- | --- | --- | --- |
+| AVD (virtual scene) | 14.8–15.2 | 6.4–7.0 / 15–21 ms | 33–50 ms | 0 | 37–89 ms | 960×1280 (the emulated sensor) |
+| Galaxy S23 | 14.7–15.2 | 8.4–8.7 / 8.9–10.2 ms | 34–50 ms | 0 | 367–469 ms | 2449×3266 (12 MP sensor, scaled to the 8 MP tier) |
+
+On the AVD the live outline locks onto the TV of the virtual scene; on the S23 the camera saw the
+desk, so the default outline was kept (the flow does not depend on a page being found). Found by
+the device runs: the S23 maps a scaled `takePhoto` size to its nearest supported one, 3000×3000,
+cutting off the sides — stills now ask for the sensor's maximum and the worker scales them down;
+the scanned pages' JPEGs carry Chrome's ICC profile (APP2) and no other metadata (`scan-check.ts`).
+
+Full Tier 2 Maestro suite with this build (18 flows incl. `scan.yaml`, and the pages drag
+check): pass on the AVD and on the S23.
