@@ -32,7 +32,9 @@ export default defineConfig(({ mode, command }) => ({
   define: {
     // Browser-only build with an in-memory backend (Playwright, UI work without Rust).
     __SELIS_MOCK_IPC__: JSON.stringify(mode === "mock"),
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    // Mock builds (Playwright) show a fixed version: the Settings visual baselines must not
+    // change with every release (ADR 0019, ADR 0020).
+    __APP_VERSION__: JSON.stringify(mode === "mock" ? "1.0.0" : pkg.version),
   },
   server: {
     port: 5173,
