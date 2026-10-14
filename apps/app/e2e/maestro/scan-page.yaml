@@ -1,0 +1,19 @@
+# One page of scan.yaml: shutter → Adjust corners → filter ${FILTER} → Keep → ${COUNT}.
+appId: com.anywecon.selis
+---
+- extendedWaitUntil:
+    visible:
+      id: "scan-shutter"
+      enabled: true
+    timeout: 30000
+- tapOn:
+    id: "scan-shutter"
+- extendedWaitUntil:
+    visible: "Adjust corners"
+    timeout: 60000
+- tapOn: ${FILTER}
+- tapOn:
+    id: "scan-keep"
+- extendedWaitUntil:
+    visible: ${COUNT}
+    timeout: 60000

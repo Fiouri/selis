@@ -124,6 +124,14 @@ denied state with "Open settings" and a fallback action).
 - Camera denied: same empty state as the QR scanner, actions "Open settings" and "Choose
   photos instead" (→ Images to PDF).
 
+As built (P4c, ADR 0016): the Scan FAB (`ScanLine`, 48×48) sits above the Images FAB; the empty
+library offers "Scan a document" as a ghost button above "Images to PDF". The camera screen is
+always dark (like the QR viewfinder); Adjust corners and the queue follow the theme. "Open
+settings" is Android only (elsewhere "Try again"). Leaving with scanned pages asks "Discard N
+scanned pages?" (Discard / Keep scanning). The queue grid uses the Images-to-PDF tiles (move
+earlier / later, remove), with "Add page" and "Save as PDF"; the result opens in the viewer and
+a toast says "Scan saved to the library."
+
 ## 8. OCR (P4d)
 
 Precedent: the transfer progress card (`Progress` bar, per-item line, Cancel, Resume).

@@ -61,7 +61,10 @@ the device, is not backed up and is not part of a library move.
 ## Camera and notifications
 
 - The camera is used only when you tap "Scan QR code" on the Receive tab, to read the transfer
-  code; frames are processed on the device and never stored or sent.
+  code, and while the Scan screen is open, to photograph pages. Frames are processed on the
+  device and never sent. A scanned page is kept only if you tap Keep, and only as part of the
+  PDF you save (no photo details such as location are in it); the camera stops when you leave
+  the screen or the app.
 - Android: a notification shows the progress of a running transfer (you can refuse the
   notification permission; the transfer still runs).
 
@@ -71,5 +74,5 @@ the device, is not backed up and is not part of a library move.
 | --- | --- |
 | Internet, network state | Transfer, only while it is in use |
 | Wi‑Fi multicast | Find your other device on the same Wi‑Fi (mDNS) |
-| Camera | Scan a transfer QR code (asked when you tap Scan) |
+| Camera | Scan a transfer QR code or a document (asked the first time you use either) |
 | Foreground service (data sync), notifications | Keep a running transfer going in the background, show its progress |
