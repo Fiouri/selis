@@ -130,6 +130,11 @@ Tier 2 — end of every feature:
   the live-detection stats and, on a real device, fails under 10 fps or on a UI frame gap over
   200 ms). The scan module is Rust → WebAssembly (`crates/selis-scan`, ADR 0016), built by
   `npm run build:scan` (npm pre-scripts; needs `rustup target add wasm32-unknown-unknown`).
+  And `ocr.yaml` with `PRE_RUN="…/ocr.sh pre"` and `POST_RUN="…/ocr.sh check"` (P4d: the scanned
+  Greek fixture made searchable; per-page times from logcat, RSS of app + WebView renderer around
+  the OCR; the new version passes qpdf and pdf.js reads ≥ 95 % of the words of each page; the
+  viewer's search finds an accented Greek word). OCR assets (tesseract.js worker, cores,
+  tessdata_fast) are copied into `apps/app/public/ocr/` by `scripts/copy-ocr-assets.ts`.
   run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro

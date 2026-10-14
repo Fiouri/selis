@@ -58,6 +58,12 @@ Each device has its own key (Ed25519), made on the device and kept in the system
 storage (Android Keystore, iOS / macOS Keychain, Windows Credential Manager). It never leaves
 the device, is not backed up and is not part of a library move.
 
+## Text recognition (OCR)
+
+"Make text searchable" reads scanned pages on the device (Tesseract, bundled with the app with
+its Greek and English models). Nothing is downloaded or sent; the recognised words are stored
+only in the new version of your document, as invisible text.
+
 ## Camera and notifications
 
 - The camera is used only when you tap "Scan QR code" on the Receive tab, to read the transfer

@@ -62,20 +62,16 @@ export function imageSize(bytes: Uint8Array): ImageSize | null {
 /** Loading the worker, core and models; a load that broke (a missing asset) never settles. */
 const START_TIMEOUT_MS = 120_000;
 
-function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${what} timed out`)), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err: unknown) => {
-        clearTimeout(timer);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      },
-    );
+async function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} timed out`)), ms);
   });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function createOcr(languages: OcrLanguages, paths: OcrPaths): Promise<Ocr> {

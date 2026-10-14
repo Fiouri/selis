@@ -14,8 +14,14 @@ import type { Command, EditSession } from "../annotate/session";
 
 /** Pages with at least this many characters of their own text count as having text. */
 export const MIN_TEXT_CHARS = 20;
-/** Render resolution for Tesseract (A4 at 300 dpi: 2480 × 3508), clamped to the device tier. */
+/** Render resolution for Tesseract. */
 export const OCR_DPI = 300;
+/**
+ * Pixel cap of a page rendered for OCR: A4 at 300 dpi (2480 × 3508) on every device tier —
+ * Tesseract reads small print far better at 300 dpi than at the 250 a 6-MP cap allows; larger
+ * pages are rendered at a lower resolution. Measured on the 3 GB AVD (docs/spike-p4.md).
+ */
+export const OCR_MAX_PIXELS = 2480 * 3508;
 
 export type OcrPhase =
   | { step: "idle" }
@@ -97,10 +103,10 @@ export const useOcr = create<OcrState>()((set, get) => {
         const page = current.queue[0] ?? 0;
         set({ phase: { step: "running", done: current.done, total: current.total, page } });
         const started = performance.now();
-        const image = await current.doc.exportPageImage(page, { dpi: OCR_DPI, format: "png" });
+        const image = await current.doc.exportPageImage(page, { dpi: OCR_DPI, format: "png", maxPixels: OCR_MAX_PIXELS });
         const size = current.doc.pages[page];
         if (!size) throw new Error(`page ${String(page)} is gone`);
-        // The engine may have rendered below 300 dpi (device limit): tell Tesseract the truth.
+        // A page larger than A4 is rendered below 300 dpi: tell Tesseract the truth.
         const dpi = (image.width / size.width) * 72;
         const read = await reader.recognize(new Uint8Array(image.bytes), dpi);
         if (mine !== generation) return { kind: "stopped" };

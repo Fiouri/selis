@@ -132,7 +132,15 @@ export interface DocHandle {
    * Page `index` as a PNG or JPEG at `dpi` (with annotations and form values), within the
    * engine's bitmap limit (`limits.maxBitmapPixels`; see `exportPixels`).
    */
-  exportPageImage(index: number, options: { readonly dpi: number; readonly format: "png" | "jpeg" }): Promise<ExportedImage>;
+  exportPageImage(
+    index: number,
+    options: {
+      readonly dpi: number;
+      readonly format: "png" | "jpeg";
+      /** Pixel cap instead of the device tier's (OCR renders A4 at 300 dpi on every tier). */
+      readonly maxPixels?: number;
+    },
+  ): Promise<ExportedImage>;
   /**
    * Adds an invisible text layer of `words` to page `index` (OCR, P4d), replacing a Selis OCR
    * layer it had. Resolves to the words of the layer it replaced (for undo; empty if none).

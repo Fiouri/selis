@@ -352,7 +352,7 @@ export class WorkerPdfEngine implements PdfEngine {
           index,
           dpi: options.dpi,
           format: options.format,
-          maxPixels: this.currentLimits.maxBitmapPixels,
+          maxPixels: options.maxPixels ?? this.currentLimits.maxBitmapPixels,
         }));
         if (msg.mime !== RAW_RGBA) return { bytes: msg.bytes, mime: msg.mime, width: msg.width, height: msg.height };
         // A WebKit without OffscreenCanvas in workers: encode here.

@@ -573,6 +573,24 @@ for (const lang of LANGS) {
         await expect(page).toHaveScreenshot(shot("scan-denied"));
       });
 
+      test(`ocr: options sheet, stopped card (${theme})`, async ({ page }) => {
+        await page.goto("/");
+        await importFixture(page, "scanned-english.pdf", lang === "en" ? "Scan.pdf" : "Σάρωση.pdf");
+        await firstPageRendered(page);
+        await page.getByRole("button", { name: ui(lang, "viewer.more") }).click();
+        await page.getByTestId("more-tools").click();
+        await page.getByTestId("tool-ocr").click();
+        await expect(page.getByTestId("ocr-sheet")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("ocr-sheet"), { maxDiffPixelRatio: 0.004 });
+        await page.getByTestId("ocr-start").click();
+        await expect(page.getByTestId("ocr-label")).toHaveText(ui(lang, "ocr.reading", { page: "1", total: "2" }), { timeout: 30_000 });
+        await page.getByTestId("ocr-cancel").click();
+        await expect(page.getByTestId("ocr-card")).toHaveAttribute("data-step", "stopped");
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("ocr-stopped"), { maxDiffPixelRatio: 0.004 });
+      });
+
       test(`recent (${theme})`, async ({ page }) => {
         await page.goto("/");
         await stockLibrary(page, lang);
