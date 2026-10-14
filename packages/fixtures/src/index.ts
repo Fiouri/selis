@@ -13,6 +13,7 @@ export {
   leakyDocument,
   ownerPasswordDocument,
 } from "./corpus.ts";
+export { exifSegment, insertSegments, makePhoto, PHOTO_QUADRANTS, PHOTO_SECRETS, type PhotoOptions } from "./photo.ts";
 
 /** Directory where `npm run fixtures` writes the generated corpus (git-ignored). */
 export const FIXTURES_OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "out");
