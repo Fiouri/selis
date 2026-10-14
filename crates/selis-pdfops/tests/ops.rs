@@ -2,19 +2,41 @@
 //! Every written file must pass `qpdf --check` (`selis_pdfops::check`).
 
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 use qpdf::{EncryptionParams, EncryptionParamsR3, EncryptionParamsR6, PrintPermission, QPdf};
 use selis_pdfops::{
     Error, Operation, Outcome, Password, Permissions, Protection, Unchanged, check, protection, run,
 };
 
+/// One test at a time: on Windows a child process (the `qpdf` CLI below) inherits the handles
+/// open at that moment, and qpdf opens the file it writes exclusively — another test then could
+/// not reopen its own output until the child exits.
+fn serial() -> MutexGuard<'static, ()> {
+    static SERIAL: Mutex<()> = Mutex::new(());
+    SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// A PDF with `pages` pages, uncompressed content streams and an unreferenced 64 KB stream, so
 /// compressing has something to do.
 fn make_pdf(dir: &Path, name: &str, pages: usize) -> PathBuf {
+    make_pdf_with(dir, name, pages, false)
+}
+
+/// As [`make_pdf`], with an outline (one bookmark per page) when `outline` is set.
+fn make_pdf_with(dir: &Path, name: &str, pages: usize, outline: bool) -> PathBuf {
     let mut objects: Vec<String> = Vec::new();
-    // 1 catalog, 2 pages, 3 font, then per page: page + contents; last: unreferenced filler.
+    // 1 catalog, 2 pages, 3 font, then per page: page + contents; then the unreferenced
+    // filler; then the outline root and its items.
     let kids: Vec<String> = (0..pages).map(|i| format!("{} 0 R", 4 + i * 2)).collect();
-    objects.push("<< /Type /Catalog /Pages 2 0 R >>".into());
+    let outline_root = 4 + pages * 2 + 1;
+    objects.push(if outline {
+        format!("<< /Type /Catalog /Pages 2 0 R /Outlines {outline_root} 0 R >>")
+    } else {
+        "<< /Type /Catalog /Pages 2 0 R >>".into()
+    });
     objects.push(format!(
         "<< /Type /Pages /Kids [{}] /Count {pages} >>",
         kids.join(" ")
@@ -36,6 +58,29 @@ fn make_pdf(dir: &Path, name: &str, pages: usize) -> PathBuf {
         "<< /Length {} >>\nstream\n{filler}\nendstream",
         filler.len() + 1
     ));
+    if outline {
+        let first = outline_root + 1;
+        let last = outline_root + pages;
+        objects.push(format!(
+            "<< /Type /Outlines /First {first} 0 R /Last {last} 0 R /Count {pages} >>"
+        ));
+        for i in 0..pages {
+            let id = outline_root + 1 + i;
+            let mut item = format!(
+                "<< /Title (Page {}) /Parent {outline_root} 0 R /Dest [{} 0 R /Fit]",
+                i + 1,
+                4 + i * 2
+            );
+            if i > 0 {
+                item.push_str(&format!(" /Prev {} 0 R", id - 1));
+            }
+            if i + 1 < pages {
+                item.push_str(&format!(" /Next {} 0 R", id + 1));
+            }
+            item.push_str(" >>");
+            objects.push(item);
+        }
+    }
 
     let mut out = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n".to_vec();
     let mut offsets = Vec::new();
@@ -94,6 +139,7 @@ fn protect(open: &str) -> Operation {
 
 #[test]
 fn protect_then_unprotect_keeps_every_page_content_stream() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let input = make_pdf(dir.path(), "in.pdf", 3);
     let locked = dir.path().join("locked.pdf");
@@ -129,6 +175,7 @@ fn protect_then_unprotect_keeps_every_page_content_stream() {
 
 #[test]
 fn a_wrong_password_is_refused_and_writes_nothing() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let input = make_pdf(dir.path(), "in.pdf", 1);
     let locked = dir.path().join("locked.pdf");
@@ -158,6 +205,7 @@ fn a_wrong_password_is_refused_and_writes_nothing() {
 
 #[test]
 fn removing_a_password_the_file_does_not_have_is_refused() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let input = make_pdf(dir.path(), "in.pdf", 1);
     let out = dir.path().join("out.pdf");
@@ -176,6 +224,7 @@ fn removing_a_password_the_file_does_not_have_is_refused() {
 
 #[test]
 fn restrictions_need_a_separate_owner_password() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let input = make_pdf(dir.path(), "in.pdf", 1);
     let out = dir.path().join("out.pdf");
@@ -233,6 +282,7 @@ fn restrictions_need_a_separate_owner_password() {
 
 #[test]
 fn a_file_with_only_an_owner_password_counts_as_restricted() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let input = make_pdf(dir.path(), "in.pdf", 1);
     let restricted = dir.path().join("restricted.pdf");
@@ -251,6 +301,9 @@ fn a_file_with_only_an_owner_password_counts_as_restricted() {
         encrypt_metadata: true,
     }));
     writer.write(&restricted).expect("write");
+    // qpdf keeps the written file open until the document is freed.
+    drop(writer);
+    drop(doc);
     assert_eq!(
         protection(&restricted).expect("protection"),
         Protection::Restricted
@@ -263,6 +316,7 @@ fn a_file_with_only_an_owner_password_counts_as_restricted() {
 
 #[test]
 fn a_legacy_rc4_password_can_be_removed() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let input = make_pdf(dir.path(), "in.pdf", 2);
     let rc4 = dir.path().join("rc4.pdf");
@@ -295,6 +349,7 @@ fn a_legacy_rc4_password_can_be_removed() {
 
 #[test]
 fn compress_makes_the_file_smaller_once_then_reports_nothing_to_gain() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let input = make_pdf(dir.path(), "in.pdf", 5);
     let small = dir.path().join("small.pdf");
@@ -320,6 +375,7 @@ fn compress_makes_the_file_smaller_once_then_reports_nothing_to_gain() {
 
 #[test]
 fn linearize_once() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let input = make_pdf(dir.path(), "in.pdf", 4);
     let fast = dir.path().join("fast.pdf");
@@ -338,6 +394,7 @@ fn linearize_once() {
 
 #[test]
 fn repair_rebuilds_a_broken_cross_reference_table() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let input = make_pdf(dir.path(), "in.pdf", 3);
     // Shift every object by 7 bytes: every xref offset is now wrong.
@@ -364,6 +421,7 @@ fn repair_rebuilds_a_broken_cross_reference_table() {
 
 #[test]
 fn not_a_pdf_is_damaged() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     let junk = dir.path().join("junk.pdf");
     std::fs::write(&junk, b"hello, not a pdf").expect("write");
@@ -377,12 +435,14 @@ fn not_a_pdf_is_damaged() {
 
 #[test]
 fn passwords_never_show_in_debug_output() {
+    let _serial = serial();
     let op = protect("correct horse battery");
     assert!(!format!("{op:?}").contains("horse"));
 }
 
 #[test]
 fn a_stream_above_the_limit_is_refused_before_anything_is_written() {
+    let _serial = serial();
     let dir = tempfile::tempdir().expect("tempdir");
     // 64 KB filler stream.
     let input = make_pdf(dir.path(), "in.pdf", 1);
@@ -394,4 +454,35 @@ fn a_stream_above_the_limit_is_refused_before_anything_is_written() {
     );
     assert!(!out.exists());
     assert!(selis_pdfops::run_with_limit(&input, &out, &Operation::Compress, 1024 * 1024).is_ok());
+}
+
+/// `qpdf --check` by the qpdf command-line tool, which also checks linearization hint tables
+/// (the library's check does not). CI installs qpdf; locally see CONTRIBUTING.md.
+fn qpdf_cli_check(path: &Path) -> String {
+    let out = std::process::Command::new("qpdf")
+        .arg("--check")
+        .arg(path)
+        .output()
+        .expect("the qpdf command-line tool is needed for this test (CONTRIBUTING.md)");
+    let report = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "qpdf --check failed:\n{report}");
+    report
+}
+
+#[test]
+fn a_compressed_file_with_an_outline_linearizes_without_hint_table_errors() {
+    let _serial = serial();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = make_pdf_with(dir.path(), "in.pdf", 100, true);
+    let small = dir.path().join("small.pdf");
+    run(&input, &small, &Operation::Compress).expect("compress");
+    let fast = dir.path().join("fast.pdf");
+    run(&small, &fast, &Operation::Linearize).expect("linearize");
+    let report = qpdf_cli_check(&fast);
+    assert!(report.contains("File is linearized"), "{report}");
+    assert!(!report.contains("WARNING"), "{report}");
 }

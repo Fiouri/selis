@@ -23,7 +23,9 @@ implementation for exactly these operations and is what the test oracle already 
   password different from the open password. Remove = needs the open password. Compress =
   object streams, streams decoded at the "generalized" level and re-encoded with Flate (images
   untouched: lossless), unreferenced objects dropped; **no version if not smaller**. Linearize
-  (no version if already linearized). Repair = qpdf's recovery, then a rewrite; no version if
+  (no version if already linearized) writes **without object streams**: with them qpdf 12.4
+  writes wrong outline hint tables (`qpdf --check` warns; the 1000-page fixture after Compress,
+  regression test), so a linearized file can be a little larger. Repair = qpdf's recovery, then a rewrite; no version if
   the file reads without a warning and passes `qpdf --check`.
 - **Every operation is a new version**: `selis-core` hands out the current version's file and a
   path in the work folder (`begin_tool_run`); the output becomes the next version through the
@@ -66,5 +68,8 @@ implementation for exactly these operations and is what the test oracle already 
   password writes nothing, restrictions, legacy RC4 removal, compress once, linearize once,
   repair of a broken xref, the stream limit); every output passes `qpdf --check`. On devices
   `tools.yaml` + `tools.sh check` (qpdf CLI and pdf.js on every version pulled from the device).
+- Tests: on Windows a child process inherits the handles open at that moment and qpdf opens
+  the file it writes exclusively, so the qpdf tests run one at a time (the app spawns no
+  processes while a tool runs).
 - Not covered: editing encrypted documents, removing an owner-only protection, image
   recompression (lossy) — not in v1.

@@ -34,8 +34,9 @@ name: Selis tools (qpdf)
 - extendedWaitUntil:
     visible: "This document is protected"
     timeout: 30000
-- tapOn:
-    id: "unlock-password"
+# Inputs carry an HTML id (useId), which the DevTools hierarchy reports instead of the test
+# id: tap their labels.
+- tapOn: "Password"
 - inputText: "wrong horse"
 - hideKeyboard
 - tapOn:
@@ -43,8 +44,7 @@ name: Selis tools (qpdf)
 - extendedWaitUntil:
     visible: "Wrong password."
     timeout: 15000
-- tapOn:
-    id: "unlock-password"
+- tapOn: "Password"
 - inputText: "correct horse"
 - hideKeyboard
 - tapOn:
@@ -52,9 +52,9 @@ name: Selis tools (qpdf)
 - extendedWaitUntil:
     visible: "Page 1 of 2"
     timeout: 20000
-- tapOn:
-    id: "dock-annotate"
+- tapOn: "Annotate"
 - assertVisible: "Remove the password to edit."
+- assertNotVisible: "Done"
 
 # Remove the password: wrong, then right.
 - tapOn: "More"
@@ -63,8 +63,7 @@ name: Selis tools (qpdf)
 - assertVisible: "Already protected"
 - tapOn:
     id: "tool-unprotect"
-- tapOn:
-    id: "tools-current-password"
+- tapOn: "Current password"
 - inputText: "wrong horse"
 - hideKeyboard
 - tapOn:
@@ -72,8 +71,7 @@ name: Selis tools (qpdf)
 - extendedWaitUntil:
     visible: "Wrong password."
     timeout: 15000
-- tapOn:
-    id: "tools-current-password"
+- tapOn: "Current password"
 - inputText: "correct horse"
 - hideKeyboard
 - tapOn:

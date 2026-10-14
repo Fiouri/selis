@@ -31,8 +31,10 @@ case "$mode" in
     [ -f "$state/sampler.pid" ] && kill "$(cat "$state/sampler.pid")" 2>/dev/null || true
     adb -s "$serial" shell pm clear "$app" >/dev/null
     : > "$state/rss.log"
+    # At most 15 minutes: POST_RUN (which stops it) does not run after a failed flow.
     (
-      while true; do
+      end=$((SECONDS + 900))
+      while [ "$SECONDS" -lt "$end" ]; do
         kb="$(adb -s "$serial" shell dumpsys meminfo "$app" 2>/dev/null | tr -d '\r' | sed -n 's/.*TOTAL RSS:[[:space:]]*\([0-9]*\).*/\1/p' | head -1)"
         [ -n "$kb" ] && echo "$(date +%s%3N) $kb" >> "$state/rss.log"
         sleep 0.5

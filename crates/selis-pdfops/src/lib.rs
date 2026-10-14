@@ -12,7 +12,9 @@
 use std::fmt;
 use std::path::Path;
 
-use qpdf::{EncryptionParams, EncryptionParamsR6, ObjectStreamMode, PrintPermission, QPdf};
+use qpdf::{
+    EncryptionParams, EncryptionParamsR6, ObjectStreamMode, PrintPermission, QPdf, QPdfWriter,
+};
 use qpdf::{QPdfError, QPdfErrorCode, QPdfObjectLike, QPdfObjectType, QPdfScalar, QPdfStream};
 use qpdf::{StreamDataMode, StreamDecodeLevel};
 use zeroize::Zeroizing;
@@ -128,7 +130,8 @@ pub enum Operation {
     Unprotect { password: Password },
     /// Lossless: object streams, streams re-encoded with Flate, unreferenced objects dropped.
     Compress,
-    /// "Fast web view": the first page can be shown before the whole file has arrived.
+    /// "Fast web view": the first page can be shown before the whole file has arrived. Written
+    /// without object streams (see `run`), so it can grow a little.
     Linearize,
     /// Rewrites the file from what qpdf recovers (rebuilt cross-reference table).
     Repair,
@@ -206,6 +209,18 @@ fn largest_stream(doc: &QPdf) -> u64 {
         }
     }
     largest
+}
+
+/// Writes `doc` to `output` with the writer set up by `configure`, then lets go of both: qpdf
+/// keeps the output file open until the document is freed (Windows then refuses to open it
+/// again for the checks below).
+fn write(doc: QPdf, output: &Path, configure: impl FnOnce(&mut QPdfWriter)) -> Result<()> {
+    let mut writer = doc.writer();
+    configure(&mut writer);
+    let written = writer.write(output).map_err(|e| from_qpdf(&e));
+    drop(writer);
+    drop(doc);
+    written
 }
 
 /// Whether (and how) the file is protected.
@@ -293,24 +308,24 @@ fn run_inner(
                 None => Zeroizing::new(open_password.as_str().to_owned()),
             };
             let doc = open(input, None)?;
-            let mut writer = doc.writer();
-            writer.encryption_params(EncryptionParams::R6(EncryptionParamsR6 {
-                user_password: open_password.as_str().to_owned(),
-                owner_password: owner_password.as_str().to_owned(),
-                allow_accessibility: true,
-                allow_extract: permissions.copy,
-                allow_assemble: permissions.modify,
-                allow_annotate_and_form: permissions.modify,
-                allow_form_filling: permissions.modify,
-                allow_modify_other: permissions.modify,
-                allow_print: if permissions.print {
-                    PrintPermission::Full
-                } else {
-                    PrintPermission::None
-                },
-                encrypt_metadata: true,
-            }));
-            writer.write(output).map_err(|e| from_qpdf(&e))?;
+            write(doc, output, |writer| {
+                writer.encryption_params(EncryptionParams::R6(EncryptionParamsR6 {
+                    user_password: open_password.as_str().to_owned(),
+                    owner_password: owner_password.as_str().to_owned(),
+                    allow_accessibility: true,
+                    allow_extract: permissions.copy,
+                    allow_assemble: permissions.modify,
+                    allow_annotate_and_form: permissions.modify,
+                    allow_form_filling: permissions.modify,
+                    allow_modify_other: permissions.modify,
+                    allow_print: if permissions.print {
+                        PrintPermission::Full
+                    } else {
+                        PrintPermission::None
+                    },
+                    encrypt_metadata: true,
+                }));
+            })?;
             // The new file opens with the new password (and not without it).
             if open(output, None).is_ok() {
                 return Err(Error::Unsupported(
@@ -330,23 +345,23 @@ fn run_inner(
                 Err(e) => return Err(e),
             }
             let doc = open(input, Some(password))?;
-            let mut writer = doc.writer();
-            writer.preserve_encryption(false);
-            writer.write(output).map_err(|e| from_qpdf(&e))?;
+            write(doc, output, |writer| {
+                writer.preserve_encryption(false);
+            })?;
             open(output, None)?;
         }
         Operation::Compress => {
             let doc = open(input, None)?;
-            let mut writer = doc.writer();
-            writer
-                .object_stream_mode(ObjectStreamMode::Generate)
-                .compress_streams(true)
-                .stream_data_mode(StreamDataMode::Compress)
-                // Decodes LZW/ASCII85/ASCIIHex/RunLength and Flate, re-encodes with Flate;
-                // images (DCT, JPX, CCITT, JBIG2) stay as they are: lossless.
-                .stream_decode_level(StreamDecodeLevel::Generalized)
-                .preserve_unreferenced_objects(false);
-            writer.write(output).map_err(|e| from_qpdf(&e))?;
+            write(doc, output, |writer| {
+                writer
+                    .object_stream_mode(ObjectStreamMode::Generate)
+                    .compress_streams(true)
+                    .stream_data_mode(StreamDataMode::Compress)
+                    // Decodes LZW/ASCII85/ASCIIHex/RunLength and Flate, re-encodes with Flate;
+                    // images (DCT, JPX, CCITT, JBIG2) stay as they are: lossless.
+                    .stream_decode_level(StreamDecodeLevel::Generalized)
+                    .preserve_unreferenced_objects(false);
+            })?;
             open(output, None)?;
             let output_bytes = size(output)?;
             if output_bytes >= input_bytes {
@@ -362,9 +377,13 @@ fn run_inner(
             if doc.is_linearized() {
                 return Ok(Outcome::Unchanged(Unchanged::AlreadyLinearized));
             }
-            let mut writer = doc.writer();
-            writer.linearize(true);
-            writer.write(output).map_err(|e| from_qpdf(&e))?;
+            // qpdf 12.4 writes wrong outline hints when a linearized file keeps object streams
+            // (`qpdf --check` warns; seen with the 1000-page fixture after Compress).
+            write(doc, output, |writer| {
+                writer
+                    .linearize(true)
+                    .object_stream_mode(ObjectStreamMode::Disable);
+            })?;
             if !open(output, None)?.is_linearized() {
                 return Err(Error::Unsupported(
                     "the written file is not linearized".into(),
@@ -379,8 +398,7 @@ fn run_inner(
             if checked && !doc.more_warnings() {
                 return Ok(Outcome::Unchanged(Unchanged::NothingToRepair));
             }
-            let writer = doc.writer();
-            writer.write(output).map_err(|e| from_qpdf(&e))?;
+            write(doc, output, |_| {})?;
             open(output, None)?;
         }
     }
