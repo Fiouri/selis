@@ -138,7 +138,7 @@ function document(title: string, lang: SampleLanguage, build: Builder): Uint8Arr
 }
 
 type Strings = {
-  lease: { file: string; title: string; heading: string; parties: string; clauses: Array<[string, string]>; sign: [string, string] };
+  lease: { file: string; title: string; heading: string; parties: string; clauses: Array<[string, string]>; signatures: string; place: string; sign: [string, string] };
   trip: { file: string; title: string; subtitle: string; days: Array<[string, string]> };
   invoice: { file: string; title: string; from: string; address: string; to: string; columns: [string, string, string, string]; rows: Array<[string, number, number]>; subtotal: string; vat: string; total: string; note: string };
   report: { file: string; title: string; summary: string; chart: string; quarters: [string, string, string, string]; outlook: string; outlookText: string };
@@ -160,6 +160,8 @@ const TEXT: Record<SampleLanguage, Strings> = {
         ["5. Repairs", "The landlord keeps the structure, heating and plumbing in good repair; the tenant reports faults promptly and keeps the flat clean and ventilated."],
         ["6. Ending the lease", "Either party may end the lease after the first six months with two months' notice. The keys are returned on the last day."],
       ],
+      signatures: "Signatures",
+      place: "Signed in Brightwater on 1 October 2026, in two copies, one for each party.",
       sign: ["Landlord", "Tenant"],
     },
     trip: {
@@ -219,6 +221,8 @@ const TEXT: Record<SampleLanguage, Strings> = {
         ["5. Επισκευές", "Η εκμισθώτρια φροντίζει τον φέροντα οργανισμό, τη θέρμανση και τις υδραυλικές εγκαταστάσεις· ο μισθωτής αναφέρει έγκαιρα τις βλάβες και διατηρεί το σπίτι καθαρό."],
         ["6. Λύση", "Μετά τους πρώτους έξι μήνες κάθε μέρος μπορεί να λύσει τη μίσθωση με προειδοποίηση δύο μηνών. Τα κλειδιά παραδίδονται την τελευταία ημέρα."],
       ],
+      signatures: "Υπογραφές",
+      place: "Υπογράφεται στην Ακρογιαλιά, 1 Οκτωβρίου 2026, σε δύο αντίτυπα, ένα για κάθε μέρος.",
       sign: ["Η εκμισθώτρια", "Ο μισθωτής"],
     },
     trip: {
@@ -282,12 +286,17 @@ function lease(s: Strings["lease"], lang: SampleLanguage): Uint8Array {
       p.heading(title, 11.5);
       p.para(body);
     }
-    p.y += 64;
+    // Signatures at the top of page 2 (the store screenshot signs there).
+    const q = newPage();
+    q.rect(0, 0, A4[0], 8, ACCENT);
+    q.para(s.signatures, 14, { bold: true, gap: 6 });
+    q.para(s.place, 10.5, { gap: 0 });
+    q.y += 90;
     const [left, right] = s.sign;
-    p.line(64, p.y, 250, p.y);
-    p.line(345, p.y, 531, p.y);
-    p.text(left, 64, p.y + 16, 10, { color: MUTED });
-    p.text(right, 345, p.y + 16, 10, { color: MUTED });
+    q.line(64, q.y, 250, q.y);
+    q.line(345, q.y, 531, q.y);
+    q.text(left, 64, q.y + 16, 10, { color: MUTED });
+    q.text(right, 345, q.y + 16, 10, { color: MUTED });
   });
 }
 
@@ -369,7 +378,7 @@ function report(s: Strings["report"], lang: SampleLanguage): Uint8Array {
 export function samples(lang: SampleLanguage): Sample[] {
   const s = TEXT[lang];
   return [
-    { file: s.lease.file, title: s.lease.title, heading: s.lease.heading, pageCount: 1, build: () => lease(s.lease, lang) },
+    { file: s.lease.file, title: s.lease.title, heading: s.lease.heading, pageCount: 2, build: () => lease(s.lease, lang) },
     { file: s.trip.file, title: s.trip.title, heading: s.trip.title, pageCount: 1, build: () => trip(s.trip, lang) },
     { file: s.invoice.file, title: s.invoice.title, heading: s.invoice.from, pageCount: 1, build: () => invoice(s.invoice, lang) },
     { file: s.report.file, title: s.report.title, heading: s.report.title, pageCount: 1, build: () => report(s.report, lang) },

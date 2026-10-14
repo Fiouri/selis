@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Store screenshots on the AVD (P5a, docs/store/store-screenshots.md): six key screens with the
+# Store screenshots on the AVD (P5a, ADR 0024): six key screens with the
 # realistic sample documents, in one language and theme per call.
 #
 #   apps/app/e2e/maestro/store-screenshots.sh <serial> en|el light|dark
@@ -10,9 +10,11 @@
 #   restored on exit.
 # - Labels of the target language come from apps/app/src/i18n/<lang>.json, so the flow taps the
 #   same strings the user sees.
-# - Output: docs/store/screenshots/<lang>/<theme>/{1-library,…,6-scan}.png; light also goes to
-#   fastlane/metadata/android/<locale>/images/phoneScreenshots/ (what Play and F-Droid show).
-# Prerequisite: a debug build of Selis installed (any build with devtools-readable WebView).
+# - Output: light → fastlane/metadata/android/<locale>/images/phoneScreenshots/ (what Play and
+#   F-Droid show), dark → docs/store/screenshots/<lang>/dark/; {1-library,…,6-tools}.png.
+# Prerequisite: a release build with the `measure` feature installed (WebView readable through
+# DevTools for Maestro, none of the debug-only UI of a debug build in the pictures):
+#   npm run tauri -- android build --apk --target x86_64 --features measure, debug-signed.
 set -euo pipefail
 serial="${1:?usage: store-screenshots.sh <serial> en|el light|dark}"
 lang="${2:?usage: store-screenshots.sh <serial> en|el light|dark}"
@@ -40,11 +42,12 @@ for f in "$samples"/*.pdf; do
     -d "\"file:///sdcard/Download/selis-samples/$lang/$name\"" > /dev/null
 done
 
-# Labels and positions for the flow (KEY=VALUE per line, run.sh MAESTRO_ENV_FILE).
-node --input-type=module - "$root" "$lang" "$theme" "$(win "$work")" > "$work/env" <<'EOF'
+# The flow's parameters go into a small UTF-8 wrapper flow (an `env:` block, then runFlow):
+# Greek labels passed as `maestro -e` arguments lose their characters on Windows.
+node --input-type=module - "$(win "$root")" "$lang" "$theme" "$(win "$here/store-screenshots.yaml")" > "$work/store-screenshots-$lang-$theme.yaml" <<'EOF'
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-const [root, lang, theme, out] = process.argv.slice(2);
+const [root, lang, theme, flow] = process.argv.slice(2);
 const json = JSON.parse(readFileSync(join(root, "apps/app/src/i18n", `${lang}.json`), "utf8"));
 const t = (key, vars = {}) => {
   const value = key.split(".").reduce((o, k) => o?.[k], json);
@@ -55,7 +58,6 @@ const { samples } = await import(`file://${join(root, "packages/fixtures/src/sam
 const [lease, trip, invoice, report] = samples(lang);
 const env = {
   LANG: lang,
-  OUT: out,
   S_LEASE: lease.file, S_TRIP: trip.file, S_INVOICE: invoice.file, S_REPORT: report.file,
   T_THEME: t(theme === "dark" ? "settings.themeDark" : "settings.themeLight"),
   T_LIBRARY: t("tabs.library"),
@@ -64,31 +66,31 @@ const env = {
   T_OPEN_TRIP: t("library.openDocument", { title: trip.title }),
   T_OPEN_REPORT: t("library.openDocument", { title: report.title }),
   T_PAGE_1: t("viewer.pageIndicator", { page: "1", total: "1" }),
+  T_PAGE_1_OF_2: t("viewer.pageIndicator", { page: "1", total: "2" }),
+  T_PAGE_2_OF_2: t("viewer.pageIndicator", { page: "2", total: "2" }),
   T_ANNOTATE: t("viewer.dockAnnotate"),
   T_DONE: t("annotate.done"),
   T_PEN: t("annotate.toolPen"),
   T_SIGN: t("viewer.dockSign"),
   T_NEW: t("sign.new"),
   T_MODE_TYPE: t("sign.modeType"),
-  T_NAME: t("sign.nameLabel"),
   T_SAVE: t("sign.save"),
   T_PLACE_HINT: t("sign.placeHint"),
   T_REMOVE: t("sign.remove"),
   T_TAB_SEND: t("transfer.tabSend"),
   T_SELECT_ALL: t("transfer.send.selectAll"),
   T_SEND_ALL: t("transfer.send.startWith", { summary: ".*" }),
-  T_QR: t("transfer.send.qrAlt"),
-  T_SCAN: t("scan.open"),
-  T_SHUTTER: t("scan.shutter"),
-  T_ADJUST: t("scan.adjustTitle"),
+  T_EXPIRES: t("transfer.send.expiresIn", { time: ".*" }),
+  T_MORE: t("viewer.more"),
   // adb input types ASCII only; a signature in Latin letters is usual in Greece too.
   SIGNER: lang === "el" ? "D. Rigas" : "Daniel Reyes",
-  // Screen positions on the 1080×1920 screen (page fitted to the width).
-  Y_HIGHLIGHT: "24%",
-  Y_PEN: "59%",
-  SIGN_POINT: "72%, 70%",
 };
-for (const [k, v] of Object.entries(env)) console.log(`${k}=${v}`);
+console.log("appId: com.anywecon.selis");
+console.log("androidWebViewHierarchy: devtools");
+console.log("env:");
+for (const [k, v] of Object.entries(env)) console.log(`  ${k}: ${JSON.stringify(v)}`);
+console.log("---");
+console.log(`- runFlow: ${JSON.stringify(flow)}`);
 EOF
 
 restore() {
@@ -105,15 +107,19 @@ demo battery -e level 100 -e plugged false
 demo network -e wifi show -e level 4 -e mobile hide
 demo notifications -e visible false
 
-MAESTRO_ENV_FILE="$work/env" "$here/run.sh" "$serial" "$here/store-screenshots.yaml"
+"$here/run.sh" "$serial" "$work/store-screenshots-$lang-$theme.yaml"
+# Maestro writes takeScreenshot files into its debug output (run.sh: .tmp/maestro), one
+# folder per run; take this run's.
+latest="$(ls -td "$root"/.tmp/maestro/.maestro/tests/*/ | head -1)"
+find "$latest" -path '*takeScreenshot/*.png' -exec cp {} "$work/" \;
+[ "$(ls "$work"/*.png | wc -l)" -eq 6 ] || { echo "expected 6 screenshots in $latest" >&2; exit 1; }
 
-shots="$root/docs/store/screenshots/$lang/$theme"
+if [ "$theme" = light ]; then
+  shots="$root/fastlane/metadata/android/$locale/images/phoneScreenshots"
+else
+  shots="$root/docs/store/screenshots/$lang/$theme"
+fi
+rm -rf "$shots"
 mkdir -p "$shots"
 cp "$work"/*.png "$shots/"
-if [ "$theme" = light ]; then
-  play="$root/fastlane/metadata/android/$locale/images/phoneScreenshots"
-  rm -rf "$play"
-  mkdir -p "$play"
-  cp "$work"/*.png "$play/"
-fi
 echo "store screenshots $lang/$theme: $(ls "$work"/*.png | wc -l) → $shots"

@@ -6,7 +6,7 @@
  * - Google Play feature graphic, 1024 × 500 PNG without alpha:
  *   fastlane/metadata/android/<locale>/images/featureGraphic.png (tagline per language)
  * - Website: social preview website/assets/og.png (1200 × 630) and the screenshots as WebP,
- *   540 × 960, website/assets/screens/<lang>/ (from docs/store/screenshots/<lang>/light/).
+ *   540 × 960, website/assets/screens/<lang>/ (from the light Play screenshots).
  *
  * Sources: apps/app/assets/icon.svg, packages/ui/src/tokens.css (accent and neutral colours),
  * Inter from @fontsource-variable/inter (self-hosted, embedded as data URLs).
@@ -85,8 +85,8 @@ async function main(): Promise<void> {
     console.log("website: og.png 1200×630");
 
     // Store screenshots → WebP for the website (canvas encoder of Chromium, quality 0.85).
-    for (const lang of ["en", "el"]) {
-      const from = join(ROOT, "docs", "store", "screenshots", lang, "light");
+    for (const [lang, locale] of [["en", "en-US"], ["el", "el-GR"]] as const) {
+      const from = join(META, locale, "images", "phoneScreenshots");
       if (!existsSync(from)) continue;
       const to = join(ROOT, "website", "assets", "screens", lang);
       mkdirSync(to, { recursive: true });

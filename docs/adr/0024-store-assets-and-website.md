@@ -23,11 +23,12 @@ phone screenshots with sides at most 2:1. App Store: name and subtitle ≤ 30, p
   Playwright): Play icon (full-bleed, Play masks it), feature graphic per language, the
   website's social image and WebP screenshots — reproducible, no image editor.
 - **Screenshots from the real app** (`apps/app/e2e/maestro/store-screenshots.sh`, Maestro on the
-  AVD): six screens (library, viewer, annotate, sign, transfer, scan) × en/el × light/dark, with
+  AVD): six screens (library, viewer, annotate, sign, transfer, tools; a scan needs a real page before a real camera) × en/el × light/dark, with
   invented sample documents (`packages/fixtures/src/samples.ts`), a 1080 × 1920 screen and a
   clean status bar (System UI demo mode). The flow taps the labels of the target language read
-  from `apps/app/src/i18n`. Light sets go to `phoneScreenshots/`, all sets to
-  `docs/store/screenshots/`.
+  from `apps/app/src/i18n`. Light sets go to `phoneScreenshots/`, dark sets to
+  `docs/store/screenshots/<lang>/dark/`. The screenshots come from a release build with the
+  `measure` feature (no debug-only UI in the pictures).
 - **Website** (`website/`, no framework, no JavaScript): English at `/`, Greek at `/el/`;
   landing, features, privacy (rendered from `docs/PRIVACY.md` / `PRIVACY.el.md`), download
   (APKs of the newest GitHub release with SHA-256, the signing certificate once it exists).
