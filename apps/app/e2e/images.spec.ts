@@ -124,9 +124,10 @@ test("a page saved as an image: PNG at a chosen resolution, JPEG", async ({ page
   await page.getByTestId("tool-export-image").click();
   await page.getByTestId("tools-format-jpeg").click();
   await page.getByTestId("tools-export-save").click();
-  await expect(page.getByText("Page saved as an image.")).toBeVisible();
+  // The PNG's toast may still be up: wait for the export itself.
+  const lastMime = () => page.evaluate(() => (window as unknown as { __selisTest: Hooks }).__selisTest.photos.lastExport()?.mime);
+  await expect.poll(lastMime).toBe("image/jpeg");
   const jpeg = await page.evaluate(() => (window as unknown as { __selisTest: Hooks }).__selisTest.photos.lastExport());
-  expect(jpeg?.mime).toBe("image/jpeg");
   expect(jpeg?.bytes.slice(0, 3)).toEqual([0xff, 0xd8, 0xff]);
 });
 

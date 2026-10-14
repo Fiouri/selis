@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
+import { makePhoto } from "@selis/fixtures";
 import el from "../src/i18n/el.json" with { type: "json" };
 import en from "../src/i18n/en.json" with { type: "json" };
 import { addToLibrary, firstPageRendered, importFixture, presetSettings, thumbnailsLoaded } from "./helpers";
@@ -461,6 +462,39 @@ for (const lang of LANGS) {
         await expect(page.getByTestId("pack-import-done")).toBeVisible();
         await settle(page);
         await expect(page).toHaveScreenshot(shot("pack-imported"));
+      });
+
+      test(`images to PDF and page export (${theme})`, async ({ page }) => {
+        await page.goto("/");
+        const photos = await Promise.all(
+          [1, 6, 1, 3].map(async (orientation, i) => ({
+            name: `IMG_${String(i)}.jpg`,
+            bytes: [...(await makePhoto({ width: 320, height: 240, orientation }))],
+          })),
+        );
+        await page.evaluate((items) => {
+          type Hooks = { photos: { pickNext: (p: Array<{ name: string; bytes: number[] }>) => void } };
+          (window as unknown as { __selisTest: Hooks }).__selisTest.photos.pickNext(items);
+        }, photos);
+        await page.getByTestId("images-empty").click();
+        await expect(page.getByTestId("images-tile")).toHaveCount(4);
+        await expect(page.locator('[data-testid="images-grid"] img')).toHaveCount(4);
+        await expect
+          .poll(() => page.locator('[data-testid="images-grid"] img').evaluateAll((imgs: HTMLImageElement[]) => imgs.every((i) => i.complete && i.naturalWidth > 0)))
+          .toBe(true);
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("images-screen"));
+        await page.goBack();
+        await expect(page.getByTestId("images-screen")).toHaveCount(0);
+
+        await importFixture(page, "greek.pdf", c.greek);
+        await firstPageRendered(page);
+        await page.getByRole("button", { name: ui(lang, "viewer.more") }).click();
+        await page.getByTestId("more-tools").click();
+        await page.getByTestId("tool-export-image").click();
+        await expect(page.getByTestId("tools-export-pixels")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("tools-export"), { maxDiffPixelRatio: 0.004 });
       });
 
       test(`tools: sheet, protect, compressed, unlock (${theme})`, async ({ page }) => {

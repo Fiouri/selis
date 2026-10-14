@@ -6,7 +6,7 @@
 import type { PageSizeOption } from "@selis/engine";
 import { Button, IconButton, Segmented } from "@selis/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, ImagePlus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Image as ImageIcon, ImagePlus, X } from "lucide-react";
 import { type ReactNode, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../../components/Toast";
@@ -108,7 +108,13 @@ export function ImagesScreen() {
               {items.map((item, index) => (
                 <li key={item.id} className="flex flex-col gap-1" data-testid="images-tile">
                   <div className="relative aspect-square overflow-hidden rounded-[12px] bg-neutral-3">
-                    <img src={item.thumb} alt="" className="size-full object-contain" />
+                    {item.thumb ? (
+                      <img src={item.thumb} alt="" className="size-full object-contain" />
+                    ) : (
+                      <span className="flex size-full items-center justify-center text-neutral-9" aria-hidden="true">
+                        <ImageIcon size={28} strokeWidth={1.5} />
+                      </span>
+                    )}
                     <button
                       type="button"
                       className="selis-focus absolute top-0 right-0 flex size-11 items-center justify-center"
