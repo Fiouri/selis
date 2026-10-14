@@ -215,6 +215,8 @@ Mobile-first. Κάθε phase κλείνει μόνο όταν περάσει τ�
    - OCR (Tesseract el + en) → searchable PDF.
    - qpdf: password protect/remove, compress, linearize, repair.
    - Images → PDF, export σελίδας ως PNG/JPEG.
+   - **Κατάσταση: done (2026-10-14).** P4a qpdf (ADR 0015), P4b images (ADR 0017), P4c scan
+     (ADR 0016), P4d OCR (ADR 0018)· μετρήσεις στο `docs/spike-p4.md`, Maestro σε S23 + AVD.
 6. **P5 — Release 1.0**
    - **Gate (υποχρεωτικό, πριν από κάθε store release):** μέτρηση σε πραγματική mid-range Android με `scripts/measure-device.sh` (1000 σελίδες: πρώτη σελίδα < 1 s, πλήρες scroll χωρίς crash, μνήμη WebView < 600 MB) και επανάληψη του Maestro suite σε αυτήν. Αποτελέσματα στο `docs/spike-p0.md`.
    - **Gate (υποχρεωτικό, πριν από κάθε store release):** μεταφορά εκτός LAN σε πραγματική συσκευή (δεδομένα κινητής, hotspot άλλου κινητού ή απομονωμένο guest Wi-Fi), 200 MB: αναφορά διαδρομής direct ή relay, MB/s, BLAKE3 και στα δύο άκρα. Η διαδρομή relay καθαυτή καλύπτεται ήδη από το forced-relay AC του P3a (`docs/spike-p3.md`). Αποτελέσματα στο `docs/spike-p0.md`.
