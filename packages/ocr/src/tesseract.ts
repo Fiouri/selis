@@ -31,15 +31,20 @@ export function appOcrPaths(base: string, simd: boolean): OcrPaths {
 }
 
 export type Ocr = {
-  /** Reads one page image (PNG or JPEG bytes) rendered at `dpi`. */
+  /** Reads one page image (8-bit PGM, PNG or JPEG bytes) rendered at `dpi`. */
   recognize: (image: Blob | Uint8Array, dpi: number) => Promise<OcrPage>;
   terminate: () => Promise<void>;
 };
 
 type ImageSize = { width: number; height: number };
 
-/** Width and height of a PNG or JPEG (the recognised boxes are in its pixels). */
+/** Width and height of a binary PGM, PNG or JPEG (the recognised boxes are in its pixels). */
 export function imageSize(bytes: Uint8Array): ImageSize | null {
+  if (bytes[0] === 0x50 && bytes[1] === 0x35) {
+    // "P5", whitespace, width, whitespace, height (no comments: the engine writes none).
+    const m = new TextDecoder().decode(bytes.subarray(0, 64)).match(/^P5\s+(\d+)\s+(\d+)\s/);
+    return m ? { width: Number(m[1]), height: Number(m[2]) } : null;
+  }
   if (bytes[0] === 0x89 && bytes[1] === 0x50) {
     const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     return { width: v.getUint32(16), height: v.getUint32(20) };
@@ -92,7 +97,7 @@ export async function createOcr(languages: OcrLanguages, paths: OcrPaths): Promi
     recognize: async (image, dpi) => {
       const bytes = image instanceof Uint8Array ? image : new Uint8Array(await image.arrayBuffer());
       const size = imageSize(bytes);
-      if (!size) throw new Error("not a PNG or JPEG image");
+      if (!size) throw new Error("not a PGM, PNG or JPEG image");
       // PNGs from the engine carry no resolution: without it Tesseract guesses from the glyphs.
       await worker.setParameters({ user_defined_dpi: String(Math.round(dpi)) });
       // Both builds take bytes as they are. The cast is for the app's (browser) type check,

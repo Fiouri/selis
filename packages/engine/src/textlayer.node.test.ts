@@ -11,7 +11,6 @@ import { join } from "node:path";
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import type { PdfDocumentObject, PdfPageObject } from "@embedpdf/models";
 import { init } from "@embedpdf/pdfium";
-import { createCanvas } from "@napi-rs/canvas";
 import { FIXTURES, type FixtureName, scannedWords } from "@selis/fixtures";
 import { pdfjsRender, pdfjsText } from "@selis/fixtures/oracle";
 import { createOcr, layoutWords, type Ocr, wordKey } from "@selis/ocr";
@@ -54,20 +53,14 @@ function page(doc: PdfDocumentObject, index: number): PdfPageObject {
   return p;
 }
 
-/** Page `index` as a PNG at 300 dpi, as the app hands it to Tesseract. */
-async function pagePng(doc: PdfDocumentObject, index: number): Promise<Uint8Array> {
-  const raw = await engine.renderPageRaw(doc, page(doc, index), { scaleFactor: 300 / 72, dpr: 1 }).toPromise();
-  const canvas = createCanvas(raw.width, raw.height);
-  const ctx = canvas.getContext("2d");
-  const image = ctx.createImageData(raw.width, raw.height);
-  image.data.set(raw.data);
-  ctx.putImageData(image, 0, 0);
-  return new Uint8Array(canvas.encodeSync("png"));
+/** Page `index` in 8-bit grey at 300 dpi, as the app hands it to Tesseract (a binary PGM). */
+function pageGray(doc: PdfDocumentObject, index: number): Uint8Array {
+  return text.grayPage(doc, page(doc, index), 300 / 72).bytes;
 }
 
 async function ocrPage(doc: PdfDocumentObject, index: number): Promise<number> {
   const p = page(doc, index);
-  const read = await ocr.recognize(await pagePng(doc, index), 300);
+  const read = await ocr.recognize(pageGray(doc, index), 300);
   const words = layoutWords(read, p.size.width, p.size.height);
   await text.setTextLayer(doc, p, words);
   return words.length;
@@ -146,6 +139,24 @@ it("replaces its own layer and hands back the words it replaced (undo)", async (
   // Removing the layer leaves the page without text again.
   await text.setTextLayer(doc, p, []);
   expect(text.pageTextInfo(doc, p)).toEqual({ chars: 0, ocr: false });
+});
+
+it("renders a page in 8-bit grey as a PGM of the page's size at the scale", async () => {
+  const doc = await open(fixture("scanned-english"));
+  const { bytes, width, height } = text.grayPage(doc, page(doc, 0), 150 / 72);
+  expect([width, height]).toEqual([Math.round(595.28 * (150 / 72)), Math.round(841.89 * (150 / 72))]);
+  const header = `P5
+${String(width)} ${String(height)}
+255
+`;
+  expect(new TextDecoder().decode(bytes.subarray(0, header.length))).toBe(header);
+  expect(bytes.length).toBe(header.length + width * height);
+  // Paper is light, the first text line (a heading at ~1 in) is dark.
+  const at = (x: number, y: number) => bytes[header.length + Math.round(y * height) * width + Math.round(x * width)] ?? 0;
+  expect(at(0.5, 0.02)).toBeGreaterThan(200);
+  const row = Math.round(0.087 * height);
+  const line = bytes.subarray(header.length + row * width, header.length + (row + 1) * width);
+  expect(Math.min(...line)).toBeLessThan(100);
 });
 
 it("counts a page's own text apart from the OCR layer", async () => {

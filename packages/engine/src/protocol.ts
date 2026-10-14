@@ -64,6 +64,7 @@ export type WorkerRequest =
   /** OCR text layer (P4d): replaces the page's Selis OCR words with `words`. */
   | { type: "setTextLayer"; reqId: number; docId: string; index: number; words: TextLayerWord[] }
   | { type: "pageTextInfo"; reqId: number; docId: string; index: number }
+  | { type: "pageGray"; reqId: number; docId: string; index: number; scale: number }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
 
@@ -99,6 +100,7 @@ export type WorkerResponse =
   | { type: "exportedImage"; reqId: number; mime: string; width: number; height: number; bytes: ArrayBuffer }
   | { type: "textLayer"; reqId: number; replaced: TextLayerWord[] }
   | { type: "pageTextInfo"; reqId: number; info: PageTextInfo }
+  | { type: "pageGray"; reqId: number; width: number; height: number; bytes: ArrayBuffer }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };
 

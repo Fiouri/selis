@@ -38,9 +38,9 @@ function fakeDoc(texts: PageTextInfo[]): FakeDoc {
     pages: texts.map(() => ({ width: 595.28, height: 841.89 })),
     layers,
     exported,
-    exportPageImage: (i: number) => {
+    renderPageGray: (i: number) => {
       exported.push(i);
-      return Promise.resolve({ bytes: new ArrayBuffer(8), mime: "image/png", width: 1240, height: 1754 });
+      return Promise.resolve({ bytes: new ArrayBuffer(8), width: 1240, height: 1754 });
     },
     pageTextInfo: vi.fn((i: number) => Promise.resolve(texts[i] ?? { chars: 0, ocr: false })),
     setTextLayer: vi.fn((i: number, words: readonly TextLayerWord[]) => {
@@ -134,6 +134,16 @@ describe("OCR job", () => {
     expect(doc.layers.has(1)).toBe(true);
     // A new Tesseract worker for the resumed job (the cancelled one was stopped).
     expect(createOcr).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts a fresh Tesseract worker every eight pages and lets each one go", async () => {
+    const doc = fakeDoc(Array.from({ length: 17 }, () => ({ chars: 0, ocr: false })));
+    recognize.mockResolvedValue(PAGE);
+    expect(await useOcr.getState().start("doc", doc, session(doc).s)).toEqual({ kind: "saved", pages: 17 });
+    // Pages 1–8, 9–16, 17: three workers, each terminated (the last when the job ends).
+    expect(createOcr).toHaveBeenCalledTimes(3);
+    expect(terminate).toHaveBeenCalledTimes(3);
+    expect(doc.exported).toHaveLength(17);
   });
 
   it("stops with the reason when a page cannot be read", async () => {

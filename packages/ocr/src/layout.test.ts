@@ -51,7 +51,9 @@ describe("helpers", () => {
     expect(wordKey("(London).")).toBe("London");
   });
 
-  it("reads PNG and JPEG sizes", () => {
+  it("reads PGM, PNG and JPEG sizes", () => {
+    // PGM allows any whitespace between its fields.
+    expect(imageSize(new TextEncoder().encode("P5 2480 3508 255 x"))).toEqual({ width: 2480, height: 3508 });
     const png = new Uint8Array(24);
     png.set([0x89, 0x50, 0x4e, 0x47]);
     new DataView(png.buffer).setUint32(16, 2480);
