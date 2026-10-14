@@ -112,3 +112,22 @@ the scanned pages' JPEGs carry Chrome's ICC profile (APP2) and no other metadata
 
 Full Tier 2 Maestro suite with this build (18 flows incl. `scan.yaml`, and the pages drag
 check): pass on the AVD and on the S23.
+
+## P4d — OCR (2026-10-14)
+
+`textlayer.node.test.ts` (Node, real PDFium + Tesseract, host): the scanned fixtures (two A4
+pages each, 300 dpi JPEG, skewed 0.25–0.35°, noisy) read in ~3.7 s a page; pdf.js extracts
+98.0 % / 96.2 % of the Greek words (misses: `ως`, `το` read as Latin `TO`, `ευφυΐα` read with a
+polytonic `ῖ`) and ≥ 95 % of the English words; the pages render exactly as before.
+
+On the devices (`ocr.yaml` + `ocr.sh`, debug builds; the Greek fixture, Greek + English, A4
+rendered at 300 dpi = 2480 × 3508 px; RSS = app process + WebView renderer, `ps`, ~2/s):
+
+| Device | Page 1 (98 words) | Page 2 (53 words) | pdf.js words p.1 / p.2 | RSS before → peak → after |
+| --- | --- | --- | --- | --- |
+| AVD `selis-midrange-api36` (3 GB) | 2.9 s | 1.8 s | 98.0 % / 96.2 % | 621 → 1001 MB (+380) → ~777 MB |
+| Galaxy S23 | S23_P1 | S23_P2 | S23_WORDS | S23_RSS |
+
+The AVD did not run out of memory. The peak is Tesseract's worker (image, binarisation, LSTM)
+plus the engine's 300-dpi render; the worker is terminated when the job ends, the engine's
+WebAssembly heap keeps its render buffer. The viewer's search then finds `Ευρωπαϊκή` (1 / 1).
