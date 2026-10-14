@@ -41,6 +41,16 @@ sockets() {
   done
 }
 
+# The peer of an earlier run whose flow failed (POST_RUN runs only after a pass) still
+# holds its store: stop it before starting another.
+stop_peer() {
+  if [ -f "$state/peer.pid" ]; then
+    kill "$(cat "$state/peer.pid")" 2>/dev/null || true
+    rm -f "$state/peer.pid"
+    sleep 1
+  fi
+}
+
 case "$cmd" in
   sockets)
     uid="$(uid_of)"
@@ -86,6 +96,8 @@ case "$cmd" in
     sleep 5
     "$0" sockets "$serial"
     adb_ shell am force-stop "$pkg"
+    stop_peer
+    rm -rf "$state/store"
     rm -f "$state/peer.log"
     # The peer is a native program: on Windows (Git Bash, MSYS_NO_PATHCONV) give it Windows paths.
     native() { if command -v cygpath > /dev/null; then cygpath -w "$1"; else echo "$1"; fi; }
@@ -111,6 +123,7 @@ case "$cmd" in
     adb_ shell pm clear "$pkg" >/dev/null
     adb_ shell pm grant "$pkg" android.permission.POST_NOTIFICATIONS
     adb_ shell setprop debug.selis.ticket_lifetime 60
+    stop_peer
     rm -rf "$state/store-recover"
     rm -f "$state/peer-recover.log"
     "$peer" send "$(native "$payload")" --yes --drop-after-accept --store "$(native "$state/store-recover")" > "$state/peer-recover.log" 2>&1 &

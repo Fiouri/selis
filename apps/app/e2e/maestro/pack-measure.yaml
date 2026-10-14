@@ -1,8 +1,8 @@
 # .selispack timing with a passphrase (P3 follow-up): 50 documents, ~300 MB.
 # PRE_RUN="apps/app/e2e/maestro/pack.sh measure-pre" clears Selis and pushes
 # it as measure-protected.selispack (made on the host) to Download/selis-measure. The timed steps are
-# from the tap on "Open" (import) and on "Create file" (export, until the share sheet has the
-# file) to the end of the wait after it; pack.sh measure-times reads them from Maestro's debug
+# from the tap on "Open" (import) and on "Create file" (export, until the share sheet shows the
+# pack by name) to the end of the wait after it; pack.sh measure-times reads them from Maestro's debug
 # output.
 # Release-like build with the `measure` feature (WebView DevTools on) or a debug build.
 appId: com.anywecon.selis
@@ -45,12 +45,20 @@ name: Selis pack timing (passphrase, 50 documents)
 - tapOn: "Close"
 
 - tapOn: "Send"
-# Below the list of 50 documents.
-- scrollUntilVisible:
-    element:
-      id: "pack-export-open"
-    direction: DOWN
-    timeout: 180000
+# Below the list of 50 documents. Swipes start mid-screen: scrollUntilVisible starts near the
+# bottom, and on a slow emulator a swipe there can land as a tap on the tab bar.
+- repeat:
+    while:
+      notVisible:
+        id: "pack-export-open"
+    times: 30
+    commands:
+      - swipe:
+          start: 50%, 60%
+          end: 50%, 20%
+          duration: 400
+- assertVisible:
+    id: "transfer-screen"
 - tapOn:
     id: "pack-export-open"
 - assertVisible: "The whole library (versions, tags, signatures, settings)"
@@ -69,8 +77,12 @@ name: Selis pack timing (passphrase, 50 documents)
     enabled: true
 - tapOn: "Create file"
 - extendedWaitUntil:
-    visible: "File with 50 documents ready"
+    visible: 'Selis \d{4}-\d{2}-\d{2}\.selispack'
     timeout: 300000
     label: "TIMED export"
-# The share sheet is open over the app: close it without sending anywhere.
+# Close the share sheet without sending anywhere: the app is back and closes its sheet.
 - back
+- extendedWaitUntil:
+    notVisible:
+      id: "pack-export-sheet"
+    timeout: 30000

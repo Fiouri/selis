@@ -116,8 +116,13 @@ name: Selis pack open with, passphrase, tamper
 - tapOn:
     id: "pack-export-open"
 - tapOn: "Create file"
+# The share sheet shows the pack by name (the app's own message waits until it is back).
 - extendedWaitUntil:
-    visible: "File with 3 documents ready"
+    visible: 'Selis \d{4}-\d{2}-\d{2}\.selispack'
     timeout: 60000
-# The share sheet is open over the app: close it without sending anywhere.
+# Close it without sending anywhere: the app is back and closes its sheet.
 - back
+- extendedWaitUntil:
+    notVisible:
+      id: "pack-export-sheet"
+    timeout: 30000
