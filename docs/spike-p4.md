@@ -126,8 +126,11 @@ rendered at 300 dpi = 2480 × 3508 px; RSS = app process + WebView renderer, `ps
 | Device | Page 1 (98 words) | Page 2 (53 words) | pdf.js words p.1 / p.2 | RSS before → peak → after |
 | --- | --- | --- | --- | --- |
 | AVD `selis-midrange-api36` (3 GB) | 2.9 s | 1.8 s | 98.0 % / 96.2 % | 621 → 1001 MB (+380) → ~777 MB |
-| Galaxy S23 | S23_P1 | S23_P2 | S23_WORDS | S23_RSS |
+| Galaxy S23 (8 GB) | 2.5 s | 1.6 s | 98.0 % / 96.2 % | 526 → 930 MB (+404) → ~730, later 627 MB |
 
 The AVD did not run out of memory. The peak is Tesseract's worker (image, binarisation, LSTM)
 plus the engine's 300-dpi render; the worker is terminated when the job ends, the engine's
 WebAssembly heap keeps its render buffer. The viewer's search then finds `Ευρωπαϊκή` (1 / 1).
+
+Full Tier 2 Maestro suite with this build (19 flows incl. `scan.yaml` and `ocr.yaml`, and the
+pages drag check): pass on the AVD and on the S23.
