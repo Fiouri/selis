@@ -49,6 +49,8 @@
     "allow-pack-export",
     "allow-pack-import",
     "allow-pick-pack",
+    "allow-document-protection",
+    "allow-run-tool",
     "allow-pending-transfer-link",
     "allow-dismiss-transfer-link",
     "allow-transfer-open",

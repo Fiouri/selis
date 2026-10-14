@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-document-protection"
+description = "Enables the document_protection command without any pre-configured scope."
+commands.allow = ["document_protection"]
+
+[[permission]]
+identifier = "deny-document-protection"
+description = "Denies the document_protection command without any pre-configured scope."
+commands.deny = ["document_protection"]

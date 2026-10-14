@@ -157,7 +157,7 @@ impl Library {
             .join(format!("{upload_id}.part")))
     }
 
-    fn working_path(&self, document_id: &str) -> PathBuf {
+    pub(crate) fn working_path(&self, document_id: &str) -> PathBuf {
         // Document ids are UUIDs generated here; `get_document` checks them first.
         self.root.join(WORK_DIR).join(format!("{document_id}.pdf"))
     }

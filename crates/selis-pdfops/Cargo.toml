@@ -1,0 +1,27 @@
+[package]
+name = "selis-pdfops"
+description = "Selis PDF file operations on qpdf: protect, unprotect, compress, linearize, repair (ADR 0015)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+# qpdf 12.4 built from source with its native crypto (no OpenSSL/GnuTLS), zlib and libjpeg
+# (ADR 0015). Exact pin: the C++ sources come with the crate.
+qpdf = { version = "=0.3.7", features = ["vendored"] }
+thiserror.workspace = true
+zeroize = "1.9.1"
+
+[dev-dependencies]
+blake3.workspace = true
+# Tests write legacy RC4 files to check a password can be removed from them; the app itself
+# only ever writes AES-256 (no `legacy` in [dependencies]).
+qpdf = { version = "=0.3.7", features = ["vendored", "legacy"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

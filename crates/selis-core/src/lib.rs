@@ -19,6 +19,7 @@ pub mod save;
 pub mod signatures;
 pub mod tags;
 pub mod thumbs;
+pub mod tools;
 pub mod transfers;
 pub mod trusted;
 
@@ -38,5 +39,6 @@ pub use retention::{RetentionPolicy, RetentionReport};
 pub use save::{SavedVersion, VersionLabel, WorkingCopy};
 pub use signatures::{Signature, SignatureKind};
 pub use tags::Tag;
+pub use tools::ToolRun;
 pub use transfers::{Outgoing, TransferDirection, TransferRow, TransferRowState, TransferUpdate};
 pub use trusted::TrustedDevice;
