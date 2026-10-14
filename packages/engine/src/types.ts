@@ -133,6 +133,13 @@ export interface DocHandle {
    * engine's bitmap limit (`limits.maxBitmapPixels`; see `exportPixels`).
    */
   exportPageImage(index: number, options: { readonly dpi: number; readonly format: "png" | "jpeg" }): Promise<ExportedImage>;
+  /**
+   * Adds an invisible text layer of `words` to page `index` (OCR, P4d), replacing a Selis OCR
+   * layer it had. Resolves to the words of the layer it replaced (for undo; empty if none).
+   */
+  setTextLayer(index: number, words: readonly TextLayerWord[]): Promise<TextLayerWord[]>;
+  /** Text on page `index` besides Selis' OCR layer, and whether it has that layer. */
+  pageTextInfo(index: number): Promise<PageTextInfo>;
   /** Bumped by every change to the list of pages (count, order, sizes). */
   structureRevision(): number;
   onStructureChange(listener: () => void): () => void;
@@ -162,6 +169,22 @@ export type ImportLosses = {
   readonly tooltips: number;
   readonly scripts: number;
 };
+
+/**
+ * A word of an OCR text layer (P4d): invisible text over a scanned page, in page view
+ * coordinates (points, top-left origin). The word is drawn from (`x`, `y`) on its baseline at
+ * `fontSize` and stretched horizontally to `width`.
+ */
+export type TextLayerWord = {
+  readonly text: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly fontSize: number;
+};
+
+/** What text a page has: characters outside Selis' OCR layer, and whether it has that layer. */
+export type PageTextInfo = { readonly chars: number; readonly ocr: boolean };
 
 /** Images → PDF (P4b), one image at a time (see `images.ts`). */
 export type ImagePdfSession = {

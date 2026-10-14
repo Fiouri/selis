@@ -17,6 +17,8 @@
     "@embedpdf/pdfium": "2.15.1"
   },
   "devDependencies": {
-    "@selis/fixtures": "0.1.0"
+    "@napi-rs/canvas": "1.0.11",
+    "@selis/fixtures": "0.1.0",
+    "@selis/ocr": "0.1.0"
   }
 }

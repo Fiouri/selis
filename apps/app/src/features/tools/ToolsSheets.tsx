@@ -5,12 +5,13 @@
  */
 import { exportPixels } from "@selis/engine";
 import { Button, Switch } from "@selis/ui";
-import { Check, ChevronDown, ChevronRight, Gauge, Image, LockKeyhole, LockKeyholeOpen, Shrink, Wrench } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Gauge, Image, LockKeyhole, LockKeyholeOpen, ScanText, Shrink, Wrench } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Sheet } from "../../components/Sheet";
 import { useToast } from "../../components/Toast";
 import { currentRenderLimits } from "../../lib/engine";
+import { type OcrOutcome, useOcr } from "../ocr/ocrStore";
 import { formatBytes } from "../transfer/format";
 import { Busy, Card } from "../transfer/parts";
 import { EXPORT_DPIS, type ExportDpi, type ExportFormat, MAX_PASSWORD_BYTES, MIN_PASSWORD, passwordBytes, useTools } from "./toolsStore";
@@ -20,8 +21,8 @@ const row =
 const field =
   "selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12";
 const icon = (Icon: typeof Wrench) => <Icon size={22} strokeWidth={1.75} className="text-neutral-11" aria-hidden="true" />;
-/** Rows block height (6 rows): the busy state keeps it, so the sheet does not jump. */
-const ROWS_MIN_HEIGHT = "min-h-[352px]";
+/** Rows block height (7 rows): the busy state keeps it, so the sheet does not jump. */
+const ROWS_MIN_HEIGHT = "min-h-[408px]";
 
 function ToolRow({
   label,
@@ -69,6 +70,7 @@ function ToolsMenu() {
   const protection = useTools((s) => s.protection);
   const view = useTools((s) => s.view);
   const hasPage = useTools((s) => s.page !== null);
+  const hasSession = useTools((s) => s.page?.session != null);
   const show = useTools((s) => s.show);
   const run = useTools((s) => s.run);
   const close = useTools((s) => s.close);
@@ -161,6 +163,14 @@ function ToolsMenu() {
         onClick={() => show({ step: "export" })}
         chevron
         testId="tool-export-image"
+      />
+      <ToolRow
+        label={t("tools.ocr")}
+        reason={locked ? t("tools.reasonLocked") : hasSession ? null : t("tools.reasonOpenFirst")}
+        glyph={icon(ScanText)}
+        onClick={() => show({ step: "ocr" })}
+        chevron
+        testId="tool-ocr"
       />
     </ul>
   );
@@ -463,6 +473,57 @@ function ExportSheet() {
   );
 }
 
+const OCR_OUTCOME_KEYS: Record<OcrOutcome["kind"], string | null> = {
+  saved: "ocr.saved",
+  nothingToDo: "ocr.nothingToDo",
+  failed: "ocr.failed",
+  stopped: null,
+};
+
+function OcrSheet() {
+  const { t } = useTranslation();
+  const open = useTools((s) => s.view.step === "ocr" && s.page !== null);
+  const show = useTools((s) => s.show);
+  const close = useTools((s) => s.close);
+  const languages = useOcr((s) => s.languages);
+  const includeText = useOcr((s) => s.includeText);
+  const setLanguages = useOcr((s) => s.setLanguages);
+  const setIncludeText = useOcr((s) => s.setIncludeText);
+  const onStart = () => {
+    const { docId, page } = useTools.getState();
+    if (!docId || !page?.session) return;
+    const session = page.session;
+    close();
+    void (async () => {
+      const outcome = await useOcr.getState().start(docId, page.doc, session);
+      const key = OCR_OUTCOME_KEYS[outcome.kind];
+      if (key) useToast.getState().show(t(key), outcome.kind === "failed" ? "error" : "info");
+    })();
+  };
+  return (
+    <Sheet open={open} onClose={() => show({ step: "menu" })} title={t("ocr.title")} testId="ocr-sheet">
+      <div className="flex flex-col gap-3 px-5 pb-5">
+        <RadioRows
+          label={t("ocr.languages")}
+          options={[
+            { value: "ell+eng" as const, label: t("ocr.greekEnglish"), note: null, disabled: false },
+            { value: "ell" as const, label: t("ocr.greek"), note: null, disabled: false },
+            { value: "eng" as const, label: t("ocr.english"), note: null, disabled: false },
+          ]}
+          value={languages}
+          onChange={setLanguages}
+          testId="ocr-languages"
+        />
+        <SwitchRow label={t("ocr.includeText")} checked={includeText} onChange={setIncludeText} testId="ocr-include-text" />
+        <p className="text-[13px] text-neutral-11">{t("ocr.privacy")}</p>
+        <Button onClick={onStart} data-testid="ocr-start">
+          {t("ocr.start")}
+        </Button>
+      </div>
+    </Sheet>
+  );
+}
+
 /** Mounted once: the Tools sheet, its password sheets, and its notices as toasts. */
 export function ToolsSheets() {
   const { t } = useTranslation();
@@ -479,7 +540,7 @@ export function ToolsSheets() {
     useToast.getState().show(t(`tools.notice.${notice.key}`), notice.error ? "error" : "info");
   }, [notice, t]);
 
-  const menuOpen = docId !== null && step !== "protect" && step !== "unprotect" && step !== "export" && step !== "exporting";
+  const menuOpen = docId !== null && step !== "protect" && step !== "unprotect" && step !== "export" && step !== "exporting" && step !== "ocr";
   return (
     <>
       <Sheet open={menuOpen} onClose={close} title={t("tools.title")} testId="tools-sheet">
@@ -488,6 +549,7 @@ export function ToolsSheets() {
       <ProtectSheet />
       <UnprotectSheet />
       <ExportSheet />
+      <OcrSheet />
     </>
   );
 }

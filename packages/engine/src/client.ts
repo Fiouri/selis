@@ -358,6 +358,31 @@ export class WorkerPdfEngine implements PdfEngine {
         // A WebKit without OffscreenCanvas in workers: encode here.
         return encodeExportOnMainThread(msg.width, msg.height, msg.bytes, options.format);
       },
+      setTextLayer: async (index, words) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "textLayer" }>>((reqId) => ({
+          type: "setTextLayer",
+          reqId,
+          docId,
+          index,
+          words: [...words],
+        }));
+        // Invisible, but the page's text (search, selection) changed.
+        changed(index);
+        return msg.replaced;
+      },
+      pageTextInfo: async (index) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "pageTextInfo" }>>((reqId) => ({
+          type: "pageTextInfo",
+          reqId,
+          docId,
+          index,
+        }));
+        return msg.info;
+      },
       extractPages: async (indices) => {
         ensureOpen();
         const msg = await this.request<Extract<WorkerResponse, { type: "extracted" }>>((reqId) => ({

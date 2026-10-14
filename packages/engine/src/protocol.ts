@@ -10,9 +10,11 @@ import type {
   ImportLosses,
   OutlineItem,
   PageSize,
+  PageTextInfo,
   RedactionPreview,
   SearchHit,
   StampImage,
+  TextLayerWord,
   TextRun,
 } from "./types";
 
@@ -59,6 +61,9 @@ export type WorkerRequest =
   | { type: "imagesDiscard"; reqId: number; builder: number }
   /** A page as a PNG/JPEG at `dpi`, within `maxPixels`. */
   | { type: "exportImage"; reqId: number; docId: string; index: number; dpi: number; format: "png" | "jpeg"; maxPixels: number }
+  /** OCR text layer (P4d): replaces the page's Selis OCR words with `words`. */
+  | { type: "setTextLayer"; reqId: number; docId: string; index: number; words: TextLayerWord[] }
+  | { type: "pageTextInfo"; reqId: number; docId: string; index: number }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
 
@@ -92,6 +97,8 @@ export type WorkerResponse =
   | { type: "imagesDone"; reqId: number; bytes: ArrayBuffer }
   /** `mime` RAW_RGBA when the worker could not encode (the client encodes). */
   | { type: "exportedImage"; reqId: number; mime: string; width: number; height: number; bytes: ArrayBuffer }
+  | { type: "textLayer"; reqId: number; replaced: TextLayerWord[] }
+  | { type: "pageTextInfo"; reqId: number; info: PageTextInfo }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };
 

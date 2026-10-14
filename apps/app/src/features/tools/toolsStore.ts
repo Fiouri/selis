@@ -4,6 +4,7 @@
  * version (Rust); the host (viewer or library) is told through `onSaved` and reloads.
  */
 import type { DocHandle } from "@selis/engine";
+import type { EditSession } from "../annotate/session";
 import { create } from "zustand";
 import { ApiError, api, type Document, type ProtectionView, type ToolProblem, type ToolRequest } from "../../lib/api";
 import { upload } from "../../lib/save";
@@ -17,7 +18,13 @@ export const MAX_PASSWORD_BYTES = 127;
 export type ToolKind = ToolRequest["kind"];
 
 /** The open document and page, when the Tools sheet comes from the viewer (page export, P4b). */
-export type PageContext = { readonly doc: DocHandle; readonly page: number; readonly title: string };
+export type PageContext = {
+  readonly doc: DocHandle;
+  readonly page: number;
+  readonly title: string;
+  /** The viewer's edit session: OCR adds its text layer as edits (P4d). */
+  readonly session: EditSession | null;
+};
 
 export type ExportFormat = "png" | "jpeg";
 export const EXPORT_DPIS = [96, 150, 300] as const;
@@ -31,7 +38,8 @@ export type ToolsView =
   | { step: "compressed"; inputBytes: number; outputBytes: number }
   | { step: "notSmaller"; inputBytes: number }
   | { step: "export" }
-  | { step: "exporting" };
+  | { step: "exporting" }
+  | { step: "ocr" };
 
 /** One-line outcomes shown as a toast (i18n keys under `tools.`). */
 export type ToolsNotice =

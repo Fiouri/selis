@@ -1,0 +1,21 @@
+{
+  "name": "@selis/ocr",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "OCR for scanned pages: tesseract.js (Tesseract LSTM, WebAssembly) with local tessdata_fast models, and the word layout for an invisible text layer.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "tesseract.js": "7.0.0",
+    "tesseract.js-core": "7.0.0"
+  },
+  "devDependencies": {
+    "@selis/fixtures": "0.1.0"
+  }
+}

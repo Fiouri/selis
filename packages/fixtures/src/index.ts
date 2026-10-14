@@ -13,6 +13,7 @@ export {
   leakyDocument,
   ownerPasswordDocument,
 } from "./corpus.ts";
+export { SCANNED_DPI, SCANNED_TEXT, type ScannedLanguage, scannedWords } from "./scanned.ts";
 export { exifSegment, insertSegments, makePhoto, PHOTO_QUADRANTS, PHOTO_SECRETS, type PhotoOptions } from "./photo.ts";
 
 /** Directory where `npm run fixtures` writes the generated corpus (git-ignored). */

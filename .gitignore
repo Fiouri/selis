@@ -38,3 +38,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# OCR assets copied by scripts/copy-ocr-assets.ts (npm pre-scripts)
+apps/app/public/ocr/
