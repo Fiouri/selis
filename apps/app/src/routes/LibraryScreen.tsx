@@ -152,7 +152,7 @@ function ImportFab({ busy, importing, onClick }: { busy: boolean; importing: boo
       disabled={busy}
       data-testid="import-fab"
       className="selis-focus fixed z-10 inline-flex h-14 items-center gap-2 rounded-[18px] bg-accent-9 pr-5 pl-4 text-[15px] font-semibold text-accent-contrast shadow-3 transition-colors duration-150 ease-standard active:bg-accent-10 disabled:opacity-70"
-      style={{ right: "calc(var(--safe-right) + 20px)", bottom: "calc(var(--fab-bottom, calc(var(--safe-bottom) + 20px)) + 4px)" }}
+      style={{ right: "calc(var(--safe-right) + 20px)", bottom: "var(--fab-bottom, calc(var(--safe-bottom) + 20px))" }}
     >
       <Plus size={22} strokeWidth={2} aria-hidden="true" />
       {importing ? t("library.importing") : t("library.import")}
