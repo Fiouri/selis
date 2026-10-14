@@ -36,6 +36,7 @@ export {
   type FormFieldKind,
   type Glyph,
   type ImportLosses,
+  type GrayPage,
   type PageTextInfo,
   type TextLayerWord,
   type RedactionPreview,

@@ -17,6 +17,8 @@ export default defineConfig(
       "**/playwright-report/**",
       "**/test-results/**",
       "packages/fixtures/out/**",
+      // Scripts and results kept as evidence (docs/evidence/README.md), not project code.
+      "docs/evidence/**",
       // Third-party OCR assets copied by scripts/copy-ocr-assets.ts.
       "apps/app/public/ocr/**",
       // Local scratch dir (also TMP for tooling, e.g. jiti's cache).

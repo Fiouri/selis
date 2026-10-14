@@ -73,7 +73,7 @@ could not show it. The two photo picker versions differ: the S23's marks a selec
 The same algorithm on both (Canny → dilate → outer contours → convex hull → four corners), run in
 the Selis WebView over DevTools (debug build): detection on 30 synthetic 240×320 frames (200
 timed runs), and straighten + black-and-white of a 3000×4000 photo (3 runs, output 8 MP).
-Harness: `.tmp/p4c/bench` (not committed).
+Harness and raw results: `docs/evidence/p4c-bench/` (the OpenCV.js build is not kept).
 
 | | OpenCV.js 4.12 (core + imgproc, SIMD, `DYNAMIC_EXECUTION=0`) | Rust + imageproc 0.27 (SIMD, opt-level 3) |
 | --- | --- | --- |
@@ -134,3 +134,27 @@ WebAssembly heap keeps its render buffer. The viewer's search then finds `Ευρ
 
 Full Tier 2 Maestro suite with this build (19 flows incl. `scan.yaml` and `ocr.yaml`, and the
 pages drag check): pass on the AVD and on the S23.
+
+### P4d follow-up — OCR memory (2026-10-14)
+
+Target: peak of app + WebView renderer while reading an A4 page at 300 dpi ≤ 650 MB on the AVD,
+≤ 700 MB on the S23, accuracy ≥ 95 %. The `ps` RSS above double-counts the WebView's shared
+libraries (the same metric issue as P0: the gate is PSS), so `ocr.sh` now samples
+`dumpsys meminfo` of the app and of our renderer (`mem-sampler.ts`, ~1/s, PSS and RSS) and
+prints the peak during "TIMED ocr" (`mem-peak.ts`).
+
+Changes: the engine renders the page with PDFium straight into an 8-bit grey bitmap and hands
+Tesseract a PGM (`renderPageGray`; before: RGBA render → PNG encode → Tesseract decodes it to
+RGBA again), capped at 2480 × 3508 px and 3508 px on the longest side; one page in flight; a fresh
+Tesseract worker every 8 pages (its WebAssembly memory never shrinks) and after each document.
+
+Same fixture and flow, debug builds; PSS (RSS) of app + renderer, before → peak:
+
+| Device | Before: peak (Δ) | After: peak (Δ) | Page 1 / 2 before → after | pdf.js words p.1 / p.2 |
+| --- | --- | --- | --- | --- |
+| AVD (3 GB) | 357 → 702 MB (+345); RSS 644 → 975 | 365 → **539 MB** (+174); RSS 639 → 814 | 3.3 / 2.0 s → 1.7 / 0.9 s | 98.0 % / 96.2 % (unchanged) |
+| Galaxy S23 | 454 → 839 MB (+384); RSS 676 → 1061 | 461 → **613 MB** (+152); RSS 683 → 835 | 2.5 / 1.7 s → 1.6 / 1.0 s | 98.0 % / 96.2 % (unchanged) |
+
+Renderer alone at the peak: AVD 533 → 362 MB, S23 558 → 319 MB. Both targets met on PSS; RSS
+(which counts shared WebView pages in both processes) stays above them. English fixture (Node
+test): 100 % / 100 %. Raw samples (`<ms> <app PSS> <renderer PSS> <app RSS> <renderer RSS>` kB): `docs/evidence/p4d-ocr-memory/`.

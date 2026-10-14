@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-11T13:13:01.589Z",
+  "device": {
+    "serial": "emulator-5554",
+    "model": "sdk_gphone64_x86_64",
+    "manufacturer": "Google",
+    "soc": "AOSP ranchu",
+    "ramGb": 2.9,
+    "android": "16 (API 36)",
+    "webview": "133.0.6943.137",
+    "abi": "x86_64"
+  },
+  "runs": [
+    {
+      "firstPageMs": 356,
+      "peak": {
+        "app": 99,
+        "renderer": 217,
+        "total": 316
+      },
+      "lastPageRendered": true,
+      "alive": true
+    },
+    {
+      "firstPageMs": 680,
+      "peak": {
+        "app": 103,
+        "renderer": 215,
+        "total": 318
+      },
+      "lastPageRendered": true,
+      "alive": true
+    },
+    {
+      "firstPageMs": 673,
+      "peak": {
+        "app": 103,
+        "renderer": 210,
+        "total": 313
+      },
+      "lastPageRendered": true,
+      "alive": true
+    }
+  ],
+  "peak": {
+    "app": 103,
+    "renderer": 215,
+    "total": 318
+  },
+  "pass": true,
+  "failures": []
+}

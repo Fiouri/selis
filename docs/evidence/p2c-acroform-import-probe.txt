@@ -1,0 +1,6 @@
+source widgets 4 [ [ 'full_name', 6 ], [ 'email', 6 ], [ 'agree', 2 ], [ 'plan', 4 ] ]
+imported 1
+has /AcroForm false count /Fields 0
+page 7 widgets 4 [ [ 'full_name', 6 ], [ 'email', 6 ], [ 'agree', 2 ], [ 'plan', 4 ] ]
+formType 0
+merge(): has /AcroForm false

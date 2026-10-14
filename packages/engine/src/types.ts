@@ -146,6 +146,11 @@ export interface DocHandle {
    * layer it had. Resolves to the words of the layer it replaced (for undo; empty if none).
    */
   setTextLayer(index: number, words: readonly TextLayerWord[]): Promise<TextLayerWord[]>;
+  /**
+   * Page `index` in 8-bit grey (a binary PGM) at `dpi`, within `maxPixels` and a longest side of
+   * `maxSide` px — the OCR input (P4d).
+   */
+  renderPageGray(index: number, options: { readonly dpi: number; readonly maxPixels: number; readonly maxSide: number }): Promise<GrayPage>;
   /** Text on page `index` besides Selis' OCR layer, and whether it has that layer. */
   pageTextInfo(index: number): Promise<PageTextInfo>;
   /** Bumped by every change to the list of pages (count, order, sizes). */
@@ -190,6 +195,9 @@ export type TextLayerWord = {
   readonly width: number;
   readonly fontSize: number;
 };
+
+/** A page in 8-bit grey: a binary PGM (`P5`) of `width × height` pixels. */
+export type GrayPage = { readonly bytes: ArrayBuffer; readonly width: number; readonly height: number };
 
 /** What text a page has: characters outside Selis' OCR layer, and whether it has that layer. */
 export type PageTextInfo = { readonly chars: number; readonly ocr: boolean };

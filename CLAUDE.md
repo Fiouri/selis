@@ -131,7 +131,7 @@ Tier 2 — end of every feature:
   200 ms). The scan module is Rust → WebAssembly (`crates/selis-scan`, ADR 0016), built by
   `npm run build:scan` (npm pre-scripts; needs `rustup target add wasm32-unknown-unknown`).
   And `ocr.yaml` with `PRE_RUN="…/ocr.sh pre"` and `POST_RUN="…/ocr.sh check"` (P4d: the scanned
-  Greek fixture made searchable; per-page times from logcat, RSS of app + WebView renderer around
+  Greek fixture made searchable; per-page times from logcat, PSS (and RSS) of app + our WebView renderer around
   the OCR; the new version passes qpdf and pdf.js reads ≥ 95 % of the words of each page; the
   viewer's search finds an accented Greek word). OCR assets (tesseract.js worker, cores,
   tessdata_fast) are copied into `apps/app/public/ocr/` by `scripts/copy-ocr-assets.ts`.
@@ -141,8 +141,9 @@ Tier 2 — end of every feature:
   2.11 sends the DevTools socket name as the WebSocket Host, which WebView 15x (the S23) rejects, so
   run the S23 with a patched copy: `tools/maestro-patch/build.sh` once (pinned upstream release,
   SHA-256 checked; see its README), then `MAESTRO=F:/DevCache/maestro-selis/bin/maestro run.sh …`.
-- Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC) + 390×844 visual snapshots in
-  light/dark/sepia (`visual-390`; baselines per OS, see CONTRIBUTING.md): `npm run e2e`
+- Playwright mobile smoke (Pixel 7 + iPhone 15, mock IPC): `npm run e2e`. The 390×844 visual
+  snapshots (`visual-390`, light/dark/sepia, en + el) run on Linux only — CI is their check, with
+  one Linux baseline set and exact comparison (ADR 0019; update flow in CONTRIBUTING.md).
 - Windows compile check: `npm run tauri -- build --no-bundle`
 - Visual changes: inspect screenshots (Playwright `test-results/screenshots`, device `adb exec-out screencap`).
 

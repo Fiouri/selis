@@ -50,6 +50,10 @@ const APPEARANCE_NORMAL = 0;
 const FPDF_FONT_TRUETYPE = 2;
 const FPDF_PAGEOBJ_TEXT = 1;
 const FPDF_TEXTRENDERMODE_INVISIBLE = 3;
+/** FPDFBitmap_Gray: one byte per pixel. */
+const FPDF_BITMAP_GRAY = 1;
+/** FPDF_ANNOT: draw annotations (with their appearance streams). */
+const FPDF_RENDER_ANNOT = 0x01;
 /** Marked-content tag of the words of a Selis OCR text layer (P4d). */
 export const OCR_MARK = "SelisOCR";
 /** Mark parameter holding a word's layout: JSON [x, y, width, fontSize] (page view points). */
@@ -508,6 +512,39 @@ export class EmbeddedText {
       pageCtx.release();
     }
     return replaced;
+  }
+
+  /**
+   * Page `page` rendered straight into an 8-bit grey bitmap at `scale` pixels per point, as a
+   * binary PGM (P5) — the OCR input (P4d): a quarter of an RGBA render, no canvas, no PNG, and
+   * Tesseract's Leptonica reads it as an 8-bit image. The size follows the page as shown (its
+   * /Rotate applied), like the other renders.
+   */
+  grayPage(doc: PdfDocumentObject, page: PdfPageObject, scale: number): { bytes: Uint8Array; width: number; height: number } {
+    const pageCtx = this.context(doc).acquirePage(page.index);
+    try {
+      const width = Math.max(1, Math.round(this.pdf.FPDF_GetPageWidthF(pageCtx.pagePtr) * scale));
+      const height = Math.max(1, Math.round(this.pdf.FPDF_GetPageHeightF(pageCtx.pagePtr) * scale));
+      const bitmap = this.pdf.FPDFBitmap_CreateEx(width, height, FPDF_BITMAP_GRAY, 0, 0);
+      if (!bitmap) throw new Error("no memory for the page image");
+      try {
+        this.pdf.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff);
+        this.pdf.FPDF_RenderPageBitmap(bitmap, pageCtx.pagePtr, 0, 0, width, height, 0, FPDF_RENDER_ANNOT);
+        const stride = this.pdf.FPDFBitmap_GetStride(bitmap);
+        const buffer = this.pdf.FPDFBitmap_GetBuffer(bitmap);
+        const header = new TextEncoder().encode(`P5\n${String(width)} ${String(height)}\n255\n`);
+        const bytes = new Uint8Array(header.length + width * height);
+        bytes.set(header);
+        for (let y = 0; y < height; y++) {
+          bytes.set(this.heap.HEAPU8.subarray(buffer + y * stride, buffer + y * stride + width), header.length + y * width);
+        }
+        return { bytes, width, height };
+      } finally {
+        this.pdf.FPDFBitmap_Destroy(bitmap);
+      }
+    } finally {
+      pageCtx.release();
+    }
   }
 
   /** Characters of the page's text besides the Selis OCR layer, and whether it has that layer. */

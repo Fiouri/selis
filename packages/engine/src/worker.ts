@@ -696,6 +696,18 @@ async function handleSetTextLayer(req: Extract<WorkerRequest, { type: "setTextLa
   }
 }
 
+function handlePageGray(req: Extract<WorkerRequest, { type: "pageGray" }>): void {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    if (!textStamps) throw new Error("engine not ready");
+    const { bytes, width, height } = textStamps.grayPage(t.doc, t.page, req.scale);
+    post({ type: "pageGray", reqId: req.reqId, width, height, bytes: bytes.buffer as ArrayBuffer }, [bytes.buffer as ArrayBuffer]);
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
 function handlePageTextInfo(req: Extract<WorkerRequest, { type: "pageTextInfo" }>): void {
   const t = target(req, req.index);
   if (!t?.page) return;
@@ -882,6 +894,9 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "pageTextInfo":
       handlePageTextInfo(req);
+      break;
+    case "pageGray":
+      handlePageGray(req);
       break;
     case "close":
       void handleClose(req);

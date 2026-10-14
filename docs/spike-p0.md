@@ -312,7 +312,7 @@ One command, no manual steps: `scripts/measure-device.sh [--serial S] [--runs 5]
 5. Cleans up (`pm clear`: library copy and database; the pushed fixture and its MediaStore rows
    are deleted; adb port forward removed) and appends a row to the table below.
    Exit code 0 = PASS (every first page < 1 s, peak < 600 MB, page 1000 drawn, no crash),
-   1 = gate failed, 2 = error, 3 = no suitable device. Raw results: `.tmp/measure/result-<serial>.json`.
+   1 = gate failed, 2 = error, 3 = no suitable device. Raw results: `.tmp/measure/result-<serial>.json` (the runs recorded here: `docs/evidence/measure/`).
 
 The tap is a real touch (`input tap` at the card's position read from the DOM), not a
 UiAutomator lookup. Dry run on the AVD `selis-midrange-api36` (2026-10-11, `--serial`): release-like

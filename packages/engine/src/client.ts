@@ -372,6 +372,24 @@ export class WorkerPdfEngine implements PdfEngine {
         changed(index);
         return msg.replaced;
       },
+      renderPageGray: async (index, options) => {
+        ensureOpen();
+        checkIndex(index);
+        const size = frozenPages[index];
+        if (!size) throw new RangeError(`page index ${String(index)} out of range`);
+        // 300 dpi within the pixel and side caps (a page larger than A4 is read at a lower dpi).
+        const byArea = Math.sqrt(options.maxPixels / (size.width * size.height));
+        const bySide = options.maxSide / Math.max(size.width, size.height);
+        const scale = Math.min(options.dpi / 72, byArea, bySide);
+        const msg = await this.request<Extract<WorkerResponse, { type: "pageGray" }>>((reqId) => ({
+          type: "pageGray",
+          reqId,
+          docId,
+          index,
+          scale,
+        }));
+        return { bytes: msg.bytes, width: msg.width, height: msg.height };
+      },
       pageTextInfo: async (index) => {
         ensureOpen();
         checkIndex(index);

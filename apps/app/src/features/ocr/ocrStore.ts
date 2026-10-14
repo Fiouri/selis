@@ -17,11 +17,18 @@ export const MIN_TEXT_CHARS = 20;
 /** Render resolution for Tesseract. */
 export const OCR_DPI = 300;
 /**
- * Pixel cap of a page rendered for OCR: A4 at 300 dpi (2480 × 3508) on every device tier —
- * Tesseract reads small print far better at 300 dpi than at the 250 a 6-MP cap allows; larger
- * pages are rendered at a lower resolution. Measured on the 3 GB AVD (docs/spike-p4.md).
+ * Caps of a page rendered for OCR: A4 at 300 dpi (2480 × 3508) on every device tier — Tesseract
+ * reads small print far better at 300 dpi than at the 250 a 6-MP cap allows; a larger or longer
+ * page is rendered at a lower resolution. The render is 8-bit grey (a quarter of RGBA).
+ * Measured on the 3 GB AVD and the S23 (docs/spike-p4.md).
  */
 export const OCR_MAX_PIXELS = 2480 * 3508;
+export const OCR_MAX_SIDE = 3508;
+/**
+ * Tesseract's WebAssembly memory only grows: a fresh worker every this many pages bounds it
+ * (one costs about a second to start).
+ */
+export const OCR_PAGES_PER_WORKER = 8;
 
 export type OcrPhase =
   | { step: "idle" }
@@ -97,25 +104,34 @@ export const useOcr = create<OcrState>()((set, get) => {
     if (!current) return { kind: "failed" };
     const mine = generation;
     try {
-      const reader = await engineOcr(current.languages);
+      let reader = await engineOcr(current.languages);
+      let readByWorker = 0;
       while (current.queue.length > 0) {
         if (mine !== generation) return { kind: "stopped" };
         const page = current.queue[0] ?? 0;
         set({ phase: { step: "running", done: current.done, total: current.total, page } });
         const started = performance.now();
-        const image = await current.doc.exportPageImage(page, { dpi: OCR_DPI, format: "png", maxPixels: OCR_MAX_PIXELS });
+        if (readByWorker >= OCR_PAGES_PER_WORKER) {
+          dropOcr();
+          reader = await engineOcr(current.languages);
+          readByWorker = 0;
+        }
         const size = current.doc.pages[page];
         if (!size) throw new Error(`page ${String(page)} is gone`);
+        const image = await current.doc.renderPageGray(page, { dpi: OCR_DPI, maxPixels: OCR_MAX_PIXELS, maxSide: OCR_MAX_SIDE });
         // A page larger than A4 is rendered below 300 dpi: tell Tesseract the truth.
         const dpi = (image.width / size.width) * 72;
+        const px = `${String(image.width)}x${String(image.height)}`;
+        // One page in flight: the render goes to Tesseract and is not kept here.
         const read = await reader.recognize(new Uint8Array(image.bytes), dpi);
+        readByWorker += 1;
         if (mine !== generation) return { kind: "stopped" };
         const words = layoutWords(read, size.width, size.height);
         await current.session.run(textLayerCommand(current.doc, page, words));
         current.queue.shift();
         current.done += 1;
         console.info(
-          `[selis:perf] ocr page=${String(page + 1)} ms=${String(Math.round(performance.now() - started))} dpi=${String(Math.round(dpi))} px=${String(image.width)}x${String(image.height)} words=${String(words.length)}`,
+          `[selis:perf] ocr page=${String(page + 1)} ms=${String(Math.round(performance.now() - started))} dpi=${String(Math.round(dpi))} px=${px} words=${String(words.length)}`,
         );
       }
       set({ phase: { step: "finishing", total: current.total } });
