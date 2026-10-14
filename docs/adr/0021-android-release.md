@@ -50,9 +50,10 @@ Measured on the existing builds: the Rust library's LOAD segments were 16 KB ali
   Firebase, ML Kit, Play Core / Billing, ads, analytics or crash-reporting SDK in npm, Gradle or
   Cargo; shipped npm packages permissively licensed (Rust: cargo-deny). The release workflow
   also runs F-Droid's own `fdroid scanner` on the APKs.
-- **Reproducible:** a second job builds the universal APK from the same commit in another
-  directory with another `CARGO_HOME` and compares it byte for byte with the first (diffoscope
-  report on failure); for signed releases it runs `apksigcopier compare`, F-Droid's check.
+- **Reproducible:** a second job builds the arm64 APK from the same commit the way the F-Droid
+  recipe does (one ABI per build), in another directory with another `CARGO_HOME`, and compares
+  it byte for byte with the first job's (diffoscope report on failure); for signed releases it
+  runs `apksigcopier compare`, F-Droid's check.
 - **Sizes** per artifact and Play's per-ABI download size (`bundletool get-size total`) go to
   the job summary and `sizes.md` in the artifact, with SHA-256 sums.
 

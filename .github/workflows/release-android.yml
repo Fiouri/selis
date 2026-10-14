@@ -172,10 +172,11 @@ jobs:
           if-no-files-found: error
 
   reproducible:
-    # The same commit built in another directory with another CARGO_HOME (as F-Droid's build
-    # server would) must give the same unsigned universal APK. With a signed release, the
+    # The same commit built the way the F-Droid recipe builds it (one ABI per build,
+    # docs/store/fdroid/com.anywecon.selis.yml), in another directory with another CARGO_HOME,
+    # must give the same unsigned arm64 APK as the first job. With a signed release, the
     # apksigcopier check below is exactly what F-Droid runs before it publishes our APK.
-    name: Reproducible build (other path, other CARGO_HOME)
+    name: Reproducible build (F-Droid way, other path, other CARGO_HOME)
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -204,14 +205,14 @@ jobs:
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           rustup show active-toolchain || rustup toolchain install
-          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android wasm32-unknown-unknown
+          rustup target add aarch64-linux-android wasm32-unknown-unknown
       - name: libclang for bindgen
         run: sudo apt-get update -q && sudo apt-get install -y -q libclang-dev
       - run: npm ci
-      - name: Build universal APK
+      - name: Build the arm64 APK as the F-Droid recipe does
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --apk
+          NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --apk --split-per-abi --target aarch64
       - uses: actions/download-artifact@v8
         with:
           name: selis-android-release
@@ -219,11 +220,11 @@ jobs:
       - name: Compare with the first build
         run: |
           v="${{ needs.build.outputs.version }}"
-          a="${{ github.workspace }}/first/unsigned/selis-$v-universal-unsigned.apk"
-          b="$OUT/apk/universal/release/app-universal-release-unsigned.apk"
+          a="${{ github.workspace }}/first/unsigned/selis-$v-arm64-v8a-unsigned.apk"
+          b="$OUT/apk/arm64/release/app-arm64-release-unsigned.apk"
           sha256sum "$a" "$b"
           if cmp -s "$a" "$b"; then
-            echo "### Reproducible: the unsigned universal APK is byte-identical" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Reproducible: the unsigned arm64 APK is byte-identical" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::error::The second build differs from the first (diffoscope report in the artifact)"
             sudo apt-get install -y -q --no-install-recommends diffoscope > /dev/null || true
@@ -236,7 +237,7 @@ jobs:
         run: |
           v="${{ needs.build.outputs.version }}"
           pipx install apksigcopier==1.1.1
-          apksigcopier compare "${{ github.workspace }}/first/signed/selis-$v-universal.apk" --unsigned "$OUT/apk/universal/release/app-universal-release-unsigned.apk"
+          apksigcopier compare "${{ github.workspace }}/first/signed/selis-$v-arm64-v8a.apk" --unsigned "$OUT/apk/arm64/release/app-arm64-release-unsigned.apk"
           echo "apksigcopier: our signature verifies on the independently built APK" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v6
         if: failure()
