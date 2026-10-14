@@ -541,7 +541,9 @@ export type ToolProblem = "passwordNeeded" | "wrongPassword" | "damaged" | "unsu
 /**  The request does not fit the document (e.g. no password to remove). */
 "notApplicable" | 
 /**  The document has edits that are not a version yet. */
-"unsavedEdits";
+"unsavedEdits" | 
+/**  A part of the file (one stream) is too large to process on a phone. */
+"tooLarge";
 
 /**  The operation, as the UI asks for it. */
 export type ToolRequest = { kind: "protect"; password: string; ownerPassword: string | null; allowPrint: boolean; allowCopy: boolean; allowModify: boolean } | { kind: "unprotect"; password: string } | { kind: "compress" } | { kind: "linearize" } | { kind: "repair" };

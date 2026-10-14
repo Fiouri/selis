@@ -108,6 +108,8 @@ pub enum ToolProblem {
     NotApplicable,
     /// The document has edits that are not a version yet.
     UnsavedEdits,
+    /// A part of the file (one stream) is too large to process on a phone.
+    TooLarge,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -140,6 +142,7 @@ fn problem(e: &selis_pdfops::Error) -> Option<ToolProblem> {
         E::Damaged(_) => ToolProblem::Damaged,
         E::Unsupported(_) => ToolProblem::Unsupported,
         E::InvalidArgument(_) => ToolProblem::NotApplicable,
+        E::TooLarge(_) => ToolProblem::TooLarge,
         E::Io(_) => return None,
     })
 }

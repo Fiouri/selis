@@ -32,6 +32,7 @@ export type ToolsNotice =
   | "unsupported"
   | "notApplicable"
   | "unsavedEdits"
+  | "tooLarge"
   | "failed";
 
 type ToolsState = {

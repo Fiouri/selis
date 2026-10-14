@@ -380,3 +380,18 @@ fn passwords_never_show_in_debug_output() {
     let op = protect("correct horse battery");
     assert!(!format!("{op:?}").contains("horse"));
 }
+
+#[test]
+fn a_stream_above_the_limit_is_refused_before_anything_is_written() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // 64 KB filler stream.
+    let input = make_pdf(dir.path(), "in.pdf", 1);
+    let out = dir.path().join("out.pdf");
+    let refused = selis_pdfops::run_with_limit(&input, &out, &Operation::Compress, 32 * 1024);
+    assert!(
+        matches!(refused, Err(Error::TooLarge(n)) if n > 32 * 1024),
+        "{refused:?}"
+    );
+    assert!(!out.exists());
+    assert!(selis_pdfops::run_with_limit(&input, &out, &Operation::Compress, 1024 * 1024).is_ok());
+}

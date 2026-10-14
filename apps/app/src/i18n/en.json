@@ -619,6 +619,7 @@
       "unsupported": "Selis can't change this file.",
       "notApplicable": "This doesn't apply to this file.",
       "unsavedEdits": "Save your edits first.",
+      "tooLarge": "This file has a part too large to process on this device. Nothing was changed.",
       "failed": "Something went wrong. Nothing was changed."
     }
   }

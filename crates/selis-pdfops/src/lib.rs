@@ -13,11 +13,17 @@ use std::fmt;
 use std::path::Path;
 
 use qpdf::{EncryptionParams, EncryptionParamsR6, ObjectStreamMode, PrintPermission, QPdf};
-use qpdf::{QPdfError, QPdfErrorCode, StreamDataMode, StreamDecodeLevel};
+use qpdf::{QPdfError, QPdfErrorCode, QPdfObjectLike, QPdfObjectType, QPdfScalar, QPdfStream};
+use qpdf::{StreamDataMode, StreamDecodeLevel};
 use zeroize::Zeroizing;
 
 /// The longest password AES-256 (revision 6) uses; qpdf would cut a longer one silently.
 pub const MAX_PASSWORD_BYTES: usize = 127;
+
+/// qpdf holds each stream it writes in memory (to know its length first), up to ~2.5× its size:
+/// files are processed in constant memory except for their largest stream. A file with a single
+/// stream above this is refused rather than risk the app being killed (ADR 0015).
+pub const MAX_STREAM_BYTES: u64 = 512 * 1024 * 1024;
 
 /// Why an operation did not produce a file.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -39,6 +45,9 @@ pub enum Error {
     Unsupported(String),
     #[error("i/o: {0}")]
     Io(String),
+    /// A single stream larger than [`MAX_STREAM_BYTES`].
+    #[error("a stream of {0} bytes is too large to process")]
+    TooLarge(u64),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -175,6 +184,30 @@ fn open(path: &Path, password: Option<&Password>) -> Result<QPdf> {
     }
 }
 
+/// The largest stream's declared length (its `/Length`), objects of generation 0.
+fn largest_stream(doc: &QPdf) -> u64 {
+    let count = doc
+        .get_trailer()
+        .and_then(|t| t.get("/Size"))
+        .filter(|s| s.get_type() == QPdfObjectType::Integer)
+        .map_or(0, |s| QPdfScalar::from(s).as_u64());
+    let mut largest = 0;
+    for id in 1..u32::try_from(count).unwrap_or(u32::MAX) {
+        let Some(object) = doc.get_object_by_id(id, 0) else {
+            continue;
+        };
+        if object.get_type() != QPdfObjectType::Stream {
+            continue;
+        }
+        if let Some(length) = QPdfStream::from(object).get_dictionary().get("/Length")
+            && length.get_type() == QPdfObjectType::Integer
+        {
+            largest = largest.max(QPdfScalar::from(length).as_u64());
+        }
+    }
+    largest
+}
+
 /// Whether (and how) the file is protected.
 pub fn protection(path: &Path) -> Result<Protection> {
     match open(path, None) {
@@ -198,15 +231,40 @@ pub fn check(path: &Path, password: Option<&Password>) -> Result<()> {
 /// Runs `op` on `input`, writing `output` (replaced if it exists). On an error or an
 /// [`Outcome::Unchanged`] no `output` is left behind.
 pub fn run(input: &Path, output: &Path, op: &Operation) -> Result<Outcome> {
-    let result = run_inner(input, output, op);
+    run_with_limit(input, output, op, MAX_STREAM_BYTES)
+}
+
+/// [`run`] with another stream limit (tests).
+pub fn run_with_limit(
+    input: &Path,
+    output: &Path,
+    op: &Operation,
+    max_stream_bytes: u64,
+) -> Result<Outcome> {
+    let result = run_inner(input, output, op, max_stream_bytes);
     if !matches!(result, Ok(Outcome::Written { .. })) {
         let _ = std::fs::remove_file(output);
     }
     result
 }
 
-fn run_inner(input: &Path, output: &Path, op: &Operation) -> Result<Outcome> {
+fn run_inner(
+    input: &Path,
+    output: &Path,
+    op: &Operation,
+    max_stream_bytes: u64,
+) -> Result<Outcome> {
     let input_bytes = size(input)?;
+    let open = |path: &Path, password: Option<&Password>| -> Result<QPdf> {
+        let doc = open(path, password)?;
+        if path == input {
+            let largest = largest_stream(&doc);
+            if largest > max_stream_bytes {
+                return Err(Error::TooLarge(largest));
+            }
+        }
+        Ok(doc)
+    };
     match op {
         Operation::Protect {
             open: open_password,
