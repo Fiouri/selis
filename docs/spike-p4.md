@@ -73,7 +73,7 @@ could not show it. The two photo picker versions differ: the S23's marks a selec
 The same algorithm on both (Canny → dilate → outer contours → convex hull → four corners), run in
 the Selis WebView over DevTools (debug build): detection on 30 synthetic 240×320 frames (200
 timed runs), and straighten + black-and-white of a 3000×4000 photo (3 runs, output 8 MP).
-Harness: `.tmp/p4c/bench` (not committed).
+Harness and raw results: `docs/evidence/p4c-bench/` (the OpenCV.js build is not kept).
 
 | | OpenCV.js 4.12 (core + imgproc, SIMD, `DYNAMIC_EXECUTION=0`) | Rust + imageproc 0.27 (SIMD, opt-level 3) |
 | --- | --- | --- |

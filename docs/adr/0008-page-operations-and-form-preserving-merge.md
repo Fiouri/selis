@@ -15,7 +15,7 @@ P2c adds the Pages screen: rotate, delete, reorder, insert blank, duplicate, ext
    EmbedPDF's `importPages`, `merge`, `extractPages` on top of them) copy the page objects with
    their `/Annots`, but not the catalog's `/AcroForm`. Measured on the `acroform` fixture merged
    into `mixed-sizes`: `FPDF_GetFormType` = 0 afterwards, the four widgets are orphans (no field
-   in `/AcroForm /Fields`), so nothing is fillable (evidence: `.tmp/p2c/acroform-import-probe.txt`
+   in `/AcroForm /Fields`), so nothing is fillable (evidence: `docs/evidence/p2c-acroform-import-probe.txt`
    at the time of writing). The SPEC's acceptance criterion is "merging PDFs that contain AcroForm
    keeps all fields fillable"; the fallback named in the plan was pulling qpdf forward from P4.
 
