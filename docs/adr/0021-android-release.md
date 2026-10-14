@@ -53,7 +53,12 @@ Measured on the existing builds: the Rust library's LOAD segments were 16 KB ali
 - **Reproducible:** a second job builds the arm64 APK from the same commit the way the F-Droid
   recipe does (one ABI per build), in another directory with another `CARGO_HOME`, and compares
   it byte for byte with the first job's (diffoscope report on failure); for signed releases it
-  runs `apksigcopier compare`, F-Droid's check.
+  runs `apksigcopier compare`, F-Droid's check. The first attempt differed: absolute
+  `$CARGO_HOME` paths of registry crates in panic messages (+17 KB in the `.so`).
+  `scripts/reproducible-env.sh` (sourced before every release build, also in the F-Droid
+  recipe) remaps `$CARGO_HOME`, the checkout and the NDK (`--remap-path-prefix` through a
+  cfg-target rustflags entry in `$CARGO_HOME/config.toml`, which Cargo joins with the
+  project's per-triple 16 KB flags; `-ffile-prefix-map` for C/C++).
 - **Sizes** per artifact and Play's per-ABI download size (`bundletool get-size total`) go to
   the job summary and `sizes.md` in the artifact, with SHA-256 sums.
 

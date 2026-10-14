@@ -56,7 +56,9 @@ Builds:
       - source $HOME/.cargo/env
       - cd ../../../../..
       - npm ci
-      - NDK_HOME=$$NDK$$ npm run tauri -- android build --apk --split-per-abi --target aarch64
+      - export NDK_HOME=$$NDK$$
+      - . scripts/reproducible-env.sh
+      - npm run tauri -- android build --apk --split-per-abi --target aarch64
     ndk: 27.3.13750724
 
   - versionName: 1.0.0
@@ -84,7 +86,9 @@ Builds:
       - source $HOME/.cargo/env
       - cd ../../../../..
       - npm ci
-      - NDK_HOME=$$NDK$$ npm run tauri -- android build --apk --split-per-abi --target armv7
+      - export NDK_HOME=$$NDK$$
+      - . scripts/reproducible-env.sh
+      - npm run tauri -- android build --apk --split-per-abi --target armv7
     ndk: 27.3.13750724
 
   - versionName: 1.0.0
@@ -112,7 +116,9 @@ Builds:
       - source $HOME/.cargo/env
       - cd ../../../../..
       - npm ci
-      - NDK_HOME=$$NDK$$ npm run tauri -- android build --apk --split-per-abi --target x86_64
+      - export NDK_HOME=$$NDK$$
+      - . scripts/reproducible-env.sh
+      - npm run tauri -- android build --apk --split-per-abi --target x86_64
     ndk: 27.3.13750724
 
 AutoUpdateMode: Version

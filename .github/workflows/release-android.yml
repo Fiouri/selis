@@ -32,6 +32,7 @@ on:
       - scripts/check-release-apk.sh
       - tools/release/**
       - .cargo/config.toml
+      - scripts/reproducible-env.sh
       - apps/app/src-tauri/gen/android/**
       - apps/app/src-tauri/tauri.conf.json
 
@@ -99,11 +100,20 @@ jobs:
         run: scripts/check-android-local-network.sh
 
       - name: Build AAB (all ABIs)
-        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --aab
+        run: |
+          export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          . scripts/reproducible-env.sh
+          npm run tauri -- android build --aab
       - name: Build per-ABI APKs
-        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --apk --split-per-abi
+        run: |
+          export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          . scripts/reproducible-env.sh
+          npm run tauri -- android build --apk --split-per-abi
       - name: Build universal APK
-        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --apk
+        run: |
+          export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          . scripts/reproducible-env.sh
+          npm run tauri -- android build --apk
       - name: Collect unsigned artifacts
         run: |
           v="${{ steps.version.outputs.version }}"
@@ -216,8 +226,9 @@ jobs:
       - run: npm ci
       - name: Build the arm64 APK as the F-Droid recipe does
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
-          NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --apk --split-per-abi --target aarch64
+          export PATH="$HOME/.cargo/bin:$PATH" NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          . scripts/reproducible-env.sh
+          npm run tauri -- android build --apk --split-per-abi --target aarch64
       - uses: actions/download-artifact@v8
         with:
           name: selis-android-release
