@@ -352,6 +352,38 @@ export class EmbeddedText {
     }
   }
 
+  /**
+   * The exact text of each rect (page view coordinates), with one text page for all of them.
+   * EmbedPDF's getPageTextRects decodes its buffer past the characters PDFium wrote, so its
+   * `content` can end in stray characters ("Plan", "Landlord 畧慬r"); the runs of the
+   * selection / copy / accessibility layer take their text from here instead.
+   */
+  boundedTexts(doc: PdfDocumentObject, page: PdfPageObject, rects: readonly PageRect[]): string[] {
+    const toPage = (p: Point) => internals(this.engine).convertDevicePointToPagePoint(doc, page, p);
+    const pageCtx = this.context(doc).acquirePage(page.index);
+    const textPage = this.pdf.FPDFText_LoadPage(pageCtx.pagePtr);
+    try {
+      if (!textPage) return rects.map(() => "");
+      return rects.map((rect) => {
+        const a = toPage({ x: rect.x, y: rect.y });
+        const b = toPage({ x: rect.x + rect.width, y: rect.y + rect.height });
+        const args = [Math.min(a.x, b.x), Math.max(a.y, b.y), Math.max(a.x, b.x), Math.min(a.y, b.y)] as const;
+        const units = this.pdf.FPDFText_GetBoundedText(textPage, ...args, 0, 0);
+        if (units <= 0) return "";
+        const buf = this.malloc((units + 1) * 2);
+        try {
+          const got = this.pdf.FPDFText_GetBoundedText(textPage, ...args, buf, units);
+          return String.fromCharCode(...this.heap.HEAPU16.subarray(buf >> 1, (buf >> 1) + got));
+        } finally {
+          this.free(buf);
+        }
+      });
+    } finally {
+      if (textPage) this.pdf.FPDFText_ClosePage(textPage);
+      pageCtx.release();
+    }
+  }
+
   /** Whether the document has a security handler (an owner password at least). */
   isEncrypted(doc: PdfDocumentObject): boolean {
     return this.pdf.EPDF_IsEncrypted(this.context(doc).docPtr);
