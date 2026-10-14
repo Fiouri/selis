@@ -96,6 +96,9 @@ jobs:
         run: |
           rustup show active-toolchain || rustup toolchain install
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+      # qpdf-sys runs bindgen for Android (ADR 0015): libclang; the NDK clang comes from scripts/tauri.ts.
+      - name: libclang for bindgen
+        run: sudo apt-get update -q && sudo apt-get install -y -q libclang-dev
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
       - name: Local-network permission before targetSdk 37 (ADR 0010)

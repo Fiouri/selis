@@ -463,6 +463,41 @@ for (const lang of LANGS) {
         await expect(page).toHaveScreenshot(shot("pack-imported"));
       });
 
+      test(`tools: sheet, protect, compressed, unlock (${theme})`, async ({ page }) => {
+        await page.goto("/");
+        await importFixture(page, "greek.pdf", c.greek);
+        await firstPageRendered(page);
+        await page.getByRole("button", { name: ui(lang, "viewer.more") }).click();
+        await page.getByTestId("more-tools").click();
+        await expect(page.getByTestId("tools-rows")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("tools-sheet"));
+        await page.getByTestId("tool-protect").click();
+        await page.getByTestId("tools-password").fill("correct horse");
+        await page.getByTestId("tools-password-again").fill("correct hors");
+        await page.getByTestId("tools-restrictions").click();
+        await expect(page.getByTestId("tools-password-problem")).toBeVisible();
+        await settle(page);
+        // Bottom-anchored sheet with fields: see "selispack export".
+        await expect(page).toHaveScreenshot(shot("tools-protect"), { maxDiffPixelRatio: 0.004 });
+        await page.goBack();
+        await page.getByTestId("tool-compress").click();
+        await expect(page.getByTestId("tools-compressed")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("tools-compressed"));
+        await page.getByTestId("tools-done").click();
+        await expect(page.getByTestId("tools-sheet")).toHaveCount(0);
+
+        await page.goBack();
+        await importFixture(page, "encrypted.pdf", c.greek.replace(/\.pdf$/, " 2.pdf"));
+        await expect(page.getByTestId("unlock-sheet")).toBeVisible();
+        await page.getByTestId("unlock-password").fill("wrong");
+        await page.getByTestId("unlock-submit").click();
+        await expect(page.getByTestId("unlock-wrong")).toBeVisible({ timeout: 15_000 });
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("tools-unlock"));
+      });
+
       test(`recent (${theme})`, async ({ page }) => {
         await page.goto("/");
         await stockLibrary(page, lang);

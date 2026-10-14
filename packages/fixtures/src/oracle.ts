@@ -24,9 +24,10 @@ const require = createRequire(import.meta.url);
 const PDFJS_DIR = dirname(require.resolve("pdfjs-dist/package.json"));
 const asset = (dir: string) => `${pathToFileURL(join(PDFJS_DIR, dir)).href}/`;
 
-async function withDocument<T>(bytes: Uint8Array, use: (doc: PDFDocumentProxy) => Promise<T>): Promise<T> {
+async function withDocument<T>(bytes: Uint8Array, use: (doc: PDFDocumentProxy) => Promise<T>, password?: string): Promise<T> {
   const task = getDocument({
     data: bytes.slice(),
+    ...(password === undefined ? {} : { password }),
     verbosity: 0,
     standardFontDataUrl: asset("standard_fonts"),
     cMapUrl: asset("cmaps"),
@@ -263,9 +264,9 @@ function qpdf(args: readonly string[]): string {
   return report;
 }
 
-/** Number of pages pdf.js opens. */
-export async function pdfjsPageCount(bytes: Uint8Array): Promise<number> {
-  return withDocument(bytes, (doc) => Promise.resolve(doc.numPages));
+/** Number of pages pdf.js opens (with the user password, for a protected file). */
+export async function pdfjsPageCount(bytes: Uint8Array, password?: string): Promise<number> {
+  return withDocument(bytes, (doc) => Promise.resolve(doc.numPages), password);
 }
 
 /**

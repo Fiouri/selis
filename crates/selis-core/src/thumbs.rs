@@ -84,6 +84,32 @@ impl Library {
         self.get_document(id)
     }
 
+    /// Forgets the document's thumbnail and deletes its file (P4a: a document just protected
+    /// with a password must not keep a picture of its first page). Idempotent.
+    pub fn drop_thumbnail(&self, id: &str) -> Result<Document> {
+        let previous: Option<String> = self
+            .conn()
+            .query_row(
+                "SELECT thumbnail_path FROM documents WHERE id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| Error::NotFound(id.to_owned()))?;
+        self.conn().execute(
+            "UPDATE documents
+                SET thumbnail_path = NULL, thumbnail_bytes = 0, thumbnail_used_at = NULL
+              WHERE id = ?1",
+            [id],
+        )?;
+        if let Some(rel) = previous
+            && let Ok(path) = self.resolve_location(&rel)
+        {
+            remove_quietly(&path);
+        }
+        self.get_document(id)
+    }
+
     /// Total size of cached thumbnails, in bytes.
     pub fn thumbnail_cache_bytes(&self) -> Result<u64> {
         let total: i64 = self.conn().query_row(
@@ -153,6 +179,22 @@ mod tests {
             })
             .collect::<Result<Vec<_>>>()?;
         Ok((dir, lib, ids))
+    }
+
+    #[test]
+    fn a_dropped_thumbnail_is_gone_from_disk_and_the_document() -> Result<()> {
+        let (_dir, lib, ids) = lib_with_docs(1)?;
+        let path = lib
+            .save_thumbnail(&ids[0], &webp(100))?
+            .thumbnail_path
+            .ok_or(Error::InvalidArgument("no path"))?;
+        let doc = lib.drop_thumbnail(&ids[0])?;
+        assert!(doc.thumbnail_path.is_none());
+        assert!(!Path::new(&path).exists());
+        assert_eq!(lib.thumbnail_cache_bytes()?, 0);
+        // Again: nothing to drop.
+        assert!(lib.drop_thumbnail(&ids[0])?.thumbnail_path.is_none());
+        Ok(())
     }
 
     #[test]

@@ -91,6 +91,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::pack::pack_export::<tauri::Wry>,
         commands::pack::pack_import::<tauri::Wry>,
         commands::pack::pick_pack::<tauri::Wry>,
+        commands::tools::document_protection,
+        commands::tools::run_tool,
         commands::requests::take_result,
     ])
 }

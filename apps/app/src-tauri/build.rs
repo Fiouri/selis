@@ -67,6 +67,8 @@ const APP_COMMANDS: &[&str] = &[
     "pack_export",
     "pack_import",
     "pick_pack",
+    "document_protection",
+    "run_tool",
     "take_result",
 ];
 

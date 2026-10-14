@@ -1,0 +1,123 @@
+# Tools on Android (P4a, ADR 0015) with qpdf in the app: protect a document, reopen it with
+# its password (editing is off), remove the password (wrong first), then compress, optimise and
+# repair the 1000-page fixture. PRE_RUN="apps/app/e2e/maestro/tools.sh pre" clears Selis and
+# samples its RSS; POST_RUN="apps/app/e2e/maestro/tools.sh check" checks every file with qpdf and
+# pdf.js and prints the RSS around the compress. Debug build (run-as). Run with ./run.sh.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis tools (qpdf)
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "greek.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+
+# Protect: the document opens again and asks for the password.
+- tapOn: "More"
+- tapOn:
+    id: "more-tools"
+- tapOn:
+    id: "tool-protect"
+- tapOn: "Password"
+- inputText: "correct horse"
+- hideKeyboard
+- tapOn: "Password again"
+- inputText: "correct horse"
+- hideKeyboard
+- tapOn: "Protect"
+- extendedWaitUntil:
+    visible: "This document is protected"
+    timeout: 30000
+# Inputs carry an HTML id (useId), which the DevTools hierarchy reports instead of the test
+# id: tap their labels.
+- tapOn: "Password"
+- inputText: "wrong horse"
+- hideKeyboard
+- tapOn: "Open"
+- extendedWaitUntil:
+    visible: "Wrong password."
+    timeout: 15000
+- tapOn: "Password"
+- inputText: "correct horse"
+- hideKeyboard
+- tapOn: "Open"
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+- tapOn: "Annotate"
+- assertVisible: "Remove the password to edit."
+- assertNotVisible: "Done"
+
+# Remove the password: wrong, then right.
+- tapOn: "More"
+- tapOn:
+    id: "more-tools"
+- assertVisible: "Already protected"
+- tapOn:
+    id: "tool-unprotect"
+- tapOn: "Current password"
+- inputText: "wrong horse"
+- hideKeyboard
+- tapOn: "Remove"
+- extendedWaitUntil:
+    visible: "Wrong password."
+    timeout: 15000
+- tapOn: "Current password"
+- inputText: "correct horse"
+- hideKeyboard
+- tapOn: "Remove"
+- extendedWaitUntil:
+    visible: "Saved as a new version."
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+- assertNotVisible: "This document is protected"
+- back
+
+# The 1000-page fixture: compress (RSS sampled around it), optimise, repair.
+- tapOn: "Import PDF"
+- tapOn: "large-1000.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 1000"
+    timeout: 30000
+- tapOn: "More"
+- tapOn:
+    id: "more-tools"
+- tapOn:
+    id: "tool-compress"
+- extendedWaitUntil:
+    visible:
+      id: "tools-done"
+    timeout: 120000
+    label: "RSS compress"
+- tapOn: "Done"
+- extendedWaitUntil:
+    visible: "Page 1 of 1000"
+    timeout: 30000
+- tapOn: "More"
+- tapOn:
+    id: "more-tools"
+- tapOn:
+    id: "tool-linearize"
+- extendedWaitUntil:
+    visible: "Saved as a new version."
+    timeout: 120000
+- extendedWaitUntil:
+    visible: "Page 1 of 1000"
+    timeout: 30000
+- tapOn: "More"
+- tapOn:
+    id: "more-tools"
+- tapOn:
+    id: "tool-repair"
+- extendedWaitUntil:
+    visible: "Nothing to repair — the file is sound."
+    timeout: 120000
+- back
+- assertVisible: "Import PDF"

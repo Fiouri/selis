@@ -12,6 +12,7 @@ pub mod settings;
 pub mod share;
 pub mod signatures;
 pub mod tags;
+pub mod tools;
 pub mod transfer;
 
 use serde::Serialize;

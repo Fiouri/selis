@@ -1,6 +1,6 @@
 import { IconButton } from "@selis/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, Pencil, Star, Tag as TagIcon, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Pencil, Star, Tag as TagIcon, Trash2, Wrench, X } from "lucide-react";
 import { type ReactNode, type SyntheticEvent, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -8,7 +8,8 @@ import { Sheet } from "../../components/Sheet";
 import { useToast } from "../../components/Toast";
 import type { Document } from "../../lib/api";
 import { documentTitle } from "./importFeedback";
-import { deleteDocument, renameDocument, setFavorite } from "./queries";
+import { useTools } from "../tools/toolsStore";
+import { deleteDocument, documentsKey, patchCachedDocument, renameDocument, setFavorite } from "./queries";
 import { TagPicker } from "./TagPicker";
 
 type Mode = "menu" | "tags" | "rename" | "delete";
@@ -153,6 +154,19 @@ export function DocumentMenu({ doc, onClose }: { doc: Document | null; onClose: 
               label={t("library.editTags")}
               onClick={() => setMode("tags")}
               trailing={<ChevronRight size={20} strokeWidth={1.75} className="text-neutral-9" aria-hidden="true" />}
+            />
+            <MenuItem
+              icon={<Wrench size={22} strokeWidth={1.75} className="text-neutral-11" aria-hidden="true" />}
+              label={t("tools.open")}
+              onClick={() => {
+                close();
+                void useTools.getState().open(doc.id, (document) => {
+                  patchCachedDocument(queryClient, document);
+                  void queryClient.invalidateQueries({ queryKey: documentsKey });
+                });
+              }}
+              trailing={<ChevronRight size={20} strokeWidth={1.75} className="text-neutral-9" aria-hidden="true" />}
+              testId="menu-tools"
             />
             <MenuItem
               icon={<Pencil size={22} strokeWidth={1.75} className="text-neutral-11" aria-hidden="true" />}

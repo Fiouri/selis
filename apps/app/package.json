@@ -12,7 +12,7 @@
     "preview:mock": "vite preview --mode mock --port 4173 --strictPort",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "e2e": "playwright test",
-    "tauri": "tauri"
+    "tauri": "node ../../scripts/tauri.ts"
   },
   "dependencies": {
     "@selis/engine": "0.1.0",

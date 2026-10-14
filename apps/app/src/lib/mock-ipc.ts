@@ -7,6 +7,7 @@
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { createMockPack, PACK_COMMANDS } from "./mock-pack";
+import { createMockTools, TOOL_COMMANDS } from "./mock-tools";
 import { createMockTransfer, TRANSFER_COMMANDS } from "./mock-transfer";
 import type {
   CommandError,
@@ -511,12 +512,25 @@ export function installMockIpc(): void {
       importDocument(registerMockFile(new File([new Uint8Array(bytes)], name, { type: "application/pdf" })), name),
   });
   (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.pack = pack.hooks;
+  const tools = createMockTools({
+    fail,
+    runOnce,
+    documentBytes: async (docId) => new Uint8Array(await (await fetch(entryOf(docId).url)).arrayBuffer()),
+    saveSameBytes: (docId) => {
+      const list = versions.get(docId) ?? [];
+      versions.set(docId, list);
+      list.push("manual");
+      return update(docId, { modifiedAt: Date.now(), thumbnailPath: null });
+    },
+  });
+  (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.tools = tools.hooks;
   mockIPC(async (cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     const id = String(args.id);
     if (knobs().failCommands?.includes(cmd)) fail("io", `${cmd} failed (test knob)`);
     if (TRANSFER_COMMANDS.has(cmd)) return transfer.handle(cmd, args);
     if (PACK_COMMANDS.has(cmd)) return pack.handle(cmd, args);
+    if (TOOL_COMMANDS.has(cmd)) return tools.handle(cmd, args);
     switch (cmd) {
       case "import_document":
         return runOnce(cmd, String(args.requestId), () =>

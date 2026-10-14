@@ -15,6 +15,8 @@ export type OpenState =
   | { status: "loading" }
   /** A working copy from a session that never became a version (crash, kill). */
   | { status: "recovery"; choose: (choice: RecoveryChoice) => void }
+  /** The document needs its password (asked again after a wrong one). */
+  | { status: "locked"; wrong: boolean; unlock: (password: string) => void }
   | {
       status: "ready";
       doc: DocHandle;
@@ -24,6 +26,8 @@ export type OpenState =
       session: EditSession;
       /** The document was opened from recovered edits. */
       recovered: boolean;
+      /** Opened with a password: editing is off, no thumbnail is made (P4a). */
+      locked: boolean;
     }
   | { status: "error"; code: EngineErrorCode | "io" };
 
@@ -55,9 +59,11 @@ async function recoverWorkingCopy(
 /**
  * Loads a library document into the engine with its edit session. On unmount
  * the session's edits become a version first, then the document is closed
- * (freeing WASM memory).
+ * (freeing WASM memory). A new `reloadKey` opens the document again (a tool
+ * saved a new version). A password-protected document waits in "locked" for
+ * its password, which lives only in this effect.
  */
-export function useOpenDocument(docId: string): OpenState {
+export function useOpenDocument(docId: string, reloadKey = 0): OpenState {
   const [state, setState] = useState<OpenState>({ status: "loading" });
   const queryClient = useQueryClient();
 
@@ -93,9 +99,33 @@ export function useOpenDocument(docId: string): OpenState {
         });
         if (aborted()) return;
         const file = await api.readDocument(docId);
-        const bytes = await readDocumentBytes(file.path);
-        markStep("read");
-        const doc = await getEngine().open(bytes);
+        let password: string | undefined;
+        let doc: DocHandle;
+        for (;;) {
+          // Read for every attempt: the engine takes the buffer.
+          const bytes = await readDocumentBytes(file.path);
+          markStep("read");
+          try {
+            doc = await getEngine().open(bytes, password === undefined ? {} : { password });
+            break;
+          } catch (err) {
+            if (!(err instanceof EngineError && err.code === "password") || aborted()) throw err;
+            const wrong = password !== undefined;
+            password = await new Promise<string>((resolve) => {
+              setState({
+                status: "locked",
+                wrong,
+                unlock: (value) => {
+                  setState({ status: "loading" });
+                  resolve(value);
+                },
+              });
+            });
+            if (aborted()) return;
+          }
+        }
+        const locked = password !== undefined;
+        password = undefined;
         markStep(`open pages=${doc.pageCount}`);
         if (aborted()) {
           void doc.close();
@@ -108,10 +138,13 @@ export function useOpenDocument(docId: string): OpenState {
           refreshThumbnail(queryClient, docId, doc);
         };
         session = new EditSession(doc, docId, file.document.blake3, undefined, onVersion);
-        setState({ status: "ready", doc, meta: file.document, path: file.path, session, recovered });
-        // Queued behind the visible pages in the worker, so it never delays them.
-        if (recovered) refreshThumbnail(queryClient, docId, doc);
-        else thumbnailFromOpenDocument(queryClient, file.document, doc);
+        setState({ status: "ready", doc, meta: file.document, path: file.path, session, recovered, locked });
+        // Queued behind the visible pages in the worker, so it never delays them. A protected
+        // document gets none: its first page would sit unencrypted in the thumbnail cache.
+        if (!locked) {
+          if (recovered) refreshThumbnail(queryClient, docId, doc);
+          else thumbnailFromOpenDocument(queryClient, file.document, doc);
+        }
 
         const needsInfo = file.document.pageCount !== doc.pageCount || (!file.document.title && doc.title);
         if (needsInfo) {
@@ -143,7 +176,7 @@ export function useOpenDocument(docId: string): OpenState {
         }
       })();
     };
-  }, [docId, queryClient]);
+  }, [docId, queryClient, reloadKey]);
 
   return state;
 }

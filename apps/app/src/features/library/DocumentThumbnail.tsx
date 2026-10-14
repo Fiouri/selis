@@ -1,5 +1,6 @@
 import { Skeleton } from "@selis/ui";
 import { useQueryClient } from "@tanstack/react-query";
+import { LockKeyhole } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DocumentGlyph } from "../../components/Illustrations";
 import type { Document } from "../../lib/api";
@@ -21,6 +22,7 @@ const BOX: Record<Variant, { width: number; height: number }> = {
 export function DocumentThumbnail({ doc, variant }: { doc: Document; variant: Variant }) {
   const queryClient = useQueryClient();
   const failed = useThumbnailStatus((s) => s.failed.has(doc.id));
+  const locked = useThumbnailStatus((s) => s.locked.has(doc.id));
   const [loadedPath, setLoadedPath] = useState<string | null>(null);
   const box = BOX[variant];
 
@@ -35,8 +37,14 @@ export function DocumentThumbnail({ doc, variant }: { doc: Document; variant: Va
 
   if (path === null && failed) {
     return (
-      <span className="flex items-center justify-center" style={box} aria-hidden="true">
-        <DocumentGlyph />
+      <span className="flex items-center justify-center" style={box} aria-hidden="true" data-testid={locked ? "thumbnail-locked" : undefined}>
+        {locked ? (
+          <span className="flex size-16 items-center justify-center rounded-[12px] bg-neutral-3 text-neutral-11">
+            <LockKeyhole size={32} strokeWidth={1.75} />
+          </span>
+        ) : (
+          <DocumentGlyph />
+        )}
       </span>
     );
   }

@@ -14,6 +14,7 @@ import {
   reliableIpc,
   type ShortCallOptions,
   type SignatureKind,
+  type ToolRequest,
   type VersionLabel,
 } from "./ipc";
 
@@ -213,6 +214,11 @@ export const api = {
   packImport: (source: string, passphrase: string | null) =>
     unwrap(ipc().long("pack_import", (requestId) => commands.packImport(requestId, source, passphrase), SAVE)),
   pickPack: () => unwrap(ipc().long("pick_pack", (requestId) => commands.pickPack(requestId), PICK)),
+  // Tools (P4a, ADR 0015): qpdf on the current version; a result becomes the next version.
+  documentProtection: (id: string) =>
+    unwrap(ipc().short("document_protection", () => commands.documentProtection(id), READ)),
+  runTool: (id: string, request: ToolRequest) =>
+    unwrap(ipc().long("run_tool", (requestId) => commands.runTool(requestId, id, request), SAVE)),
   pendingTransferLink: () => unwrap(ipc().short("pending_transfer_link", () => commands.pendingTransferLink(), READ)),
   dismissTransferLink: (link: string) =>
     unwrap(ipc().short("dismiss_transfer_link", () => commands.dismissTransferLink(link), READ)),
@@ -259,6 +265,11 @@ export type {
   LibrarySummary,
   OfferView,
   PackExportView,
+  ProtectionView,
+  ToolOutcome,
+  ToolProblem,
+  ToolRequest,
+  ToolUnchanged,
   PackImportView,
   PackKind,
   PackProblem,

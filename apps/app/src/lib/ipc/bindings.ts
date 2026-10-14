@@ -218,6 +218,13 @@ export const commands = {
 	packImport: (requestId: string, source: string, passphrase: string | null) => typedError<PackImportView, CommandError>(__TAURI_INVOKE("pack_import", { requestId, source, passphrase })),
 	/**  The picker for a pack (any file type: other apps label packs as binary data). */
 	pickPack: (requestId: string) => typedError<PickOutcome, CommandError>(__TAURI_INVOKE("pick_pack", { requestId })),
+	/**  Whether the document's current version needs a password to open. */
+	documentProtection: (id: string) => typedError<ProtectionView, CommandError>(__TAURI_INVOKE("document_protection", { id })),
+	/**
+	 *  Runs a tool on the document's current version; the result becomes the next version.
+	 *  Runs once per `request_id`.
+	 */
+	runTool: (requestId: string, id: string, request: ToolRequest) => typedError<ToolOutcome, CommandError>(__TAURI_INVOKE("run_tool", { requestId, id, request })),
 	/**
 	 *  The state of a long-running request: still running, its final result, or
 	 *  unknown (never received, or expired). Read-only; a fresh call the UI makes
@@ -405,6 +412,13 @@ export type PingView = {
 	ready: boolean,
 };
 
+/**  Who may open the document's current version. */
+export type ProtectionView = "none" | 
+/**  Opens without a password, has an owner password (restrictions). */
+"restricted" | 
+/**  Needs a password to open. */
+"password";
+
 export type ReceiveView = { kind: "connecting" } | { kind: "confirm"; code: string } | { kind: "receiving"; bytes: number; total: number; route: RouteView } | { kind: "verifying" } | 
 /**  Adding the documents to the library. */
 { kind: "saving" } | { kind: "done"; documentIds: string[]; duplicates: number; 
@@ -517,6 +531,25 @@ export type TakeResult =
 { status: "unknown" };
 
 export type ThemePref = "system" | "light" | "dark" | "sepia";
+
+export type ToolOutcome = 
+/**  A new version was saved. */
+{ status: "saved"; document: Document; inputBytes: number; outputBytes: number } | { status: "unchanged"; reason: ToolUnchanged; inputBytes: number } | { status: "refused"; problem: ToolProblem };
+
+/**  Why the tool did not run (the UI explains each; nothing was saved). */
+export type ToolProblem = "passwordNeeded" | "wrongPassword" | "damaged" | "unsupported" | 
+/**  The request does not fit the document (e.g. no password to remove). */
+"notApplicable" | 
+/**  The document has edits that are not a version yet. */
+"unsavedEdits" | 
+/**  A part of the file (one stream) is too large to process on a phone. */
+"tooLarge";
+
+/**  The operation, as the UI asks for it. */
+export type ToolRequest = { kind: "protect"; password: string; ownerPassword: string | null; allowPrint: boolean; allowCopy: boolean; allowModify: boolean } | { kind: "unprotect"; password: string } | { kind: "compress" } | { kind: "linearize" } | { kind: "repair" };
+
+/**  Why nothing changed although the tool ran. */
+export type ToolUnchanged = "notSmaller" | "alreadyLinearized" | "nothingToRepair";
 
 export type TransferErrorCode = "expired" | "alreadyUsed" | "unknown" | "declined" | "unreachable" | "interrupted" | "mismatch" | "protocol" | "storage" | "cancelled" | 
 /**  Not a Selis transfer link. */
