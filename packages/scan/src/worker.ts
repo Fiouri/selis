@@ -19,7 +19,8 @@ declare const self: DedicatedWorkerGlobalScope;
 type Pixels = { width: number; height: number; rgba: Uint8ClampedArray<ArrayBuffer> };
 
 const canvasInWorker = typeof OffscreenCanvas !== "undefined";
-let module: ScanModule | null = null;
+/** The module, loading since `init` (requests that arrive meanwhile wait for it). */
+let module: Promise<ScanModule> | null = null;
 /** The still being adjusted, its preview as shown, and that preview's unfiltered pixels. */
 let still: { photo: Pixels; preview: Pixels } | null = null;
 
@@ -27,7 +28,7 @@ function post(message: WorkerResponse, transfer: Transferable[] = []): void {
   self.postMessage(message, transfer);
 }
 
-function ready(): ScanModule {
+async function ready(): Promise<ScanModule> {
   if (!module) throw new Error("scan worker not initialised");
   return module;
 }
@@ -72,20 +73,27 @@ function copyOf(pixels: Pixels): Pixels {
 async function handle(req: WorkerRequest): Promise<void> {
   switch (req.type) {
     case "init": {
-      module ??= await ScanModule.load(fetch(req.simd ? simdUrl : baseUrl));
+      module ??= ScanModule.load(fetch(req.simd ? simdUrl : baseUrl));
+      try {
+        await module;
+      } catch (err) {
+        module = null;
+        throw err;
+      }
       post({ type: "ready", reqId: req.reqId, canvas: canvasInWorker });
       return;
     }
     case "detect": {
+      const scan = await ready();
       const start = performance.now();
-      const quad = ready().detect(new Uint8ClampedArray(req.rgba), req.width, req.height);
+      const quad = scan.detect(new Uint8ClampedArray(req.rgba), req.width, req.height);
       post({ type: "detected", reqId: req.reqId, quad, ms: performance.now() - start });
       return;
     }
     case "still": {
       still = null;
       const photo = await pixelsOf(req.photo, req.maxPixels);
-      const quad = ready().findPage(photo.rgba, photo.width, photo.height);
+      const quad = (await ready()).findPage(photo.rgba, photo.width, photo.height);
       const preview = downscale(photo, req.previewSide);
       still = { photo, preview };
       const { picture: shown, transfer } = await picture(copyOf(preview), "image/jpeg", 0.85);
@@ -95,7 +103,7 @@ async function handle(req: WorkerRequest): Promise<void> {
     case "preview": {
       if (!still) throw new Error("no still");
       const filtered = copyOf(still.preview);
-      ready().filter(filtered.rgba, filtered.width, filtered.height, req.filter);
+      (await ready()).filter(filtered.rgba, filtered.width, filtered.height, req.filter);
       const { picture: shown, transfer } = await picture(filtered, "image/jpeg", 0.85);
       post({ type: "preview", reqId: req.reqId, preview: shown }, transfer);
       return;
@@ -105,7 +113,7 @@ async function handle(req: WorkerRequest): Promise<void> {
       const start = performance.now();
       const { photo } = still;
       still = null;
-      const page = ready().straighten(photo.rgba, photo.width, photo.height, req.quad, req.maxPixels, req.filter);
+      const page = (await ready()).straighten(photo.rgba, photo.width, photo.height, req.quad, req.maxPixels, req.filter);
       const thumb = downscale(page, req.thumbSide);
       const mime = req.filter === "bw" ? "image/png" : "image/jpeg";
       const encodedThumb = await picture(thumb, "image/jpeg", 0.8);

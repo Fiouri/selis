@@ -11,6 +11,7 @@ import { makePhoto } from "@selis/fixtures";
 import el from "../src/i18n/el.json" with { type: "json" };
 import en from "../src/i18n/en.json" with { type: "json" };
 import { addToLibrary, firstPageRendered, importFixture, presetSettings, thumbnailsLoaded } from "./helpers";
+import { useFakeScanCamera } from "./scan-camera";
 
 const LINK = readFileSync(fileURLToPath(import.meta.resolve("@selis/fixtures/transfer/link.txt")), "utf8").trim();
 const THEMES = ["light", "dark", "sepia"] as const;
@@ -530,6 +531,46 @@ for (const lang of LANGS) {
         await expect(page.getByTestId("unlock-wrong")).toBeVisible({ timeout: 15_000 });
         await settle(page);
         await expect(page).toHaveScreenshot(shot("tools-unlock"));
+      });
+
+      test(`scan: camera, adjust corners, pages (${theme})`, async ({ page }) => {
+        await useFakeScanCamera(page);
+        await page.goto("/");
+        await page.getByTestId("scan-empty").click();
+        await expect(page.getByTestId("scan-camera")).toHaveAttribute("data-camera", "live");
+        await expect(page.getByTestId("scan-outline")).toBeVisible();
+        // The fake camera repeats one frame: the eased outline settles on it.
+        await page.waitForTimeout(1500);
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("scan-camera"), { maxDiffPixelRatio: 0.004 });
+        await page.getByTestId("scan-shutter").click();
+        await expect(page.getByTestId("scan-still")).toBeVisible({ timeout: 20_000 });
+        await expect.poll(() => page.getByTestId("scan-still").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("scan-adjust"), { maxDiffPixelRatio: 0.004 });
+        await page.getByTestId("scan-filter-bw").click();
+        await page.getByTestId("scan-keep").click();
+        await expect(page.getByTestId("scan-queue-open")).toBeVisible({ timeout: 20_000 });
+        await page.getByTestId("scan-shutter").click();
+        await expect(page.getByTestId("scan-still")).toBeVisible({ timeout: 20_000 });
+        await page.getByTestId("scan-keep").click();
+        await expect(page.getByTestId("scan-count")).toContainText("2", { timeout: 20_000 });
+        await page.getByTestId("scan-queue-open").click();
+        await expect(page.getByTestId("scan-page")).toHaveCount(2);
+        await expect
+          .poll(() => page.locator('[data-testid="scan-pages"] img').evaluateAll((imgs: HTMLImageElement[]) => imgs.every((i) => i.complete && i.naturalWidth > 0)))
+          .toBe(true);
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("scan-queue"));
+      });
+
+      test(`scan: camera denied (${theme})`, async ({ page }) => {
+        await useFakeScanCamera(page, { denied: true });
+        await page.goto("/");
+        await page.getByTestId("scan-empty").click();
+        await expect(page.getByTestId("scan-camera-problem")).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("scan-denied"));
       });
 
       test(`recent (${theme})`, async ({ page }) => {

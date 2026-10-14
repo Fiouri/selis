@@ -135,7 +135,8 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
               setOutline(null);
             }
           } catch {
-            break;
+            // A frame that could not be checked (the worker is still starting, or closing):
+            // try the next one; a closed session stops the loop through `stopped`.
           }
         }
         const wait = DETECT_INTERVAL_MS - (performance.now() - started);
@@ -180,7 +181,7 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
         className="flex shrink-0 items-center gap-1 px-1"
         style={{ paddingTop: "var(--safe-top)", height: "calc(var(--safe-top) + 52px)" }}
       >
-        <IconButton label={t("scan.close")} icon={<X size={22} strokeWidth={1.75} />} onClick={onClose} className="text-[#f4f4f6]" />
+        <IconButton label={t("scan.close")} icon={<X size={22} strokeWidth={1.75} />} onClick={onClose} className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!" />
         <h1 className="min-w-0 flex-1 truncate text-[17px] font-semibold">{t("scan.title")}</h1>
         <span className="px-3 text-sm tabular-nums text-[#c9c9d1]" data-testid="scan-count">
           {t("scan.count", { count: pages.length })}
@@ -235,7 +236,7 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
                   {t("scan.tryAgain")}
                 </Button>
               ) : null}
-              <Button variant="ghost" className="text-[#f4f4f6]" icon={<Images size={20} strokeWidth={1.75} />} onClick={onChoosePhotos} data-testid="scan-choose-photos">
+              <Button variant="ghost" className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!" icon={<Images size={20} strokeWidth={1.75} />} onClick={onChoosePhotos} data-testid="scan-choose-photos">
                 {t("scan.choosePhotos")}
               </Button>
             </div>
@@ -276,7 +277,7 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
               icon={torch.on ? <Zap size={22} strokeWidth={1.75} /> : <ZapOff size={22} strokeWidth={1.75} />}
               onClick={() => void onTorch()}
               aria-pressed={torch.on}
-              className="text-[#f4f4f6]"
+              className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!"
               data-testid="scan-flash"
             />
           ) : null}
