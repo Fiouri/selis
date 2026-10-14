@@ -209,6 +209,7 @@ fn run(
         }
         Err(e) => return Err(e.into()),
     };
+    let protecting = matches!(request, ToolRequest::Protect { .. });
     let operation = request.into_operation();
     let outcome = selis_pdfops::run(&run.input, &run.output, &operation);
     drop(operation);
@@ -218,8 +219,14 @@ fn run(
             output_bytes,
         }) => {
             let saved = library.finish_tool_run(run, retention)?;
+            // The card's picture of page 1 must not outlive the protection.
+            let document = if protecting {
+                library.drop_thumbnail(id)?
+            } else {
+                saved.document
+            };
             Ok(ToolOutcome::Saved {
-                document: saved.document,
+                document,
                 input_bytes,
                 output_bytes,
             })

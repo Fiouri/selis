@@ -7,7 +7,7 @@
  *   while no document is open, after the screen has settled. Documents that
  *   cannot be rendered (password, damaged) are skipped for the session.
  */
-import type { DocHandle, Thumbnail } from "@selis/engine";
+import { type DocHandle, EngineError, type Thumbnail } from "@selis/engine";
 import type { QueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 import { api, type Document } from "../../lib/api";
@@ -24,13 +24,37 @@ const MAX_BACKGROUND_BYTES = 150 * 1024 * 1024;
 const START_DELAY_MS = 800;
 const BETWEEN_JOBS_MS = 150;
 
-type ThumbnailStatus = { failed: ReadonlySet<string> };
+type ThumbnailStatus = { failed: ReadonlySet<string>; locked: ReadonlySet<string> };
 
-/** Documents whose thumbnail could not be made this session (cards show a glyph). */
-export const useThumbnailStatus = create<ThumbnailStatus>()(() => ({ failed: new Set<string>() }));
+/**
+ * Documents whose thumbnail could not be made this session (cards show a glyph), and among
+ * them those that need a password (a lock glyph: their page is never rendered for the card).
+ */
+export const useThumbnailStatus = create<ThumbnailStatus>()(() => ({ failed: new Set<string>(), locked: new Set<string>() }));
 
-function markFailed(id: string): void {
-  useThumbnailStatus.setState((s) => ({ failed: new Set(s.failed).add(id) }));
+function markFailed(id: string, locked = false): void {
+  useThumbnailStatus.setState((s) => ({
+    failed: new Set(s.failed).add(id),
+    locked: locked ? new Set(s.locked).add(id) : s.locked,
+  }));
+}
+
+/** A document was just protected with a password: no thumbnail, a lock glyph. */
+export function markThumbnailLocked(id: string): void {
+  attempted.add(id);
+  markFailed(id, true);
+}
+
+/** Its password was removed: make a thumbnail again. */
+export function clearThumbnailState(id: string): void {
+  attempted.delete(id);
+  useThumbnailStatus.setState((s) => {
+    const failed = new Set(s.failed);
+    const locked = new Set(s.locked);
+    failed.delete(id);
+    locked.delete(id);
+    return { failed, locked };
+  });
 }
 
 const attempted = new Set<string>();
@@ -74,7 +98,7 @@ async function drain(queryClient: QueryClient): Promise<void> {
         await generate(queryClient, doc);
       } catch (err) {
         console.warn(`selis: no thumbnail for ${doc.id}`, err);
-        markFailed(doc.id);
+        markFailed(doc.id, err instanceof EngineError && err.code === "password");
       }
       await sleep(BETWEEN_JOBS_MS);
     }

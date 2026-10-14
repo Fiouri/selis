@@ -24,6 +24,8 @@ import { shareDocument } from "../features/viewer/share";
 import { type OpenState, useOpenDocument } from "../features/viewer/useOpenDocument";
 import { useDocumentSearch } from "../features/viewer/useDocumentSearch";
 import { PageChip, Scrubber, ViewerDock, ViewerSearchBar, ViewerTopBar } from "../features/viewer/ViewerChrome";
+import { useTools } from "../features/tools/toolsStore";
+import { UnlockSheet } from "../features/tools/UnlockSheet";
 import { OutlineSheet, ThumbnailsSheet, ViewerMoreSheet } from "../features/viewer/ViewerSheets";
 import { api } from "../lib/api";
 import { currentRenderLimits } from "../lib/engine";
@@ -101,7 +103,9 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   const showToast = useToast((s) => s.show);
   const night = useSettings((s) => s.nightMode);
   const setNight = useSettings((s) => s.setNightMode);
-  const state = useOpenDocument(docId);
+  // A tool saved a new version: open the document again.
+  const [reloadKey, setReloadKey] = useState(0);
+  const state = useOpenDocument(docId, reloadKey);
   const [chrome, setChrome] = useState(true);
   const [dockHidden, setDockHidden] = useState(false);
   const [page, setPage] = useState(0);
@@ -248,7 +252,25 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   }, [session, doc, showToast, t]);
   useOverlay(annotating, finishAnnotating);
 
+  // Tools work on the current version: pending edits become a version first.
+  const openTools = async () => {
+    setSheet(null);
+    try {
+      await session?.commit();
+    } catch {
+      showToast(t("annotate.saveFailed"), "error");
+      return;
+    }
+    void useTools.getState().open(docId, () => setReloadKey((key) => key + 1));
+  };
+
   const startEditing = (next: Exclude<Mode, "view">) => {
+    // Editing an encrypted file is not supported (docs/design/p4-ui-brief.md §1).
+    if (state.status === "ready" && state.locked) {
+      setSheet(null);
+      showToast(t("tools.lockedEdit"));
+      return;
+    }
     // Back from the pages grid, the viewer opens at the page it was on.
     if (next === "pages") setResumePage(page);
     // Editing works on the unrotated page with the chrome shown.
@@ -419,7 +441,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           : t("viewer.searching");
 
   let body;
-  if (state.status === "loading" || state.status === "recovery") {
+  if (state.status === "loading" || state.status === "recovery" || state.status === "locked") {
     body = <ViewerSkeleton insetTop={barHeight} />;
   } else if (state.status === "error") {
     body = (
@@ -587,6 +609,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
             onRotate={() => setRotation((r) => nextTurn(r))}
             onNight={(on) => void setNight(on)}
             onRedact={() => startEditing("redact")}
+            onTools={() => void openTools()}
           />
           <OutlineSheet open={sheet === "outline"} onClose={() => setSheet(null)} doc={doc} onJump={jumpFromSheet} />
           <ThumbnailsSheet
@@ -638,6 +661,12 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
         // Back / outside tap leaves the document; the edits stay for next time.
         onDismiss={back}
         testId="recovery-dialog"
+      />
+      <UnlockSheet
+        open={state.status === "locked"}
+        wrong={state.status === "locked" && state.wrong}
+        onUnlock={(password) => state.status === "locked" && state.unlock(password)}
+        onBack={back}
       />
     </div>
   );

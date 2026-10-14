@@ -11,3 +11,11 @@ rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
 
 [target.x86_64-linux-android]
 rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+# qpdf (selis-pdfops, ADR 0015) is C++: link the NDK's static libc++ so the app ships a single
+# .so (selis-pdfops' build script adds libc++abi). bindgen's clang: see scripts/tauri.ts.
+[env]
+CXXSTDLIB_aarch64_linux_android = "c++_static"
+CXXSTDLIB_armv7_linux_androideabi = "c++_static"
+CXXSTDLIB_i686_linux_android = "c++_static"
+CXXSTDLIB_x86_64_linux_android = "c++_static"
