@@ -32,6 +32,13 @@ case "$mode" in
     sleep 2
     (cd "$here" && node mem-sampler.ts "$serial" "$(win "$state/mem.log")" 900) > /dev/null 2>&1 &
     ;;
+  check-release)
+    # A release build (not debuggable): timings and memory only, no run-as to pull the version.
+    touch "$state/mem.log.stop"
+    sleep 2
+    adb -s "$serial" logcat -d | tr -d '\r' | grep -o '\[selis:perf\] ocr.*' || echo "no OCR timings in logcat"
+    (cd "$here" && node mem-peak.ts "$(win "$state/mem.log")" "$(win "$root/.tmp/maestro/.maestro/tests")" "Selis OCR" "TIMED ocr")
+    ;;
   check)
     touch "$state/mem.log.stop"
     status=0
