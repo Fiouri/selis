@@ -42,8 +42,10 @@ light, dark and sepia with the approved design (`docs/design/p1-ui-brief.md`). E
 (`<screen>-<theme>-…png`) and Greek the second (`<screen>-el-<theme>-…png`). There is one baseline
 set, `e2e/visual.spec.ts-snapshots/*-linux.png`, rendered by CI (ubuntu-24.04), and the comparison
 is exact (ADR 0019); the `visual-390` project only runs on Linux. After a UI change CI fails on the
-screens that changed (or have no baseline yet): download the `playwright-report` artifact,
-inspect `test-results/**/*-actual.png`, and commit each as the matching `*-linux.png`.
+screens that changed: download the `playwright-report` artifact, inspect
+`test-results/**/*-actual.png`, and commit each as the matching `*-linux.png`. For a new screen
+(or a baseline deleted to be redone) CI writes the baseline, fails the "No unreviewed visual
+baselines" step, and the file is in the artifact's `e2e/visual.spec.ts-snapshots/`.
 
 Android: `npm run tauri -- android dev`. See the README for prerequisites.
 

@@ -13,8 +13,9 @@ const PORT = 4173;
  * CI (ubuntu-24.04): the project only exists on Linux (ADR 0019). Comparison is exact
  * (`maxDiffPixels: 0`): the same Chromium on the same OS renders the same pixels, and any
  * tolerance hides small components (pixelmatch skips anti-aliased pixels, so a new line of text
- * counts only a few hundred). In CI a missing baseline fails (`updateSnapshots: "none"`); its
- * render is in the report artifact to review and commit (CONTRIBUTING.md).
+ * counts only a few hundred). A missing baseline is written (so every shot renders), and CI then
+ * fails on any baseline file it wrote; they are in the report artifact to review and commit
+ * (CONTRIBUTING.md).
  */
 const visual = process.platform === "linux";
 export default defineConfig({
@@ -27,7 +28,7 @@ export default defineConfig({
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
   timeout: 60_000,
   expect: { timeout: 15_000, toHaveScreenshot: { maxDiffPixels: 0, animations: "disabled", caret: "hide" } },
-  updateSnapshots: process.env.CI ? "none" : "missing",
+  updateSnapshots: "missing",
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",

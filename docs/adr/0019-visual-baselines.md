@@ -28,9 +28,11 @@ approved twice (win32 locally, Linux from CI), and the second set was the one th
 - **Exact comparison:** `toHaveScreenshot` default `maxDiffPixels: 0` (Chromium on the same OS
   renders the same pixels; checked by two CI runs on fresh baselines) and no per-shot
   tolerances. Animations stay disabled and the caret hidden.
-- **No silent baselines in CI:** `updateSnapshots: "none"` when `CI` is set: a missing baseline
-  fails, and its render is in the `playwright-report` artifact (`test-results/…-actual.png`) to
-  inspect and commit. Locally (Linux) "missing" still writes them.
+- **No silent baselines in CI:** a missing baseline is still written (`updateSnapshots:
+  "missing"`, so every shot of a test renders — with `"none"` a test stops at its first missing
+  shot), and a CI step then fails the job if the run wrote any baseline file, listing them. The
+  `playwright-report` artifact carries them (`e2e/visual.spec.ts-snapshots/`) to inspect and
+  commit; a changed screen fails its comparison and leaves `test-results/…-actual.png`.
 - **Proof:** a temporary 4 px shift of one component (the library's Import button) made CI fail
   on the screens that show it; the shift was reverted (PR "chore: P4 follow-ups").
 
