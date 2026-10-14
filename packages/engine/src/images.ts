@@ -195,6 +195,11 @@ export function pageLayout(width: number, height: number, size: PageSizeOption):
   return { width: pw, height: ph, box: { x: (pw - bw) / 2, y: (ph - bh) / 2, width: bw, height: bh } };
 }
 
+/** Pixel size of a page exported at `dpi` (page size in points). */
+export function exportPixels(page: { readonly width: number; readonly height: number }, dpi: number): { width: number; height: number } {
+  return { width: Math.round((page.width * dpi) / 72), height: Math.round((page.height * dpi) / 72) };
+}
+
 /** A one-page blank PDF to start from (PDFium cannot save a document with no page). */
 const SEED = (() => {
   const objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >>"];

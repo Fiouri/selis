@@ -21,6 +21,7 @@ export {
 export { DEFAULT_RENDER_LIMITS, memoryTier, type MemoryTier, renderLimitsFor, type RenderLimits } from "./limits";
 export { LruCache } from "./lru";
 export type { PageOp } from "./pages";
+export { exportPixels, orientedSize, pageLayout, type PageSizeOption } from "./images";
 export { annotationAt, glyphAt, selectionRects, simplifyStroke, strokesBounds, unionRect } from "./editing";
 export {
   type Annotation,
@@ -28,6 +29,8 @@ export {
   type DocHandle,
   EngineError,
   type EngineErrorCode,
+  type ExportedImage,
+  type ImagePdfSession,
   type FieldChange,
   type FormField,
   type FormFieldKind,

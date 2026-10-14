@@ -28,6 +28,7 @@ import wasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 import fontUrl from "../assets/SelisSans-LatinGreek.ttf?url";
 import { EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX, toPdfAnnotation, toSignatureStamp } from "./annotations";
 import { documentFields, flattenAll, pageWidgets, setField, toFormField } from "./forms";
+import { ImageFormatError, type ImageInput, ImagePdfBuilder } from "./images";
 import { applyPageOp, extractPages } from "./pages";
 import { importLosses } from "./import-losses";
 import { applyRedactions } from "./redact";
@@ -108,6 +109,7 @@ function toError(err: unknown): { code: EngineErrorCode; message: string } {
         return { code: "unknown", message: reason.message };
     }
   }
+  if (err instanceof ImageFormatError) return { code: "format", message: err.message };
   return { code: "unknown", message: err instanceof Error ? err.message : String(err) };
 }
 
@@ -595,6 +597,122 @@ async function handleExtract(req: Extract<WorkerRequest, { type: "extract" }>): 
   }
 }
 
+const builders = new Map<number, ImagePdfBuilder>();
+let nextBuilder = 1;
+
+async function handleImagesBegin(req: Extract<WorkerRequest, { type: "imagesBegin" }>): Promise<void> {
+  try {
+    const engine = await native();
+    if (!wasmModule) throw new Error("engine not ready");
+    const builder = await ImagePdfBuilder.create(engine, wasmModule);
+    const id = nextBuilder++;
+    builders.set(id, builder);
+    post({ type: "imagesBuilder", reqId: req.reqId, builder: id });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+/**
+ * JPEG goes in as it is; other formats are decoded here (the browser applies their EXIF
+ * orientation) and go in as pixels. A format the WebView cannot decode (e.g. HEIC on most
+ * Android WebViews) is a "format" error for that image only.
+ */
+async function decodeImage(bytes: ArrayBuffer, mime: string): Promise<ImageInput> {
+  const head = new Uint8Array(bytes, 0, Math.min(3, bytes.byteLength));
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return { kind: "jpeg", bytes };
+  if (typeof createImageBitmap === "undefined" || typeof OffscreenCanvas === "undefined") {
+    throw new ImageFormatError("this WebView cannot decode images in a worker");
+  }
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(new Blob([bytes], { type: mime }), { imageOrientation: "from-image" });
+  } catch {
+    throw new ImageFormatError(`cannot decode ${mime || "the image"}`);
+  }
+  try {
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("no 2d context for decoding");
+    ctx.drawImage(bitmap, 0, 0);
+    const data = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
+    canvas.width = 0;
+    canvas.height = 0;
+    return { kind: "rgba", width: bitmap.width, height: bitmap.height, data: data.buffer };
+  } finally {
+    bitmap.close();
+  }
+}
+
+async function handleImagesAdd(req: Extract<WorkerRequest, { type: "imagesAdd" }>): Promise<void> {
+  const builder = builders.get(req.builder);
+  if (!builder) {
+    post({ type: "error", reqId: req.reqId, code: "closed", message: "no such image builder" });
+    return;
+  }
+  try {
+    builder.add(await decodeImage(req.bytes, req.mime), req.size);
+    post({ type: "imagesAdded", reqId: req.reqId, pages: builder.pageCount });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleImagesFinish(req: Extract<WorkerRequest, { type: "imagesFinish" }>): Promise<void> {
+  const builder = builders.get(req.builder);
+  builders.delete(req.builder);
+  if (!builder) {
+    post({ type: "error", reqId: req.reqId, code: "closed", message: "no such image builder" });
+    return;
+  }
+  try {
+    const bytes = await builder.finish();
+    post({ type: "imagesDone", reqId: req.reqId, bytes }, [bytes]);
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleImagesDiscard(req: Extract<WorkerRequest, { type: "imagesDiscard" }>): Promise<void> {
+  const builder = builders.get(req.builder);
+  builders.delete(req.builder);
+  try {
+    await builder?.discard();
+    post({ type: "closed", reqId: req.reqId });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleExportImage(req: Extract<WorkerRequest, { type: "exportImage" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    const engine = await native();
+    const scale = clampScale(t.page.size, req.dpi / 72, req.maxPixels);
+    if (scale <= 0) throw new Error("invalid resolution");
+    const raw = await engine
+      .renderPageRaw(t.doc, t.page, { scaleFactor: scale, dpr: 1, withAnnotations: true, withForms: true })
+      .toPromise();
+    if (typeof OffscreenCanvas === "undefined") {
+      const bytes = raw.data.slice().buffer;
+      post({ type: "exportedImage", reqId: req.reqId, mime: RAW_RGBA, width: raw.width, height: raw.height, bytes }, [bytes]);
+      return;
+    }
+    const canvas = new OffscreenCanvas(raw.width, raw.height);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("no 2d context for export");
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(raw.data), raw.width, raw.height), 0, 0);
+    const blob = await canvas.convertToBlob(req.format === "png" ? { type: "image/png" } : { type: "image/jpeg", quality: 0.92 });
+    canvas.width = 0;
+    canvas.height = 0;
+    const bytes = await blob.arrayBuffer();
+    post({ type: "exportedImage", reqId: req.reqId, mime: blob.type, width: raw.width, height: raw.height, bytes }, [bytes]);
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
 async function handleAppearance(req: Extract<WorkerRequest, { type: "appearance" }>): Promise<void> {
   const t = target(req, req.index);
   if (!t?.page) return;
@@ -720,6 +838,21 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "appearance":
       void handleAppearance(req);
+      break;
+    case "imagesBegin":
+      void handleImagesBegin(req);
+      break;
+    case "imagesAdd":
+      void handleImagesAdd(req);
+      break;
+    case "imagesFinish":
+      void handleImagesFinish(req);
+      break;
+    case "imagesDiscard":
+      void handleImagesDiscard(req);
+      break;
+    case "exportImage":
+      void handleExportImage(req);
       break;
     case "close":
       void handleClose(req);

@@ -1,4 +1,5 @@
 import type { QuarterTurns } from "./geometry";
+import type { PageSizeOption } from "./images";
 import type { PageOp } from "./pages";
 import type {
   Annotation,
@@ -51,6 +52,13 @@ export type WorkerRequest =
   | { type: "redactionPreview"; reqId: number; docId: string }
   | { type: "importLosses"; reqId: number; docId: string; bytes: ArrayBuffer }
   | { type: "appearance"; reqId: number; docId: string; index: number; id: string }
+  /** Images → PDF (P4b): a builder in the worker, fed one image at a time. */
+  | { type: "imagesBegin"; reqId: number }
+  | { type: "imagesAdd"; reqId: number; builder: number; bytes: ArrayBuffer; mime: string; size: PageSizeOption }
+  | { type: "imagesFinish"; reqId: number; builder: number }
+  | { type: "imagesDiscard"; reqId: number; builder: number }
+  /** A page as a PNG/JPEG at `dpi`, within `maxPixels`. */
+  | { type: "exportImage"; reqId: number; docId: string; index: number; dpi: number; format: "png" | "jpeg"; maxPixels: number }
   | { type: "cancel"; reqId: number }
   | { type: "close"; reqId: number; docId: string };
 
@@ -79,6 +87,11 @@ export type WorkerResponse =
   | { type: "importLosses"; reqId: number; losses: ImportLosses }
   | { type: "redactionPreview"; reqId: number; preview: RedactionPreview }
   | { type: "appearance"; reqId: number; image: StampImage }
+  | { type: "imagesBuilder"; reqId: number; builder: number }
+  | { type: "imagesAdded"; reqId: number; pages: number }
+  | { type: "imagesDone"; reqId: number; bytes: ArrayBuffer }
+  /** `mime` RAW_RGBA when the worker could not encode (the client encodes). */
+  | { type: "exportedImage"; reqId: number; mime: string; width: number; height: number; bytes: ArrayBuffer }
   | { type: "closed"; reqId: number }
   | { type: "error"; reqId: number; code: EngineErrorCode; message: string };
 
