@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Selis privacy manifest (docs/PRIVACY.md): no tracking, no tracking domains, no data collected.
-  Required-reason APIs: file timestamps (the Rust core stats files inside the app container).
+  Selis privacy manifest (docs/PRIVACY.md, docs/store/app-store-privacy.md): no tracking, no
+  tracking domains, no data collected (documents never leave the device except in a transfer
+  the user starts to their own device; nothing reaches the developer).
+
+  Required-reason APIs
+  (https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api):
+  - File timestamp: the Rust core reads modification times inside the app container (C617.1);
+    the document picker (tauri-plugin-dialog FilePickerController) reads the modification date
+    of the file the user picked (3B52.1).
+  - System boot time: the transfer stack (tokio, quinn, iroh) measures elapsed time with
+    monotonic clocks for timeouts and retransmission (35F9.1). Nothing is sent off the device.
+  Not used: disk space, user defaults (settings live in the app's SQLite database), active
+  keyboards.
 -->
 <plist version="1.0">
 <dict>
@@ -20,6 +31,15 @@
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>C617.1</string>
+				<string>3B52.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
 			</array>
 		</dict>
 	</array>

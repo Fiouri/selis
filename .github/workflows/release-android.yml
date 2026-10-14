@@ -18,6 +18,11 @@ on:
         description: Release tag (vX.Y.Z[-rc.N]); checked against the version
         type: string
         required: false
+    outputs:
+      version:
+        value: ${{ jobs.build.outputs.version }}
+      signed:
+        value: ${{ jobs.build.outputs.signed }}
   workflow_dispatch:
   pull_request:
     paths:

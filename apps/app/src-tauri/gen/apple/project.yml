@@ -64,10 +64,12 @@ targets:
           - CFBundleURLName: com.anywecon.selis.transfer
             CFBundleURLSchemes: [selis]
         # Transfer (ADR 0010): mDNS on the local network (iroh's service, iroh-mdns-address-lookup
-        # N0_SERVICE_NAME "irohv1"), the camera for the QR code (ADR 0013).
+        # N0_SERVICE_NAME "irohv1"), the camera for the QR code (ADR 0013) and document scan (ADR 0016).
         NSLocalNetworkUsageDescription: Selis finds your other device on this Wi-Fi to send documents directly, only while the Transfer screen is open.
         NSBonjourServices: [_irohv1._udp]
-        NSCameraUsageDescription: Selis uses the camera only to scan the QR code of a transfer from your other device.
+        NSCameraUsageDescription: Selis uses the camera to scan the QR code of a transfer from your other device and to photograph document pages you scan. Pictures stay on this device.
+        # The share sheet's "Save Image" (a page saved as PNG/JPEG goes through the Web Share API).
+        NSPhotoLibraryAddUsageDescription: Selis adds a page you export as an image to your photos only when you choose Save Image.
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]
@@ -80,8 +82,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.1.0
-        CFBundleVersion: "0.1.0"
+        CFBundleShortVersionString: 1.0.0
+        CFBundleVersion: "1000001"
     entitlements:
       path: selis-app_iOS/selis-app_iOS.entitlements
     scheme:

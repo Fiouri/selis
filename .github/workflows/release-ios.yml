@@ -1,0 +1,116 @@
+name: iOS release
+
+# A signed App Store IPA and its upload to TestFlight (ADR 0022). Signing is automatic: Xcode
+# uses an App Store Connect API key (Admin role, cloud-managed distribution certificate), so no
+# certificate or provisioning profile is stored anywhere. Without the secrets the job skips with
+# a notice. Owner steps: docs/store/ios-release.md.
+#
+# Apps uploaded to App Store Connect must be built with Xcode 26 and an iOS 26 SDK from
+# 2026-04-28 (https://developer.apple.com/news/upcoming-requirements/): macos-26 runner.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag (vX.Y.Z[-rc.N]); checked against the version
+        type: string
+        required: false
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release-ios.yml
+      - apps/app/src-tauri/gen/apple/**
+      - tools/release/version.ts
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  testflight:
+    name: Signed IPA → TestFlight
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - name: Secrets present?
+        id: secrets
+        env:
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: |
+          if [ -z "$KEY_ID" ] || [ -z "$ISSUER" ] || [ -z "$KEY_P8" ] || [ -z "$TEAM" ]; then
+            echo "::notice::App Store Connect secrets are not set (docs/store/ios-release.md): no signed IPA, no TestFlight upload."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v7
+        if: steps.secrets.outputs.present == 'true'
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v6
+        if: steps.secrets.outputs.present == 'true'
+        with:
+          node-version-file: .nvmrc
+      - name: Rust toolchain + iOS target
+        if: steps.secrets.outputs.present == 'true'
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-apple-ios wasm32-unknown-unknown
+      - if: steps.secrets.outputs.present == 'true'
+        run: npm ci
+      - name: Version
+        id: version
+        if: steps.secrets.outputs.present == 'true'
+        run: |
+          node tools/release/version.ts check ${{ inputs.tag }}
+          echo "config=$(node tools/release/version.ts ios-config)" >> "$GITHUB_OUTPUT"
+          node -e 'const c=JSON.parse(process.argv[1]); console.log(`short=${c.version}\nbuild=${c.bundle.iOS.bundleVersion}`)' "$(node tools/release/version.ts ios-config)" >> "$GITHUB_OUTPUT"
+      - name: App Store Connect API key
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          # altool looks for ~/private_keys/AuthKey_<id>.p8; Xcode takes the same file.
+          mkdir -p ~/private_keys
+          (umask 077 && printf '%s' "$KEY_P8" > ~/private_keys/AuthKey_"$KEY_ID".p8)
+          echo "APPLE_API_KEY_PATH=$HOME/private_keys/AuthKey_$KEY_ID.p8" >> "$GITHUB_ENV"
+      - name: Build the signed IPA (automatic signing with the API key)
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: npm run tauri -- ios build --export-method app-store-connect --config '${{ steps.version.outputs.config }}'
+      - name: Upload to TestFlight
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APP_APPLE_ID: ${{ vars.APPSTORE_APP_APPLE_ID }}
+        run: |
+          ipa="$(ls apps/app/src-tauri/gen/apple/build/arm64/*.ipa | head -1)"
+          if [ -z "$APP_APPLE_ID" ]; then
+            echo "::notice::Repository variable APPSTORE_APP_APPLE_ID is not set (the app's Apple ID in App Store Connect): IPA built, not uploaded."
+            exit 0
+          fi
+          # Xcode 26's altool can exit 0 on a failed upload: read its JSON verdict.
+          xcrun altool --upload-package "$ipa" --type ios --apple-id "$APP_APPLE_ID" \
+            --bundle-id com.anywecon.selis \
+            --bundle-version "${{ steps.version.outputs.build }}" \
+            --bundle-short-version-string "${{ steps.version.outputs.short }}" \
+            --apiKey "$KEY_ID" --apiIssuer "$ISSUER" --output-format json | tee "$RUNNER_TEMP/altool.json"
+          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if (r["product-errors"]?.length || !r["success-message"]) { console.error(JSON.stringify(r["product-errors"] ?? r, null, 2)); process.exit(1) }' "$RUNNER_TEMP/altool.json"
+          echo "### TestFlight: uploaded ${{ steps.version.outputs.short }} (${{ steps.version.outputs.build }})" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove the API key
+        if: always() && steps.secrets.outputs.present == 'true'
+        run: rm -rf ~/private_keys

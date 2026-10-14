@@ -14,7 +14,8 @@
  *   universal APK, 1–4 for the per-ABI APKs (gradle, `ABI_DIGITS`). An rc sorts before its
  *   release and every release after every rc: Play only accepts a higher code.
  * - iOS: CFBundleShortVersionString = `X.Y.Z` (App Store Connect rejects a pre-release
- *   suffix), CFBundleVersion = `build` (`bundle.iOS.bundleVersion`), also increasing.
+ *   suffix), CFBundleVersion = `build` (`bundle.iOS.bundleVersion`), also increasing; the same
+ *   two values in the committed gen/apple Info.plist and project.yml.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -52,7 +53,19 @@ export function iosVersions(v: Version): { shortVersion: string; bundleVersion: 
 }
 
 type Json = Record<string, unknown>;
-export type VersionFiles = { root: Json; app: Json; lock: Json; cargo: string; tauri: Json; changelog: string };
+export type VersionFiles = { root: Json; app: Json; lock: Json; cargo: string; tauri: Json; plist: string; xcodegen: string; changelog: string };
+
+const PLIST_KEY = (key: string): RegExp => new RegExp(`(<key>${key}</key>\\s*<string>)([^<]*)(</string>)`);
+const YAML_KEY = (key: string): RegExp => new RegExp(`(\\n\\s*${key}: "?)([^"\\n]*)("?\\n)`);
+
+function iosFileValues(files: VersionFiles): string[] {
+  return [
+    files.plist.match(PLIST_KEY("CFBundleShortVersionString"))?.[2] ?? "",
+    files.plist.match(PLIST_KEY("CFBundleVersion"))?.[2] ?? "",
+    files.xcodegen.match(YAML_KEY("CFBundleShortVersionString"))?.[2] ?? "",
+    files.xcodegen.match(YAML_KEY("CFBundleVersion"))?.[2] ?? "",
+  ];
+}
 
 const CARGO_VERSION = /(\[workspace\.package\][^[]*?\nversion = ")([^"]+)(")/;
 
@@ -91,9 +104,22 @@ export function problems(files: VersionFiles, tag?: string): string[] {
   if (code !== androidVersionCode(v)) out.push(`tauri.conf.json bundle.android.versionCode is ${String(code)}, expected ${String(androidVersionCode(v))}`);
   const bundleVersion = platform(files.tauri, "iOS").bundleVersion;
   if (bundleVersion !== ios.bundleVersion) out.push(`tauri.conf.json bundle.iOS.bundleVersion is ${String(bundleVersion)}, expected ${ios.bundleVersion}`);
+  const iosValues = iosFileValues(files);
+  const iosExpected = [ios.shortVersion, ios.bundleVersion, ios.shortVersion, ios.bundleVersion];
+  if (iosValues.some((value, i) => value !== iosExpected[i])) out.push(`gen/apple Info.plist / project.yml versions are ${iosValues.join(", ")}, expected ${iosExpected.join(", ")}`);
   if (!files.changelog.includes(`## [${version}]`)) out.push(`CHANGELOG.md has no "## [${version}]" section`);
   if (tag !== undefined && tag !== `v${version}`) out.push(`tag ${tag} does not match version ${version}`);
   return out;
+}
+
+/** The body of a version's CHANGELOG.md section (release notes), without its heading. */
+export function changelogSection(changelog: string, version: string): string | null {
+  const lines = changelog.split("\n");
+  const start = lines.findIndex((line) => line.startsWith(`## [${version}]`));
+  if (start < 0) return null;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => line.startsWith("## [") || /^\[[^\]]+\]: /.test(line));
+  return (end < 0 ? rest : rest.slice(0, end)).join("\n").trim();
 }
 
 /** Writes `version` and everything derived from it into `files` (in place). */
@@ -112,6 +138,12 @@ export function applyVersion(files: VersionFiles, version: string): void {
   platform(files.tauri, "android").versionCode = androidVersionCode(v);
   platform(files.tauri, "iOS").bundleVersion = iosVersions(v).bundleVersion;
   files.cargo = files.cargo.replace(CARGO_VERSION, `$1${version}$3`);
+  const ios = iosVersions(v);
+  for (const [key, value] of [["CFBundleShortVersionString", ios.shortVersion], ["CFBundleVersion", ios.bundleVersion]] as const) {
+    if (!PLIST_KEY(key).test(files.plist) || !YAML_KEY(key).test(files.xcodegen)) throw new Error(`gen/apple has no ${key}`);
+    files.plist = files.plist.replace(PLIST_KEY(key), `$1${value}$3`);
+    files.xcodegen = files.xcodegen.replace(YAML_KEY(key), `$1${value}$3`);
+  }
 }
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -121,6 +153,8 @@ const PATHS = {
   lock: join(ROOT, "package-lock.json"),
   cargo: join(ROOT, "Cargo.toml"),
   tauri: join(ROOT, "apps", "app", "src-tauri", "tauri.conf.json"),
+  plist: join(ROOT, "apps", "app", "src-tauri", "gen", "apple", "selis-app_iOS", "Info.plist"),
+  xcodegen: join(ROOT, "apps", "app", "src-tauri", "gen", "apple", "project.yml"),
   changelog: join(ROOT, "CHANGELOG.md"),
 };
 
@@ -136,6 +170,8 @@ function load(): VersionFiles {
     lock: readJson(PATHS.lock),
     cargo: readFileSync(PATHS.cargo, "utf8"),
     tauri: readJson(PATHS.tauri),
+    plist: readFileSync(PATHS.plist, "utf8"),
+    xcodegen: readFileSync(PATHS.xcodegen, "utf8"),
     changelog: readFileSync(PATHS.changelog, "utf8"),
   };
 }
@@ -150,6 +186,8 @@ function main(argv: string[]): number {
     writeJson(PATHS.lock, files.lock);
     writeJson(PATHS.tauri, files.tauri);
     writeFileSync(PATHS.cargo, files.cargo);
+    writeFileSync(PATHS.plist, files.plist);
+    writeFileSync(PATHS.xcodegen, files.xcodegen);
     console.log(`version ${arg}: run \`cargo check\` (Cargo.lock) and add a CHANGELOG.md section`);
     return 0;
   }
@@ -165,13 +203,19 @@ function main(argv: string[]): number {
     console.log(JSON.stringify({ version: files.root.version, prerelease: version.rc !== null, build: buildNumber(version), android, ios: iosVersions(version) }, null, 2));
     return 0;
   }
+  if (command === "notes") {
+    const notes = changelogSection(files.changelog, String(files.root.version));
+    if (notes === null) return 1;
+    console.log(notes);
+    return 0;
+  }
   if (command === "ios-config") {
     // `tauri ios build --config <this>`: App Store Connect wants X.Y.Z as the short version.
     const ios = iosVersions(version);
     console.log(JSON.stringify({ version: ios.shortVersion, bundle: { iOS: { bundleVersion: ios.bundleVersion } } }));
     return 0;
   }
-  console.error("usage: node tools/release/version.ts set <X.Y.Z[-rc.N]> | check [tag] | show | ios-config");
+  console.error("usage: node tools/release/version.ts set <X.Y.Z[-rc.N]> | check [tag] | show | notes | ios-config");
   return 2;
 }
 

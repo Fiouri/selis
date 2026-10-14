@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { androidVersionCode, applyVersion, buildNumber, iosVersions, parseVersion, problems, type VersionFiles } from "./version";
+import { androidVersionCode, applyVersion, buildNumber, changelogSection, iosVersions, parseVersion, problems, type VersionFiles } from "./version";
 
 const files = (): VersionFiles => ({
   root: { name: "selis", version: "0.1.0" },
@@ -7,6 +7,8 @@ const files = (): VersionFiles => ({
   lock: { version: "0.1.0", packages: { "": { version: "0.1.0" }, "apps/app": { version: "0.1.0" }, "packages/ui": { version: "0.1.0" } } },
   cargo: '[workspace]\nmembers = []\n\n[workspace.package]\nversion = "0.1.0"\nedition = "2024"\n',
   tauri: { version: "0.1.0", bundle: { active: true } },
+  plist: "<dict>\n\t<key>CFBundleShortVersionString</key>\n\t<string>0.1.0</string>\n\t<key>CFBundleVersion</key>\n\t<string>0.1.0</string>\n</dict>\n",
+  xcodegen: '    info:\n      properties:\n        CFBundleShortVersionString: 0.1.0\n        CFBundleVersion: "0.1.0"\n    entitlements:\n',
   changelog: "# Changelog\n\n## [1.0.0-rc.1] - 2026-10-14\n",
 });
 
@@ -42,6 +44,8 @@ describe("derived files", () => {
     applyVersion(f, "1.0.0-rc.1");
     expect(f.lock).toMatchObject({ version: "1.0.0-rc.1", packages: { "": { version: "1.0.0-rc.1" }, "apps/app": { version: "1.0.0-rc.1" }, "packages/ui": { version: "0.1.0" } } });
     expect(f.cargo).toContain('version = "1.0.0-rc.1"\nedition');
+    expect(f.plist).toContain("<string>1.0.0</string>\n\t<key>CFBundleVersion</key>\n\t<string>1000001</string>");
+    expect(f.xcodegen).toContain('CFBundleShortVersionString: 1.0.0\n        CFBundleVersion: "1000001"\n');
     expect(f.tauri).toMatchObject({ version: "1.0.0-rc.1", bundle: { android: { versionCode: 10_000_010 }, iOS: { bundleVersion: "1000001" } } });
     expect(problems(f)).toEqual([]);
     expect(problems(f, "v1.0.0-rc.1")).toEqual([]);
@@ -57,5 +61,14 @@ describe("derived files", () => {
       'CHANGELOG.md has no "## [1.0.0-rc.1]" section',
       "tag v1.0.0 does not match version 1.0.0-rc.1",
     ]);
+  });
+});
+
+describe("release notes", () => {
+  it("takes one version's changelog section, without the heading and link references", () => {
+    const changelog = "# Changelog\n\n## [Unreleased]\n\n## [1.0.1] - 2026-11-01\n\n### Fixed\n\n- A.\n\n## [1.0.0] - 2026-10-20\n\n### Added\n\n- B.\n\n[Unreleased]: https://x\n[1.0.0]: https://y\n";
+    expect(changelogSection(changelog, "1.0.1")).toBe("### Fixed\n\n- A.");
+    expect(changelogSection(changelog, "1.0.0")).toBe("### Added\n\n- B.");
+    expect(changelogSection(changelog, "2.0.0")).toBeNull();
   });
 });
