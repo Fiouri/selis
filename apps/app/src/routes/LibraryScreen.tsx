@@ -1,11 +1,13 @@
 import { Button, Chip, EmptyState, IconButton } from "@selis/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDownUp, ChevronDown, FilePlus2, ImagePlus, Plus, Search, SearchX, X } from "lucide-react";
+import { ArrowDownUp, ChevronDown, FilePlus2, ImagePlus, Plus, ScanLine, Search, SearchX, X } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LibraryIllustration } from "../components/Illustrations";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { ImagesScreen, usePickImages } from "../features/images/ImagesScreen";
+import { ScanScreen } from "../features/scan/ScanScreen";
+import { useScan } from "../features/scan/scanStore";
 import { DocumentCollection, DocumentCollectionSkeleton } from "../features/library/DocumentCollection";
 import { showImported, showImportError } from "../features/library/importFeedback";
 import { isBusy } from "../features/library/importMachine";
@@ -124,6 +126,23 @@ function ImagesFab({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** Above the images FAB: document scan (P4c; docs/design/p4-ui-brief.md §0). */
+function ScanFab({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={t("scan.open")}
+      data-testid="scan-fab"
+      className="selis-focus fixed z-10 inline-flex size-12 items-center justify-center rounded-[16px] border border-neutral-5 bg-surface-raised text-neutral-12 shadow-2 active:bg-neutral-3"
+      style={{ right: "calc(var(--safe-right) + 24px)", bottom: "calc(var(--fab-bottom, calc(var(--safe-bottom) + 20px)) + 128px)" }}
+    >
+      <ScanLine size={22} strokeWidth={1.75} aria-hidden="true" />
+    </button>
+  );
+}
+
 function ImportFab({ busy, importing, onClick }: { busy: boolean; importing: boolean; onClick: () => void }) {
   const { t } = useTranslation();
   return (
@@ -144,6 +163,7 @@ function ImportFab({ busy, importing, onClick }: { busy: boolean; importing: boo
 export function LibraryScreen() {
   const { t } = useTranslation();
   const { pick: pickImages, input: imagesInput } = usePickImages();
+  const openScan = useScan((s) => s.open);
   const filter = useLibraryView((s) => s.filter);
   const tagId = useLibraryView((s) => s.tagId);
   const search = useLibraryView((s) => s.search);
@@ -196,6 +216,9 @@ export function LibraryScreen() {
           <div className="flex flex-col items-center gap-2">
             <Button icon={<FilePlus2 size={20} strokeWidth={1.75} />} onClick={startImport} disabled={busy}>
               {importState.status === "importing" ? t("library.importing") : t("library.import")}
+            </Button>
+            <Button variant="ghost" icon={<ScanLine size={20} strokeWidth={1.75} />} onClick={() => void openScan()} data-testid="scan-empty">
+              {t("scan.open")}
             </Button>
             <Button variant="ghost" icon={<ImagePlus size={20} strokeWidth={1.75} />} onClick={pickImages} data-testid="images-empty">
               {t("images.open")}
@@ -256,12 +279,14 @@ export function LibraryScreen() {
       {body}
       {libraryEmpty || searching ? null : (
         <>
+          <ScanFab onClick={() => void openScan()} />
           <ImagesFab onClick={pickImages} />
           <ImportFab busy={busy} importing={importState.status === "importing"} onClick={startImport} />
         </>
       )}
       {imagesInput}
       <ImagesScreen />
+      <ScanScreen onChoosePhotos={pickImages} />
       <SortSheet open={sheet === "sort"} onClose={() => setSheet(null)} />
       <TagsSheet open={sheet === "tags"} onClose={() => setSheet(null)} />
     </section>

@@ -237,6 +237,8 @@ export const commands = {
 	 *  — under `name`. `false` when the save dialog was cancelled. The upload is consumed.
 	 */
 	shareExport: (requestId: string, uploadId: string, name: string, mime: string) => typedError<boolean, CommandError>(__TAURI_INVOKE("share_export", { requestId, uploadId, name, mime })),
+	/**  Opens this app's page in the system settings (permissions). */
+	openAppSettings: () => typedError<null, CommandError>(__TAURI_INVOKE("open_app_settings")),
 	/**
 	 *  The state of a long-running request: still running, its final result, or
 	 *  unknown (never received, or expired). Read-only; a fresh call the UI makes

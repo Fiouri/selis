@@ -1,0 +1,29 @@
+[package]
+name = "selis-scan"
+description = "Document scan: page edge detection, perspective correction and filters (compiled to WebAssembly for the WebView)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+image = { version = "0.25", default-features = false }
+imageproc = { version = "0.27.0", default-features = false }
+
+[lints.rust]
+# The WebAssembly exports (`wasm.rs`) hand raw buffers across the module boundary; the rest of
+# the crate stays safe (`deny`, overridden only on that module).
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+serde_json.workspace = true

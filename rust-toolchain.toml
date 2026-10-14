@@ -2,3 +2,5 @@
 channel = "1.98.1"
 components = ["rustfmt", "clippy"]
 profile = "minimal"
+# The document-scan module (crates/selis-scan) runs in the WebView as WebAssembly (ADR 0016).
+targets = ["wasm32-unknown-unknown"]

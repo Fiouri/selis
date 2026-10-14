@@ -593,6 +593,8 @@ export function installMockIpc(): void {
         return setDocumentTags(String(args.documentId), args.tagIds as string[]);
       case "share_document":
         return fail("unsupported", "no native share sheet in the browser");
+      case "open_app_settings":
+        return fail("unsupported", "no app settings in the browser");
       case "pending_opens":
         return [...pendingOpens];
       case "dismiss_open": {

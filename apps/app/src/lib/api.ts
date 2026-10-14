@@ -127,6 +127,8 @@ export const api = {
   stagePhoto: (source: string) => unwrap(ipc().long("stage_photo", (requestId) => commands.stagePhoto(requestId, source), IMPORT)),
   shareExport: (uploadId: string, name: string, mime: string) =>
     unwrap(ipc().long("share_export", (requestId) => commands.shareExport(requestId, uploadId, name, mime), PICK)),
+  // Document scan (P4c, ADR 0016): Android only; the UI offers it there.
+  openAppSettings: () => unwrap(ipc().short("open_app_settings", () => commands.openAppSettings(), READ)),
   listSignatures: () => unwrap(ipc().short("list_signatures", () => commands.listSignatures(), READ)),
   // Keyed by the UI-chosen id: a repeat returns the stored signature.
   saveSignature: (id: string, kind: SignatureKind, pngBase64: string) =>

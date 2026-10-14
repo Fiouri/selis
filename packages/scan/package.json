@@ -1,0 +1,14 @@
+{
+  "name": "@selis/scan",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Document scan for the WebView: page detection, straightening and filters (crates/selis-scan as WebAssembly) in a Web Worker.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json"
+  }
+}

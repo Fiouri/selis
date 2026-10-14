@@ -1,6 +1,7 @@
 //! Thin command wrappers: validate input → call `selis-core` → typed result.
 //! No business logic lives here.
 
+pub mod camera;
 pub mod device;
 pub mod library;
 pub mod open_with;

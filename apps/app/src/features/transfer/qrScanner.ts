@@ -1,60 +1,27 @@
 /**
- * QR scanning in the WebView (ADR 0013): the camera through getUserMedia (the
- * WebView asks for the camera permission; Android: wry's WebChromeClient), the
- * code decoded by jsQR (Apache-2.0, pure JS, no network) from a centred square
- * of each frame, a few times a second. No Google ML Kit, no native plugin.
+ * QR scanning in the WebView (ADR 0013): the back camera (`lib/camera.ts`, getUserMedia), the
+ * code decoded by jsQR (Apache-2.0, pure JS, no network) from a centred square of each frame,
+ * a few times a second. No Google ML Kit, no native plugin.
  */
 import jsQR from "jsqr";
+import { CameraError, type CameraFailure, openBackCamera } from "../../lib/camera";
 
-export type ScanFailure = "denied" | "unavailable";
+export type ScanFailure = CameraFailure;
+export { CameraError as ScanError };
 
 export type Scanner = { stop: () => void };
-
-export class ScanError extends Error {
-  readonly failure: ScanFailure;
-
-  constructor(failure: ScanFailure) {
-    super(failure);
-    this.name = "ScanError";
-    this.failure = failure;
-  }
-}
 
 /** Frames decoded per second (enough for a code held still; cheap on mid-range phones). */
 const SCAN_FPS = 6;
 /** Side of the square handed to the decoder, px. */
 const SAMPLE_PX = 480;
 
-function failureOf(err: unknown): ScanFailure {
-  const name = err instanceof DOMException ? err.name : "";
-  return name === "NotAllowedError" || name === "SecurityError" ? "denied" : "unavailable";
-}
-
 /**
  * Starts the back camera into `video` and calls `onCode` with the first QR
  * code's text. Resolves with a stopper, or rejects with a `ScanError`.
  */
 export async function startScanner(video: HTMLVideoElement, onCode: (text: string) => void): Promise<Scanner> {
-  // Absent outside secure contexts and in some WebViews, whatever the types say.
-  const media = navigator.mediaDevices as MediaDevices | undefined;
-  if (typeof media?.getUserMedia !== "function") throw new ScanError("unavailable");
-  let stream: MediaStream;
-  try {
-    stream = await media.getUserMedia({
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    });
-  } catch (err) {
-    throw new ScanError(failureOf(err));
-  }
-  video.srcObject = stream;
-  video.muted = true;
-  video.playsInline = true;
-  try {
-    await video.play();
-  } catch {
-    // Autoplay of a muted inline stream is allowed; frames still arrive.
-  }
+  const camera = await openBackCamera(video, 1280, 720);
 
   const canvas = document.createElement("canvas");
   canvas.width = SAMPLE_PX;
@@ -67,8 +34,7 @@ export async function startScanner(video: HTMLVideoElement, onCode: (text: strin
     if (stopped) return;
     stopped = true;
     window.clearTimeout(timer);
-    for (const track of stream.getTracks()) track.stop();
-    video.srcObject = null;
+    camera.stop();
   };
 
   const scan = () => {
