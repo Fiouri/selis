@@ -356,7 +356,7 @@ Public repo = δωρεάν GitHub Actions minutes, μαζί με macOS runners. 
 
 **README όπως Organic Maps:** logo, μία πρόταση, σειρά από badges (App Store, Google Play, F-Droid, Obtainium, GitHub Releases, winget, Microsoft Store), 4 screenshots, λίστα «No ads · No tracking · No account · No cloud», Exodus Privacy badge για Android, Features, Build from source, Contributing, Translations, License. Τα badges ζουν στο `docs/badges/` με τα επίσημα artwork κάθε store.
 
-**Versioning:** SemVer, Conventional Commits, changelog με release-please. Android versionCode = major·10000 + minor·100 + patch.
+**Versioning (ADR 0020):** SemVer (`X.Y.Z`, `X.Y.Z-rc.N`) με μία πηγή, το `version` του root `package.json` (`tools/release/version.ts`), Conventional Commits, `CHANGELOG.md` (Keep a Changelog, χειροκίνητο). build = ((major·100 + minor)·100 + patch)·100 + (N ή 99)· Android versionCode = build·10 + ψηφίο ABI· iOS CFBundleVersion = build.
 
 ## Ρίσκα και ανοιχτές αποφάσεις
 

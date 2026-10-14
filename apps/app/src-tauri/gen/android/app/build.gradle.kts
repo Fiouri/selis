@@ -53,6 +53,19 @@ android {
     }
 }
 
+// Each per-ABI APK gets its own versionCode (ADR 0020): the AAB and the universal APK keep
+// tauri.conf's `bundle.android.versionCode` (it ends in 0), an ABI build adds its digit. Same
+// table as ABI_DIGITS in tools/release/version.ts.
+val abiVersionDigits = mapOf("universal" to 0, "arm64" to 1, "arm" to 2, "x86_64" to 3, "x86" to 4)
+androidComponents {
+    onVariants { variant ->
+        val abi = variant.productFlavors.firstOrNull { it.first == "abi" }?.second ?: "universal"
+        val digit = abiVersionDigits[abi] ?: throw GradleException("no versionCode digit for ABI flavor $abi")
+        val base = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
+        variant.outputs.forEach { it.versionCode.set(base + digit) }
+    }
+}
+
 rust {
     rootDirRel = "../../../"
 }

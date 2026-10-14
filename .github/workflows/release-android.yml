@@ -1,0 +1,246 @@
+name: Android release
+
+# Release artifacts for Android (ADR 0021): an AAB for Google Play, per-ABI and universal APKs for
+# GitHub Releases / Obtainium, all built unsigned from a clean runner, checked (16 KB pages,
+# zipalign, SDK levels, versionCode, no debug code, no proprietary libraries), then signed with
+# the release key from the repository secrets — or left unsigned, with a notice, when the
+# secrets are not set (scripts/android-keystore.md). A second build in another directory with
+# another CARGO_HOME must produce the same unsigned APK, byte for byte (F-Droid reproducible
+# builds, docs/store/fdroid/README.md).
+#
+# Runs on tags through release.yml (workflow_call), by hand, and on pull requests that change
+# the release plumbing.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag (vX.Y.Z[-rc.N]); checked against the version
+        type: string
+        required: false
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release-android.yml
+      - scripts/android-sign.sh
+      - scripts/check-android-release.sh
+      - scripts/check-release-apk.sh
+      - tools/release/**
+      - .cargo/config.toml
+      - apps/app/src-tauri/gen/android/**
+      - apps/app/src-tauri/tauri.conf.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  NDK_VERSION: 27.3.13750724
+  # apksigner from build-tools 35+ writes signatures apksigcopier cannot verify yet, so F-Droid
+  # could not reuse ours (https://f-droid.org/docs/Reproducible_Builds/): sign with 34.
+  SIGN_BUILD_TOOLS: 34.0.0
+  BUNDLETOOL_VERSION: 1.18.3
+  BUNDLETOOL_SHA256: a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29
+  OUT: apps/app/src-tauri/gen/android/app/build/outputs
+
+jobs:
+  build:
+    name: Build, check, sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      signed: ${{ steps.sign.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Android NDK and build-tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" "build-tools;${SIGN_BUILD_TOOLS}"
+      - name: Rust toolchain + Android targets
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android wasm32-unknown-unknown
+      - name: libclang for bindgen (qpdf, ADR 0015)
+        run: sudo apt-get update -q && sudo apt-get install -y -q libclang-dev
+      - name: bundletool
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/bundletool.jar" "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
+          echo "${BUNDLETOOL_SHA256}  $RUNNER_TEMP/bundletool.jar" | sha256sum -c -
+          echo "BUNDLETOOL=$RUNNER_TEMP/bundletool.jar" >> "$GITHUB_ENV"
+      # No build cache: release artifacts come from a clean tree.
+      - run: npm ci
+      - name: Version
+        id: version
+        run: |
+          node tools/release/version.ts check ${{ inputs.tag }}
+          echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+      - name: No proprietary dependencies (npm, Gradle, Cargo)
+        run: node tools/release/check-dependencies.ts
+      - name: Local-network permission before targetSdk 37 (ADR 0010)
+        run: scripts/check-android-local-network.sh
+
+      - name: Build AAB (all ABIs)
+        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --aab
+      - name: Build per-ABI APKs
+        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --apk --split-per-abi
+      - name: Build universal APK
+        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --apk
+      - name: Collect unsigned artifacts
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          mkdir -p dist/unsigned
+          cp "$OUT/bundle/universalRelease/app-universal-release.aab" "dist/unsigned/selis-$v-unsigned.aab"
+          for pair in arm64:arm64-v8a arm:armeabi-v7a x86:x86 x86_64:x86_64 universal:universal; do
+            cp "$OUT/apk/${pair%%:*}/release/app-${pair%%:*}-release-unsigned.apk" "dist/unsigned/selis-$v-${pair##*:}-unsigned.apk"
+          done
+          ls -l dist/unsigned
+      - name: Release checks (16 KB pages, zipalign, SDK levels, versionCode, no debug code)
+        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" scripts/check-android-release.sh dist/unsigned/*
+      - name: F-Droid scanner on the APKs (no non-free classes)
+        run: |
+          pipx install fdroidserver==2.4.5
+          fdroid scanner --exit-code dist/unsigned/*.apk
+
+      - name: Sign (release key from secrets)
+        id: sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Optional separate Play upload key for the AAB (scripts/android-keystore.md, option B).
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::notice::Android signing secrets are not set (scripts/android-keystore.md): artifacts stay unsigned."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/selis-release.jks"
+          trap 'rm -f "$RUNNER_TEMP"/selis-*.jks' EXIT
+          (umask 077 && printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$ANDROID_KEYSTORE_FILE")
+          if [ -n "$UPLOAD_KEYSTORE_BASE64" ]; then
+            export ANDROID_UPLOAD_KEYSTORE_FILE="$RUNNER_TEMP/selis-upload.jks"
+            (umask 077 && printf '%s' "$UPLOAD_KEYSTORE_BASE64" | base64 -d > "$ANDROID_UPLOAD_KEYSTORE_FILE")
+          fi
+          APKSIGNER="$ANDROID_HOME/build-tools/$SIGN_BUILD_TOOLS/apksigner" scripts/android-sign.sh dist/signed dist/unsigned/*
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+      - name: Signature checks (apksigner v2 + v3, jarsigner)
+        if: steps.sign.outputs.signed == 'true'
+        run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" scripts/check-android-release.sh --signed dist/signed/*
+
+      - name: Sizes per ABI
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          java -jar "$BUNDLETOOL" build-apks --bundle="dist/unsigned/selis-$v-unsigned.aab" --output="$RUNNER_TEMP/selis.apks"
+          {
+            echo "### Android artifacts ($v)"
+            echo
+            echo "| File | Size (MB) |"
+            echo "| --- | --- |"
+            for f in dist/unsigned/*; do printf '| %s | %.1f |\n' "$(basename "$f")" "$(echo "$(stat -c %s "$f") / 1048576" | bc -l)"; done
+            echo
+            echo "Play download size from the AAB, per ABI (bundletool get-size total, bytes):"
+            echo
+            echo '```'
+            java -jar "$BUNDLETOOL" get-size total --apks="$RUNNER_TEMP/selis.apks" --dimensions=ABI
+            echo '```'
+          } | tee dist/sizes.md >> "$GITHUB_STEP_SUMMARY"
+      - name: SHA-256
+        run: cd dist && find . -type f \( -name '*.apk' -o -name '*.aab' \) | sort | xargs sha256sum | tee SHA256SUMS-android.txt
+      - uses: actions/upload-artifact@v6
+        with:
+          name: selis-android-release
+          path: dist
+          if-no-files-found: error
+
+  reproducible:
+    # The same commit built in another directory with another CARGO_HOME (as F-Droid's build
+    # server would) must give the same unsigned universal APK. With a signed release, the
+    # apksigcopier check below is exactly what F-Droid runs before it publishes our APK.
+    name: Reproducible build (other path, other CARGO_HOME)
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_HOME: /home/runner/cargo-elsewhere
+    defaults:
+      run:
+        working-directory: elsewhere/selis-build
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          path: elsewhere/selis-build
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: elsewhere/selis-build/.nvmrc
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Android NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}"
+      - name: Rust toolchain + Android targets
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android wasm32-unknown-unknown
+      - name: libclang for bindgen
+        run: sudo apt-get update -q && sudo apt-get install -y -q libclang-dev
+      - run: npm ci
+      - name: Build universal APK
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" npm run tauri -- android build --apk
+      - uses: actions/download-artifact@v8
+        with:
+          name: selis-android-release
+          path: ${{ github.workspace }}/first
+      - name: Compare with the first build
+        run: |
+          v="${{ needs.build.outputs.version }}"
+          a="${{ github.workspace }}/first/unsigned/selis-$v-universal-unsigned.apk"
+          b="$OUT/apk/universal/release/app-universal-release-unsigned.apk"
+          sha256sum "$a" "$b"
+          if cmp -s "$a" "$b"; then
+            echo "### Reproducible: the unsigned universal APK is byte-identical" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::The second build differs from the first (diffoscope report in the artifact)"
+            sudo apt-get install -y -q --no-install-recommends diffoscope > /dev/null || true
+            mkdir -p "${{ github.workspace }}/repro-diff"
+            diffoscope --html "${{ github.workspace }}/repro-diff/diff.html" --max-report-size 20000000 "$a" "$b" || true
+            exit 1
+          fi
+      - name: apksigcopier (F-Droid's check, signed releases only)
+        if: needs.build.outputs.signed == 'true'
+        run: |
+          v="${{ needs.build.outputs.version }}"
+          pipx install apksigcopier==1.1.1
+          apksigcopier compare "${{ github.workspace }}/first/signed/selis-$v-universal.apk" --unsigned "$OUT/apk/universal/release/app-universal-release-unsigned.apk"
+          echo "apksigcopier: our signature verifies on the independently built APK" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: reproducible-diff
+          path: ${{ github.workspace }}/repro-diff
+          if-no-files-found: ignore
