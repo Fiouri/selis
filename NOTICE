@@ -24,6 +24,14 @@ This product includes software developed by third parties:
   — MIT / Apache License 2.0; with nalgebra (Apache License 2.0), num, rand, matrixmultiply
   and their dependencies (MIT / Apache License 2.0), moxcms and pxfm (BSD-3-Clause / Apache
   License 2.0). Compiled into the document-scan WebAssembly module (crates/selis-scan).
+- tesseract.js 7 and tesseract.js-core 7 (https://github.com/naptha/tesseract.js) — Apache
+  License 2.0. The core is a WebAssembly build of Tesseract OCR (https://github.com/tesseract-ocr,
+  Apache License 2.0) with Leptonica (http://www.leptonica.org, BSD 2-Clause style licence) and
+  the image libraries it reads with (libpng, libjpeg-turbo, libwebp, libtiff, zlib — their own
+  permissive licences). Its JavaScript dependencies: bmp-js, is-url, node-fetch,
+  regenerator-runtime, zlibjs (MIT), idb-keyval, wasm-feature-detect (Apache License 2.0).
+- tessdata_fast models eng and ell (https://github.com/tesseract-ocr/tessdata_fast, commit
+  8741641) — Apache License 2.0.
 - This software is based in part on the work of the Independent JPEG Group (libjpeg 9f,
   https://ijg.org) — IJG License.
 

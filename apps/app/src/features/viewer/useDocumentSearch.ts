@@ -40,9 +40,11 @@ export function highlightsByPage(matches: readonly SearchMatch[], active: number
 export function useDocumentSearch(doc: DocHandle | null, query: string) {
   const [stored, setState] = useState<Stored>(IDLE);
   const trimmed = query.trim();
-  // Page operations and redaction change the text: results belong to one version of it.
+  // Page operations, redaction and OCR change the text: results belong to one version of it.
   const structure = useDocStructure(doc);
-  const key = `${structure}|${trimmed}`;
+  const [pageChanges, setPageChanges] = useState(0);
+  useEffect(() => doc?.onPageChange(() => setPageChanges((n) => n + 1)), [doc]);
+  const key = `${structure}|${String(pageChanges)}|${trimmed}`;
   // Results belong to the query they were found for; anything else is "not searched yet".
   const state: SearchState =
     stored.query === key ? stored : { matches: [], done: trimmed === "", active: 0 };

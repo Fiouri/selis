@@ -6,8 +6,9 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { parseTrueType, type TrueTypeFont, woffToSfnt } from "./font.ts";
 import { n, type PdfDict, PdfWriter, type PdfValue, type Ref, Str } from "./pdf-writer.ts";
+import { buildScanned, SCANNED_TEXT } from "./scanned.ts";
 
-export type FixtureName = "large-1000" | "acroform" | "greek" | "encrypted" | "mixed-sizes";
+export type FixtureName = "large-1000" | "acroform" | "greek" | "encrypted" | "mixed-sizes" | "scanned-greek" | "scanned-english";
 
 export type Fixture = {
   readonly name: FixtureName;
@@ -671,5 +672,19 @@ export const FIXTURES: readonly Fixture[] = [
     description: "A4, Letter, A5 landscape, A3, receipt, rotated and square pages.",
     pageCount: 7,
     build: buildMixed,
+  },
+  {
+    name: "scanned-greek",
+    file: "scanned-greek.pdf",
+    description: "Two image-only A4 pages of Greek text (300 dpi JPEG, skewed, noisy): OCR input.",
+    pageCount: SCANNED_TEXT.greek.length,
+    build: () => buildScanned("greek"),
+  },
+  {
+    name: "scanned-english",
+    file: "scanned-english.pdf",
+    description: "Two image-only A4 pages of English text (300 dpi JPEG, skewed, noisy): OCR input.",
+    pageCount: SCANNED_TEXT.english.length,
+    build: () => buildScanned("english"),
   },
 ];

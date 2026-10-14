@@ -684,6 +684,29 @@ async function handleImagesDiscard(req: Extract<WorkerRequest, { type: "imagesDi
   }
 }
 
+async function handleSetTextLayer(req: Extract<WorkerRequest, { type: "setTextLayer" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    if (!textStamps) throw new Error("engine not ready");
+    const replaced = await textStamps.setTextLayer(t.doc, t.page, req.words);
+    post({ type: "textLayer", reqId: req.reqId, replaced });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+function handlePageTextInfo(req: Extract<WorkerRequest, { type: "pageTextInfo" }>): void {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    if (!textStamps) throw new Error("engine not ready");
+    post({ type: "pageTextInfo", reqId: req.reqId, info: textStamps.pageTextInfo(t.doc, t.page) });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
 async function handleExportImage(req: Extract<WorkerRequest, { type: "exportImage" }>): Promise<void> {
   const t = target(req, req.index);
   if (!t?.page) return;
@@ -853,6 +876,12 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "exportImage":
       void handleExportImage(req);
+      break;
+    case "setTextLayer":
+      void handleSetTextLayer(req);
+      break;
+    case "pageTextInfo":
+      handlePageTextInfo(req);
       break;
     case "close":
       void handleClose(req);

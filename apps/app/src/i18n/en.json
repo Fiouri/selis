@@ -637,7 +637,9 @@
       "failed": "Something went wrong. Nothing was changed.",
       "exported": "Page saved as an image.",
       "exportFailed": "The page could not be saved as an image."
-    }
+    },
+    "ocr": "Make text searchable",
+    "reasonOpenFirst": "Open the document first"
   },
   "images": {
     "title": "Images to PDF",
@@ -710,5 +712,27 @@
     "discardBody": "They have not been saved.",
     "discard": "Discard",
     "keepScanning": "Keep scanning"
+  },
+  "ocr": {
+    "title": "Make text searchable",
+    "languages": "Languages",
+    "greekEnglish": "Greek + English",
+    "greek": "Greek",
+    "english": "English",
+    "includeText": "Include pages that already have text",
+    "privacy": "Text is read on this device. Nothing is sent anywhere.",
+    "start": "Start",
+    "preparing": "Checking the pages…",
+    "reading": "Reading page {page} of {total}…",
+    "finishing": "Saving…",
+    "stoppedAt": "Stopped at page {page} of {total}",
+    "failedAt": "Could not read page {page} of {total}",
+    "progressText": "{done} of {total} pages",
+    "cancel": "Cancel",
+    "resume": "Resume",
+    "dismiss": "Close",
+    "saved": "Text is now searchable — saved as a new version.",
+    "nothingToDo": "Every page already has text.",
+    "failed": "The text could not be read. The pages read so far are kept."
   }
 }

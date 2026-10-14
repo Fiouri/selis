@@ -1,0 +1,53 @@
+# OCR on Android (P4d, ADR 0018): the scanned Greek fixture (two image-only A4 pages) gets an
+# invisible text layer — Tools → "Make text searchable" → Start — saved as a new version; the
+# viewer's search then finds an accented Greek word on page 2.
+# PRE_RUN="apps/app/e2e/maestro/ocr.sh pre" (clears Selis, samples RSS) and
+# POST_RUN="apps/app/e2e/maestro/ocr.sh check" (pdf.js reads ≥ 95 % of the words of each page of
+# the new version; prints per-page times and the RSS around the OCR). Debug build (run-as).
+# Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis OCR
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "scanned-greek.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 2.*"
+    timeout: 30000
+- tapOn: "More"
+- tapOn:
+    id: "more-tools"
+- tapOn:
+    id: "tool-ocr"
+- extendedWaitUntil:
+    visible: 'Greek + English'
+    timeout: 10000
+- tapOn:
+    id: "ocr-start"
+- extendedWaitUntil:
+    visible: 'Reading page 1 of 2.*'
+    timeout: 120000
+- extendedWaitUntil:
+    notVisible:
+      id: "ocr-card"
+    timeout: 600000
+    label: "TIMED ocr"
+# The toast lasts 4 s; the search below is the real check.
+- extendedWaitUntil:
+    visible: "Text is now searchable.*"
+    timeout: 10000
+    optional: true
+- tapOn: "Search in document"
+- inputText: "Ευρωπαϊκή"
+- extendedWaitUntil:
+    visible: "1 / 1"
+    timeout: 30000
+- back
+- back
+- extendedWaitUntil:
+    visible: "Import PDF"
+    timeout: 20000

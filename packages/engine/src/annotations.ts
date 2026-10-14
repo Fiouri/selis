@@ -23,7 +23,7 @@ import {
 } from "@embedpdf/models";
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import type { PageRect } from "./geometry";
-import type { Annotation, Point } from "./types";
+import type { Annotation, PageTextInfo, Point, TextLayerWord } from "./types";
 
 /** /NM prefix of typed-text stamps written by Selis. */
 export const TEXT_STAMP_PREFIX = "selis-text-";
@@ -48,8 +48,18 @@ const ANNOT_FLAG_PRINT = 4;
 /** FPDF_ANNOT_APPEARANCEMODE_NORMAL */
 const APPEARANCE_NORMAL = 0;
 const FPDF_FONT_TRUETYPE = 2;
+const FPDF_PAGEOBJ_TEXT = 1;
+const FPDF_TEXTRENDERMODE_INVISIBLE = 3;
+/** Marked-content tag of the words of a Selis OCR text layer (P4d). */
+export const OCR_MARK = "SelisOCR";
+/** Mark parameter holding a word's layout: JSON [x, y, width, fontSize] (page view points). */
+const OCR_LAYOUT_KEY = "SelisWord";
 
-type PageCtx = { pagePtr: number; release(): void };
+/**
+ * EmbedPDF's page context. `textPagePtr` is its cached text page (search reads it), loaded once
+ * per page context: a change to the page's text must drop it (`setTextLayer`).
+ */
+type PageCtx = { pagePtr: number; textPagePtr?: number | undefined; release(): void };
 type DocCtx = { docPtr: number; acquirePage(index: number): PageCtx };
 /** EmbedPDF internals this module relies on (checked by the Node tests). */
 type EngineInternals = {
@@ -362,6 +372,166 @@ export class EmbeddedText {
     } finally {
       this.free(ptr);
     }
+  }
+
+  /** The name of mark `index` of a page object. */
+  private markName(obj: number, index: number): string | null {
+    const mark = this.pdf.FPDFPageObj_GetMark(obj, index);
+    if (!mark) return null;
+    const out = this.malloc(4);
+    try {
+      if (!this.pdf.FPDFPageObjMark_GetName(mark, 0, 0, out)) return null;
+      return this.utf16At(mark, out, (buf, len) => this.pdf.FPDFPageObjMark_GetName(mark, buf, len, out));
+    } finally {
+      this.free(out);
+    }
+  }
+
+  /** Reads a UTF-16LE string whose byte length a first call left at `out` (with its NUL). */
+  private utf16At(_handle: number, out: number, read: (buf: number, len: number) => boolean): string {
+    const bytes = new Uint32Array(this.heap.HEAPU8.buffer, out, 1)[0] ?? 0;
+    if (bytes <= 2) return "";
+    const buf = this.malloc(bytes);
+    try {
+      if (!read(buf, bytes)) return "";
+      return String.fromCharCode(...this.heap.HEAPU16.subarray(buf >> 1, (buf >> 1) + bytes / 2 - 1));
+    } finally {
+      this.free(buf);
+    }
+  }
+
+  /** The OCR mark of a page object, or 0. */
+  private ocrMark(obj: number): number {
+    const count = this.pdf.FPDFPageObj_CountMarks(obj);
+    for (let i = 0; i < count; i++) {
+      if (this.markName(obj, i) === OCR_MARK) return this.pdf.FPDFPageObj_GetMark(obj, i);
+    }
+    return 0;
+  }
+
+  private markString(mark: number, key: string): string | null {
+    const out = this.malloc(4);
+    try {
+      if (!this.pdf.FPDFPageObjMark_GetParamStringValue(mark, key, 0, 0, out)) return null;
+      return this.utf16At(mark, out, (buf, len) => this.pdf.FPDFPageObjMark_GetParamStringValue(mark, key, buf, len, out));
+    } finally {
+      this.free(out);
+    }
+  }
+
+  /** The text of a text object (through its font's ToUnicode mapping). */
+  private objectText(textPage: number, obj: number): string {
+    const bytes = this.pdf.FPDFTextObj_GetText(obj, textPage, 0, 0);
+    if (bytes <= 2) return "";
+    const buf = this.malloc(bytes);
+    try {
+      this.pdf.FPDFTextObj_GetText(obj, textPage, buf, bytes);
+      return String.fromCharCode(...this.heap.HEAPU16.subarray(buf >> 1, (buf >> 1) + bytes / 2 - 1));
+    } finally {
+      this.free(buf);
+    }
+  }
+
+  /** Width of a text object as created (at the origin, before any transform). */
+  private naturalWidth(obj: number): number {
+    const bounds = this.malloc(16);
+    try {
+      if (!this.pdf.FPDFPageObj_GetBounds(obj, bounds, bounds + 4, bounds + 8, bounds + 12)) return 0;
+      const f32 = new Float32Array(this.heap.HEAPU8.buffer, bounds, 4);
+      return (f32[2] ?? 0) - (f32[0] ?? 0);
+    } finally {
+      this.free(bounds);
+    }
+  }
+
+  /**
+   * Replaces the Selis OCR layer of a page with invisible `words` (render mode 3: found by
+   * search, selection and copy, never drawn). Each word is a text object in the embedded
+   * Latin + Greek font, stretched to its width and tagged `/SelisOCR` with its layout, so a
+   * later run can replace it and undo can restore it. Resolves to the words replaced.
+   */
+  async setTextLayer(doc: PdfDocumentObject, page: PdfPageObject, words: readonly TextLayerWord[]): Promise<TextLayerWord[]> {
+    const font = words.length > 0 ? await this.font(doc) : 0;
+    const ctx = this.context(doc);
+    const engine = internals(this.engine);
+    const pageCtx = ctx.acquirePage(page.index);
+    const textPage = this.pdf.FPDFText_LoadPage(pageCtx.pagePtr);
+    const replaced: TextLayerWord[] = [];
+    try {
+      for (let i = this.pdf.FPDFPage_CountObjects(pageCtx.pagePtr) - 1; i >= 0; i--) {
+        const obj = this.pdf.FPDFPage_GetObject(pageCtx.pagePtr, i);
+        if (!obj || this.pdf.FPDFPageObj_GetType(obj) !== FPDF_PAGEOBJ_TEXT) continue;
+        const mark = this.ocrMark(obj);
+        if (!mark) continue;
+        const text = textPage ? this.objectText(textPage, obj) : "";
+        try {
+          const [x, y, width, fontSize] = JSON.parse(this.markString(mark, OCR_LAYOUT_KEY) ?? "[]") as number[];
+          if (text && x !== undefined && y !== undefined && width !== undefined && fontSize !== undefined) {
+            replaced.unshift({ text, x, y, width, fontSize });
+          }
+        } catch {
+          // A layer word without a readable layout goes all the same.
+        }
+        if (this.pdf.FPDFPage_RemoveObject(pageCtx.pagePtr, obj)) this.pdf.FPDFPageObj_Destroy(obj);
+      }
+      const toPage = (p: Point) => engine.convertDevicePointToPagePoint(doc, page, p);
+      for (const word of words) {
+        const obj = this.pdf.FPDFPageObj_CreateTextObj(ctx.docPtr, font, word.fontSize);
+        if (!obj) throw new Error("cannot create a text object");
+        const wide = this.wideString(word.text);
+        try {
+          this.pdf.FPDFText_SetText(obj, wide);
+        } finally {
+          this.free(wide);
+        }
+        this.pdf.FPDFTextObj_SetTextRenderMode(obj, FPDF_TEXTRENDERMODE_INVISIBLE);
+        const natural = this.naturalWidth(obj);
+        const stretch = natural > 0 ? word.width / natural : 1;
+        // Baseline in page view coordinates, turned into the page's own space (any /Rotate).
+        const o = toPage({ x: word.x, y: word.y });
+        const ex = toPage({ x: word.x + 1, y: word.y });
+        const up = toPage({ x: word.x, y: word.y - 1 });
+        this.pdf.FPDFPageObj_Transform(obj, (ex.x - o.x) * stretch, (ex.y - o.y) * stretch, up.x - o.x, up.y - o.y, o.x, o.y);
+        const mark = this.pdf.FPDFPageObj_AddMark(obj, OCR_MARK);
+        const layout = [word.x, word.y, word.width, word.fontSize].map((v) => Math.round(v * 100) / 100);
+        if (mark) this.pdf.FPDFPageObjMark_SetStringParam(ctx.docPtr, obj, mark, OCR_LAYOUT_KEY, JSON.stringify(layout));
+        this.pdf.FPDFPage_InsertObject(pageCtx.pagePtr, obj);
+      }
+      if (!this.pdf.FPDFPage_GenerateContent(pageCtx.pagePtr)) throw new Error("cannot write the page content");
+      // The page's text changed: search must not read EmbedPDF's cached text page of before.
+      if (pageCtx.textPagePtr !== undefined) {
+        this.pdf.FPDFText_ClosePage(pageCtx.textPagePtr);
+        pageCtx.textPagePtr = undefined;
+      }
+    } finally {
+      if (textPage) this.pdf.FPDFText_ClosePage(textPage);
+      pageCtx.release();
+    }
+    return replaced;
+  }
+
+  /** Characters of the page's text besides the Selis OCR layer, and whether it has that layer. */
+  pageTextInfo(doc: PdfDocumentObject, page: PdfPageObject): PageTextInfo {
+    const pageCtx = this.context(doc).acquirePage(page.index);
+    const textPage = this.pdf.FPDFText_LoadPage(pageCtx.pagePtr);
+    let chars = 0;
+    let ocr = false;
+    try {
+      const count = this.pdf.FPDFPage_CountObjects(pageCtx.pagePtr);
+      for (let i = 0; i < count; i++) {
+        const obj = this.pdf.FPDFPage_GetObject(pageCtx.pagePtr, i);
+        if (!obj || this.pdf.FPDFPageObj_GetType(obj) !== FPDF_PAGEOBJ_TEXT) continue;
+        if (this.ocrMark(obj)) {
+          ocr = true;
+          continue;
+        }
+        if (textPage) chars += this.objectText(textPage, obj).replace(/\s/gu, "").length;
+      }
+    } finally {
+      if (textPage) this.pdf.FPDFText_ClosePage(textPage);
+      pageCtx.release();
+    }
+    return { chars, ocr };
   }
 
   /** Index of the annotation named `id` on an open page, or -1. */

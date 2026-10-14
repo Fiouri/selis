@@ -142,6 +142,14 @@ Precedent: the transfer progress card (`Progress` bar, per-item line, Cancel, Re
   `Progress`, "Cancel". Cancelled/interrupted: "Stopped at page 3 of 12" + "Resume" (completed
   pages are kept). Done: toast "Text is now searchable — saved as a new version."
 
+As built (P4d, ADR 0018): the OCR row is the Tools sheet's seventh (viewer only; from the
+library it reads "Open the document first"; on a password-protected file "Remove the password
+first"); the options open as their own sheet with a privacy line ("Text is read on this device.
+Nothing is sent anywhere."). The card puts the label on its own line and the progress bar with
+Cancel / Resume + close on the second (Greek labels do not fit beside the buttons); a failed page
+says "Could not read page 3 of 12" with Resume. "Every page already has text." when nothing is
+left to read.
+
 ## Accessibility
 
 - Every icon button has an `aria-label`; switches use `role="switch"` + `aria-checked`; alerts

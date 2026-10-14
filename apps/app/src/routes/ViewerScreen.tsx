@@ -24,6 +24,8 @@ import { shareDocument } from "../features/viewer/share";
 import { type OpenState, useOpenDocument } from "../features/viewer/useOpenDocument";
 import { useDocumentSearch } from "../features/viewer/useDocumentSearch";
 import { PageChip, Scrubber, ViewerDock, ViewerSearchBar, ViewerTopBar } from "../features/viewer/ViewerChrome";
+import { OcrCard } from "../features/ocr/OcrCard";
+import { useOcr } from "../features/ocr/ocrStore";
 import { useTools } from "../features/tools/toolsStore";
 import { UnlockSheet } from "../features/tools/UnlockSheet";
 import { OutlineSheet, ThumbnailsSheet, ViewerMoreSheet } from "../features/viewer/ViewerSheets";
@@ -261,11 +263,23 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
       showToast(t("annotate.saveFailed"), "error");
       return;
     }
-    const pageContext = state.status === "ready" ? { doc: state.doc, page, title: title || t("library.untitled") } : undefined;
+    const pageContext =
+      state.status === "ready" ? { doc: state.doc, page, title: title || t("library.untitled"), session: state.session } : undefined;
     void useTools.getState().open(docId, () => setReloadKey((key) => key + 1), pageContext);
   };
 
+  // An OCR job belongs to this open document: it stops where it is when the viewer goes.
+  useEffect(
+    () => () => {
+      if (useOcr.getState().docId === docId) useOcr.getState().reset();
+    },
+    [docId],
+  );
+
   const startEditing = (next: Exclude<Mode, "view">) => {
+    // Page operations and redaction renumber or rewrite pages: a running OCR job stops first
+    // (the pages it finished stay).
+    if ((next === "pages" || next === "redact") && useOcr.getState().docId === docId) useOcr.getState().reset();
     // Editing an encrypted file is not supported (docs/design/p4-ui-brief.md §1).
     if (state.status === "ready" && state.locked) {
       setSheet(null);
@@ -600,6 +614,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
             />
           )}
           {annotating ? null : <FormBanner top={barHeight} hidden={!showChrome} onFill={() => startEditing("form")} />}
+          {annotating ? null : <OcrCard docId={docId} top={barHeight} />}
           <ViewerMoreSheet
             open={sheet === "more"}
             onClose={() => setSheet(null)}
