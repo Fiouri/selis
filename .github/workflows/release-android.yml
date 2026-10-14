@@ -179,7 +179,10 @@ jobs:
             echo '```'
           } | tee dist/sizes.md >> "$GITHUB_STEP_SUMMARY"
       - name: SHA-256
-        run: cd dist && find . -type f \( -name '*.apk' -o -name '*.aab' \) | sort | xargs sha256sum | tee SHA256SUMS-android.txt
+        run: |
+          cd dist && find . -type f \( -name '*.apk' -o -name '*.aab' \) | sort | xargs sha256sum | tee SHA256SUMS-android.txt
+          # The embedded front end, file by file: the reproducibility job compares it on a mismatch.
+          (cd ../apps/app/dist && find . -type f | sort | xargs sha256sum) > frontend-sha256.txt
       - uses: actions/upload-artifact@v6
         with:
           name: selis-android-release
@@ -242,6 +245,8 @@ jobs:
           if cmp -s "$a" "$b"; then
             echo "### Reproducible: the unsigned arm64 APK is byte-identical" >> "$GITHUB_STEP_SUMMARY"
           else
+            echo "Front-end files that differ between the two builds:"
+            (cd apps/app/dist && find . -type f | sort | xargs sha256sum) | diff "${{ github.workspace }}/first/frontend-sha256.txt" - || true
             echo "::error::The second build differs from the first (diffoscope report in the artifact)"
             sudo apt-get install -y -q --no-install-recommends diffoscope > /dev/null || true
             mkdir -p "${{ github.workspace }}/repro-diff"
