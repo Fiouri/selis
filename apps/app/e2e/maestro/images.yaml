@@ -30,7 +30,7 @@ name: Selis images to PDF
     visible: 'Page \d+ of 20.*'
     timeout: 240000
     label: "TIMED create"
-# Save a page as an image: the share sheet opens with it (Samsung: "1 image"; AOSP: its name).
+# Save a page as an image: the share sheet opens with it (Samsung: "1 image"; AOSP: "Sharing image").
 # images.sh check finds the PNG in the share folder.
 - tapOn: "More"
 - tapOn:
@@ -39,7 +39,7 @@ name: Selis images to PDF
     id: "tool-export-image"
 - tapOn: "Save"
 - extendedWaitUntil:
-    visible: '1 image|Photos .* p\d+\.png'
+    visible: '1 image|Sharing image|Photos .* p\d+\.png'
     timeout: 30000
 - back
 - back
