@@ -1,5 +1,7 @@
 # Privacy
 
+Effective 14 October 2026 (Selis 1.0). Selis is developed by Any WeCon.
+
 Selis collects nothing: no account, no analytics, no crash reporting, no advertising, no
 identifiers sent anywhere. Your library stays in the app's private storage on your device.
 
@@ -64,6 +66,13 @@ the device, is not backed up and is not part of a library move.
 its Greek and English models). Nothing is downloaded or sent; the recognised words are stored
 only in the new version of your document, as invisible text.
 
+## Photos
+
+"Images to PDF" opens the system photo picker: Selis sees only the photos you pick, never your
+whole gallery, and needs no storage permission. Photo details such as location and camera
+(EXIF) are removed from the PDF it makes. "Save page as image" hands a page to the share sheet; on
+iOS, "Save Image" there asks for permission to add it to your photos.
+
 ## Camera and notifications
 
 - The camera is used only when you tap "Scan QR code" on the Receive tab, to read the transfer
@@ -82,3 +91,17 @@ only in the new version of your document, as invisible text.
 | Wi‑Fi multicast | Find your other device on the same Wi‑Fi (mDNS) |
 | Camera | Scan a transfer QR code or a document (asked the first time you use either) |
 | Foreground service (data sync), notifications | Keep a running transfer going in the background, show its progress |
+
+## Permissions (iOS)
+
+| Permission | Why |
+| --- | --- |
+| Local network | Find your other device on the same Wi‑Fi (Bonjour), only while Transfer is open |
+| Camera | Scan a transfer QR code or a document |
+| Add to photos | Only if you choose "Save Image" for a page you export |
+
+## Changes and contact
+
+Changes to this policy are listed in the app's changelog and shown here with a new effective
+date. Questions: open an issue at <https://github.com/Fiouri/selis/issues>; report a security
+problem privately as described in <https://github.com/Fiouri/selis/security/policy>.

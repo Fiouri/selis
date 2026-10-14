@@ -20,7 +20,7 @@ export type Fixture = {
   build(): Uint8Array;
 };
 
-const A4: [number, number] = [595.28, 841.89];
+export const A4: [number, number] = [595.28, 841.89];
 const LETTER: [number, number] = [612, 792];
 
 /** Escapes a Latin-1 string for a PDF literal string. */
@@ -42,7 +42,7 @@ function helveticaResources(w: PdfWriter): PdfDict {
 type PageSpec = { size: [number, number]; content: string; rotate?: number; annots?: Ref[] };
 
 /** Builds a page tree with all pages under one /Pages node and sets the catalog. Returns the page refs. */
-function finishDocument(w: PdfWriter, pages: PageSpec[], resources: PdfDict, catalogExtra: PdfDict = {}): Ref[] {
+export function finishDocument(w: PdfWriter, pages: PageSpec[], resources: PdfDict, catalogExtra: PdfDict = {}): Ref[] {
   const pagesRef = w.reserve();
   const resRef = w.add(resources);
   const kids: Ref[] = pages.map((p) => {
@@ -276,7 +276,7 @@ function buildAcroForm(): Uint8Array {
 }
 
 /** A TrueType font embedded as Type0/CIDFontType2 with Identity-H and a ToUnicode map. */
-class EmbeddedFont {
+export class EmbeddedFont {
   readonly font: TrueTypeFont;
   readonly baseName: string;
   private readonly used = new Map<number, number>();

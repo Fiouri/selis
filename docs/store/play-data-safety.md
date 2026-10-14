@@ -1,8 +1,10 @@
 # Google Play — Data safety (draft)
 
-Draft answers for the Play Console "Data safety" form, P3 (transfer). Source of truth for the
-behaviour: docs/PRIVACY.md, ADR 0010, ADR 0011, ADR 0013. Review before each release that
-changes networking, permissions or SDKs.
+Draft answers for the Play Console "Data safety" form (updated for 1.0: transfer, scan, OCR,
+images), checked 2026-10-14 against <https://support.google.com/googleplay/android-developer/answer/10787469>.
+Source of truth for the behaviour: docs/PRIVACY.md, ADRs 0010–0013, 0016–0018. Review before
+each release that changes networking, permissions or SDKs. Other App content answers:
+`play-console.md`.
 
 ## Data collection and security
 
@@ -23,7 +25,12 @@ changes networking, permissions or SDKs.
   (docs/PRIVACY.md), not as collection by Selis.
 - **No SDKs that collect data:** no analytics, crash reporting, ads, or Google ML Kit
   (QR scanning is on-device with jsQR, ADR 0013).
-- **Camera:** frames are processed on the device only, never stored or sent → not collected.
+- **Camera:** QR codes and document scan. Frames are processed on the device only; a scanned
+  page is kept only in the PDF the user saves, never sent → not collected (ADR 0013, 0016).
+- **Photos:** picked through the system photo picker (no media permission); photo metadata
+  (EXIF, GPS) is dropped when the PDF is made; nothing is sent → not collected (ADR 0017).
+- **Text recognition (OCR):** Tesseract and its models ship in the app and run on the device;
+  nothing is downloaded or sent → not collected (ADR 0018).
 - **`.selispack` export:** a file the user creates and hands to an app of their choice through the
   system share sheet; Selis does not transmit it and receives nothing → not collected or shared
   by Selis. The optional passphrase is never stored. "Encrypted in transit" does not apply to a
@@ -37,7 +44,7 @@ changes networking, permissions or SDKs.
 | --- | --- |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Device-to-device transfer, only while the Transfer screen is open |
 | `CHANGE_WIFI_MULTICAST_STATE` | Discover the user's other device on the same Wi‑Fi (mDNS) |
-| `CAMERA` (feature not required) | Scan the transfer QR code |
+| `CAMERA` (feature not required) | Scan the transfer QR code; photograph document pages (scan) |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC` | A transfer the user started continues when the app is in the background |
 | `POST_NOTIFICATIONS` | Progress notification of that transfer |
 

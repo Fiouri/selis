@@ -11,6 +11,8 @@
 #
 # Optional hooks (e.g. open-with.sh): $PRE_RUN and $POST_RUN are run as
 # "$PRE_RUN <serial>" before / after every run; a failing hook fails the run.
+# Optional flow parameters: $MAESTRO_ENV_FILE, one KEY=VALUE per line, passed as
+# `maestro test -e KEY=VALUE` (the flow reads ${KEY}; store-screenshots.sh).
 #
 # Disk guard: before every run, the drives holding .tmp and the AVDs
 # ($ANDROID_AVD_HOME, default ~/.android/avd) must have at least $MIN_FREE_GB
@@ -50,6 +52,12 @@ case "$(uname -s)" in
 esac
 export TMP="$win_tmp" TEMP="$win_tmp" JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$win_tmp" MSYS_NO_PATHCONV=1
 maestro="${MAESTRO:-maestro}"
+flow_env=()
+if [ -n "${MAESTRO_ENV_FILE:-}" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] && flow_env+=(-e "$line")
+  done < "$MAESTRO_ENV_FILE"
+fi
 
 min_free_gb="${MIN_FREE_GB:-30}"
 avd_dir="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
@@ -147,7 +155,7 @@ for i in $(seq 1 "$runs"); do
   adb -s "$serial" logcat -c
   if [ -n "${PRE_RUN:-}" ] && ! $PRE_RUN "$serial" > "$out/pre-$i.log" 2>&1; then
     result="FAIL (PRE_RUN: $(tail -1 "$out/pre-$i.log" | tr -d '\r'))"
-  elif "$maestro" --device "$serial" test --debug-output "$tmp/maestro" "$flow" > "$out/run-$i.log" 2>&1; then
+  elif "$maestro" --device "$serial" test --debug-output "$tmp/maestro" "${flow_env[@]}" "$flow" > "$out/run-$i.log" 2>&1; then
     result=pass
   else
     # First failing step; Maestro colours its output, so strip the ANSI codes first.

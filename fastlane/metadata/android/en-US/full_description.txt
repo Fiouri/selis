@@ -1,0 +1,45 @@
+Selis is a free, open-source PDF editor for your phone. Your documents stay on your device: no account, no cloud, no ads, no analytics, nothing collected.
+
+<b>Read</b>
+• Smooth scrolling even in documents of 1000+ pages
+• Pinch and double-tap zoom, thumbnails, outline
+• Full-text search, text selection and copy
+• Night mode for pages, light, dark and sepia themes
+
+<b>Annotate and sign</b>
+• Highlight, underline, strike-through, pen, shapes, text and sticky notes
+• Fill in PDF forms and flatten them
+• Draw, type or use a picture of your signature, saved for next time
+• Undo and redo for every tool
+
+<b>Organise pages</b>
+• Reorder by drag, rotate, duplicate, delete
+• Insert a blank page or pages from another PDF (form fields stay fillable)
+• Extract and split
+
+<b>Redact for real</b>
+• Content under a redaction box is removed from the file, not just covered
+• Whiteout with new text
+
+<b>Scan and recognise text</b>
+• Scan paper documents with the camera: edge detection, perspective correction, filters
+• Make scanned pages searchable (OCR, English and Greek, on the device)
+• Turn photos into a PDF, save a page as an image
+
+<b>Tools</b>
+• Protect a PDF with a password or remove one
+• Compress, optimise for the web, repair damaged files
+
+<b>Send to your other devices</b>
+• Transfer documents directly between your phones and tablets with a QR code or link
+• End-to-end encrypted, with a 6-digit code to confirm; resumes after a dropped connection
+• Trusted devices, and moving your whole library to a new phone
+• Or save documents into one file (.selispack), optionally protected with a passphrase
+
+<b>Never loses your original</b>
+Imports are copies; the file you opened is never changed. Every save is a new version you can go back to, and autosave recovers your work after a crash.
+
+<b>Private by design</b>
+Selis uses the network only while the Transfer screen is open. When two devices cannot connect directly, the encrypted transfer goes through a relay (by default a public relay run by n0, the makers of iroh), which sees your IP address but cannot read your documents. You can turn the relay off ("Local network only") or use your own.
+
+Selis is open source under the Apache License 2.0: https://github.com/Fiouri/selis

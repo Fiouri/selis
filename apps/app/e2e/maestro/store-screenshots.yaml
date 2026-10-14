@@ -1,0 +1,150 @@
+# Store screenshots (P5a): six key screens with the realistic sample documents
+# (packages/fixtures/src/samples.ts). Run through store-screenshots.sh, which pushes the
+# samples, sets a clean 1080×1920 screen and passes the labels of the target language
+# (from apps/app/src/i18n) as ${...}; screenshots go to ${OUT}.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Store screenshots
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+
+# Import the four samples with the default (English) UI.
+- tapOn: "Import PDF"
+- tapOn: ${S_TRIP}
+- extendedWaitUntil:
+    visible: "Page 1 of 1"
+    timeout: 20000
+- back
+- tapOn: "Import PDF"
+- tapOn: ${S_INVOICE}
+- extendedWaitUntil:
+    visible: "Page 1 of 1"
+    timeout: 20000
+- back
+- tapOn: "Import PDF"
+- tapOn: ${S_REPORT}
+- extendedWaitUntil:
+    visible: "Page 1 of 1"
+    timeout: 20000
+- back
+- tapOn: "Import PDF"
+- tapOn: ${S_LEASE}
+- extendedWaitUntil:
+    visible: "Page 1 of 1"
+    timeout: 20000
+- back
+
+# Language and theme.
+- tapOn: "Settings"
+- runFlow:
+    when:
+      true: ${LANG == "el"}
+    commands:
+      - tapOn:
+          id: "setting-language"
+      - tapOn: "Ελληνικά"
+- tapOn: ${T_THEME}
+- tapOn: ${T_LIBRARY}
+- extendedWaitUntil:
+    visible: ${T_OPEN_LEASE}
+    timeout: 10000
+- takeScreenshot: ${OUT}/1-library
+
+# Reading.
+- tapOn: ${T_OPEN_TRIP}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1}
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "never shown, lets the page render"
+    timeout: 2000
+    optional: true
+- takeScreenshot: ${OUT}/2-viewer
+- back
+
+# Annotate: highlight a sentence, a pen stroke under the chart.
+- tapOn: ${T_OPEN_REPORT}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1}
+    timeout: 20000
+- tapOn: ${T_ANNOTATE}
+- extendedWaitUntil:
+    visible: ${T_DONE}
+    timeout: 5000
+- swipe:
+    start: 11%, ${Y_HIGHLIGHT}
+    end: 88%, ${Y_HIGHLIGHT}
+    duration: 1500
+- tapOn: ${T_PEN}
+- swipe:
+    start: 68%, ${Y_PEN}
+    end: 88%, ${Y_PEN}
+    duration: 1200
+- takeScreenshot: ${OUT}/3-annotate
+- tapOn: ${T_DONE}
+- back
+
+# Sign: a typed signature on the tenant's line.
+- tapOn: ${T_OPEN_LEASE}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1}
+    timeout: 20000
+- tapOn: ${T_SIGN}
+- tapOn: ${T_NEW}
+- tapOn: ${T_MODE_TYPE}
+- tapOn:
+    id: ${T_NAME}
+- inputText: ${SIGNER}
+- hideKeyboard
+- tapOn: ${T_SAVE}
+- extendedWaitUntil:
+    visible: ${T_PLACE_HINT}
+    timeout: 10000
+- tapOn:
+    point: ${SIGN_POINT}
+- extendedWaitUntil:
+    visible:
+      id: ${T_REMOVE}
+    timeout: 10000
+- takeScreenshot: ${OUT}/4-sign
+- tapOn: ${T_DONE}
+- back
+
+# Transfer: the code for sending all four documents.
+- tapOn: ${T_TRANSFER}
+- tapOn: ${T_TAB_SEND}
+- tapOn: ${T_SELECT_ALL}
+- tapOn: ${T_SEND_ALL}
+- extendedWaitUntil:
+    visible:
+      id: ${T_QR}
+    timeout: 30000
+- takeScreenshot: ${OUT}/5-transfer
+- back
+- tapOn: ${T_LIBRARY}
+
+# Scan: the page found by the camera, corners to adjust.
+- tapOn: ${T_SCAN}
+- runFlow:
+    when:
+      visible: "While using the app"
+    commands:
+      - tapOn: "While using the app"
+- extendedWaitUntil:
+    visible:
+      text: ${T_SHUTTER}
+      enabled: true
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "never shown, lets detection settle"
+    timeout: 3000
+    optional: true
+- tapOn: ${T_SHUTTER}
+- extendedWaitUntil:
+    visible: ${T_ADJUST}
+    timeout: 60000
+- takeScreenshot: ${OUT}/6-scan
