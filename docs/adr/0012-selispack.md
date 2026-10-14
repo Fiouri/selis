@@ -59,7 +59,8 @@ looks complete. Files are streamed, never held in memory.
 ### Platforms
 
 - Android: share sheet (`SharePlugin`, MIME `application/vnd.anywecon.selispack`, file in the
-  FileProvider share folder, swept after a day); "Open with" intent filters for that MIME (VIEW,
+  FileProvider share folder, deleted at the next app start and before every export — see the
+  amendment below); "Open with" intent filters for that MIME (VIEW,
   SEND) and for `application/octet-stream` (VIEW only: file managers label an unknown extension
   that way); the picker for any file. In every case the magic bytes decide — a non-pack from
   the octet-stream filter goes to the PDF import and fails there as "not a PDF".
@@ -79,3 +80,11 @@ looks complete. Files are streamed, never held in memory.
   byte in the body and in the header, zip-slip names and compressed entries.
 - An import needs free space for about twice the pack (private copy + staging) on top of what
   it adds; a failure for lack of space adds nothing.
+
+## Amendment (2026-10-14): packs do not linger in the Android cache
+
+The share folder used to be swept of files older than a day, so an unencrypted pack (the
+library in clear text) could sit in the app cache for a day. Now every `.selispack` there is
+deleted when the app starts (private import copies included: nothing is in flight) and before
+every export (an import running meanwhile keeps its copy). The receiving app still has until
+then to read the file; one that held it open keeps reading after the delete. PRIVACY.md says so.

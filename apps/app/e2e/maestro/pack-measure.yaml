@@ -1,0 +1,88 @@
+# .selispack timing with a passphrase (P3 follow-up): 50 documents, ~300 MB.
+# PRE_RUN="apps/app/e2e/maestro/pack.sh measure-pre" clears Selis and pushes
+# it as measure-protected.selispack (made on the host) to Download/selis-measure. The timed steps are
+# from the tap on "Open" (import) and on "Create file" (export, until the share sheet shows the
+# pack by name) to the end of the wait after it; pack.sh measure-times reads them from Maestro's debug
+# output.
+# Release-like build with the `measure` feature (WebView DevTools on) or a debug build.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis pack timing (passphrase, 50 documents)
+---
+- launchApp
+- tapOn: "Transfer"
+- tapOn: "Receive"
+- tapOn: "Open a .selispack file"
+# The picker opens on Recent, which lists no .selispack: search by name.
+- tapOn:
+    id: "com.google.android.documentsui:id/option_menu_search"
+- inputText: "measure-protected"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "measure-protected.selispack"
+    timeout: 15000
+- repeat:
+    while:
+      notVisible: "This file is protected"
+    times: 5
+    commands:
+      - tapOn:
+          text: "measure-protected.selispack"
+          optional: true
+      - waitForAnimationToEnd:
+          timeout: 3000
+- extendedWaitUntil:
+    visible: "This file is protected"
+    timeout: 15000
+- tapOn: "Passphrase"
+- inputText: "correct horse"
+- tapOn: "Open"
+- extendedWaitUntil:
+    visible: "Added from the file"
+    timeout: 300000
+    label: "TIMED import"
+- assertVisible: "50 documents were added to your library."
+- tapOn: "Close"
+
+- tapOn: "Send"
+# Below the list of 50 documents. Swipes start mid-screen: scrollUntilVisible starts near the
+# bottom, and on a slow emulator a swipe there can land as a tap on the tab bar.
+- repeat:
+    while:
+      notVisible:
+        id: "pack-export-open"
+    times: 30
+    commands:
+      - swipe:
+          start: 50%, 60%
+          end: 50%, 20%
+          duration: 400
+- assertVisible:
+    id: "transfer-screen"
+- tapOn:
+    id: "pack-export-open"
+- assertVisible: "The whole library (versions, tags, signatures, settings)"
+- tapOn:
+    id: "pack-protect"
+- tapOn: "Passphrase"
+- inputText: "correct horse"
+# With the keyboard up the sheet sits higher than the hierarchy says: close it first.
+- hideKeyboard
+- tapOn: "Passphrase again"
+- inputText: "correct horse"
+- hideKeyboard
+- assertNotVisible: "The two passphrases are different."
+- assertVisible:
+    text: "Create file"
+    enabled: true
+- tapOn: "Create file"
+- extendedWaitUntil:
+    visible: 'Selis \d{4}-\d{2}-\d{2}\.selispack'
+    timeout: 300000
+    label: "TIMED export"
+# Close the share sheet without sending anywhere: the app is back and closes its sheet.
+- back
+- extendedWaitUntil:
+    notVisible:
+      id: "pack-export-sheet"
+    timeout: 30000

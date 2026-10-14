@@ -210,7 +210,7 @@ export const commands = {
 	 *  is `None`) and opens the share sheet for it. The passphrase, if any, never
 	 *  leaves this call.
 	 */
-	packExport: (requestId: string, documentIds: string[] | null, includeHistory: boolean, passphrase: string | null) => typedError<PackSummary, CommandError>(__TAURI_INVOKE("pack_export", { requestId, documentIds, includeHistory, passphrase })),
+	packExport: (requestId: string, documentIds: string[] | null, includeHistory: boolean, passphrase: string | null) => typedError<PackExportView, CommandError>(__TAURI_INVOKE("pack_export", { requestId, documentIds, includeHistory, passphrase })),
 	/**
 	 *  Imports a pack from a picked or shared file: checks everything first, then
 	 *  adds what is new (documents by BLAKE3), applies moved settings.
@@ -360,6 +360,13 @@ export type OfferView = {
 	/**  Unix seconds after which the code is refused. */
 	expiresAt: number,
 };
+
+/**  What became of an export. */
+export type PackExportView = 
+/**  Handed to the share sheet (Android) or saved where the user chose. */
+{ status: "shared"; summary: PackSummary } | 
+/**  The save dialog was cancelled: the pack was deleted, nothing was written. */
+{ status: "cancelled" };
 
 export type PackImportView = { status: "imported"; documentIds: string[]; duplicates: number; signatures: number; settings: boolean } | { status: "refused"; problem: PackProblem };
 

@@ -45,9 +45,12 @@ you are sending to.
   never stored, and without it the file cannot be opened — there is no recovery.
 - A whole-library file also carries your tags, favorites, signatures and settings, never your
   device key or trusted devices.
-- On Android the file stays in the app's private share folder until the receiving app has read
-  it; Selis deletes it there after a day. Opening a pack reads a private copy, which is deleted
-  right after.
+- On Android the file stays in the app's private cache (the share folder) so the receiving app
+  can read it after the share sheet closes. Selis deletes every pack there **the next time it
+  starts and before every new export** — an unencrypted pack never outlives the next start of
+  the app. Elsewhere (desktop) the file is written only where you save it; the working copy in
+  the cache is deleted right after. Opening a pack reads a private copy, which is deleted right
+  after.
 
 ## Device identity
 
