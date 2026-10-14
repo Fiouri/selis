@@ -25,6 +25,8 @@ export type PhotoOptions = {
   readonly quality?: number;
   /** Also XMP (APP1), IPTC (APP13) and a JPEG comment. */
   readonly extras?: boolean;
+  /** Per-pixel noise on the quadrant colours, so the JPEG is as large as a real photo's. */
+  readonly texture?: boolean;
 };
 
 function u16(v: number, le: boolean): number[] {
@@ -125,6 +127,21 @@ export async function makePhoto(options: PhotoOptions): Promise<Uint8Array> {
   fill(PHOTO_QUADRANTS.topRight, Math.floor(width / 2), 0);
   fill(PHOTO_QUADRANTS.bottomLeft, 0, Math.floor(height / 2));
   fill(PHOTO_QUADRANTS.bottomRight, Math.floor(width / 2), Math.floor(height / 2));
+  if (options.texture) {
+    // Row bands keep memory small for 12-MP photos.
+    const band = 256;
+    for (let y = 0; y < height; y += band) {
+      const h = Math.min(band, height - y);
+      const img = ctx.getImageData(0, y, width, h);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const n = ((i * 2654435761 + y * 40503) >>> 24) - 128;
+        img.data[i] = Math.max(0, Math.min(255, (img.data[i] ?? 0) + (n >> 2)));
+        img.data[i + 1] = Math.max(0, Math.min(255, (img.data[i + 1] ?? 0) + (n >> 2)));
+        img.data[i + 2] = Math.max(0, Math.min(255, (img.data[i + 2] ?? 0) + (n >> 2)));
+      }
+      ctx.putImageData(img, 0, y);
+    }
+  }
   const jpeg = new Uint8Array(await canvas.encode("jpeg", options.quality ?? 90));
   const segments = [exifSegment(options.orientation)];
   if (options.extras) {

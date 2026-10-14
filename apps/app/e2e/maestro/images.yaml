@@ -1,0 +1,46 @@
+# Images → PDF on Android (P4b, ADR 0017): phone-like photos (12 MP, EXIF/GPS) picked in the
+# system photo picker (no storage permission) twice ten at a time (pick-ten-photos.yaml), made
+# into one 20-page PDF, opened in the viewer; a page is then saved as a PNG (share sheet).
+# PRE_RUN="apps/app/e2e/maestro/images.sh pre" pushes the photos and samples the app's RSS;
+# POST_RUN="apps/app/e2e/maestro/images.sh check" checks the PDF (20 pages, qpdf, no metadata)
+# and prints the RSS around "Create PDF". Debug build (run-as). Run with ./run.sh.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis images to PDF
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Images to PDF"
+- runFlow: pick-ten-photos.yaml
+- extendedWaitUntil:
+    visible: "10 photos"
+    timeout: 120000
+# Ten more through "Add photos" (the same ten: a new picker session starts unselected).
+- tapOn: "Add photos"
+- runFlow: pick-ten-photos.yaml
+# Each photo is copied in and gets a small thumbnail.
+- extendedWaitUntil:
+    visible: "20 photos"
+    timeout: 120000
+- tapOn: "Create PDF"
+# "Fit image" pages are short: the indicator may already show page 2.
+- extendedWaitUntil:
+    visible: 'Page \d+ of 20.*'
+    timeout: 240000
+    label: "TIMED create"
+# Save a page as an image: the share sheet opens with it (Samsung: "1 image"; AOSP: its name).
+# images.sh check finds the PNG in the share folder.
+- tapOn: "More"
+- tapOn:
+    id: "more-tools"
+- tapOn:
+    id: "tool-export-image"
+- tapOn: "Save"
+- extendedWaitUntil:
+    visible: '1 image|Photos .* p\d+\.png'
+    timeout: 30000
+- back
+- back
+- assertVisible: "Import PDF"
