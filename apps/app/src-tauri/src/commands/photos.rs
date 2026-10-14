@@ -39,7 +39,9 @@ pub async fn pick_photos<R: Runtime>(
     request_id: String,
 ) -> CommandResult<PhotoPick> {
     results
-        .run_once(&request_id, "pick_photos", async move { platform::pick(&app).await })
+        .run_once(&request_id, "pick_photos", async move {
+            platform::pick(&app).await
+        })
         .await
 }
 
@@ -91,7 +93,12 @@ pub async fn share_export<R: Runtime>(
         .run_once(&request_id, "share_export", async move {
             let mime = match mime.as_str() {
                 "image/png" | "image/jpeg" => mime,
-                _ => return Err(CommandError::new(ErrorCode::InvalidArgument, "not an image type")),
+                _ => {
+                    return Err(CommandError::new(
+                        ErrorCode::InvalidArgument,
+                        "not an image type",
+                    ));
+                }
             };
             let name = safe_name(&name);
             let dir = app
@@ -99,7 +106,8 @@ pub async fn share_export<R: Runtime>(
                 .app_cache_dir()
                 .map_err(|e| CommandError::new(ErrorCode::Io, e.to_string()))?
                 .join("share");
-            std::fs::create_dir_all(&dir).map_err(|e| CommandError::new(ErrorCode::Io, e.to_string()))?;
+            std::fs::create_dir_all(&dir)
+                .map_err(|e| CommandError::new(ErrorCode::Io, e.to_string()))?;
             let dest = dir.join(&name);
             let moved = dest.clone();
             let lib = Arc::clone(&library);
@@ -120,11 +128,21 @@ pub async fn share_export<R: Runtime>(
 fn safe_name(name: &str) -> String {
     let cleaned: String = name
         .chars()
-        .map(|c| if c.is_control() || "\\/:*?\"<>|".contains(c) { '_' } else { c })
+        .map(|c| {
+            if c.is_control() || "\\/:*?\"<>|".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
         .take(120)
         .collect();
     let cleaned = cleaned.trim().trim_start_matches('.').to_owned();
-    if cleaned.is_empty() { "page".into() } else { cleaned }
+    if cleaned.is_empty() {
+        "page".into()
+    } else {
+        cleaned
+    }
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
@@ -132,7 +150,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .setup(|app, api| {
             #[cfg(target_os = "android")]
             {
-                let handle = api.register_android_plugin("com.anywecon.selis", "PhotoPickerPlugin")?;
+                let handle =
+                    api.register_android_plugin("com.anywecon.selis", "PhotoPickerPlugin")?;
                 app.manage(platform::PhotoHandle(handle));
             }
             #[cfg(not(target_os = "android"))]
@@ -174,7 +193,9 @@ mod platform {
         Ok(if picked.uris.is_empty() {
             PhotoPick::Cancelled
         } else {
-            PhotoPick::Picked { sources: picked.uris }
+            PhotoPick::Picked {
+                sources: picked.uris,
+            }
         })
     }
 }

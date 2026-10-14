@@ -744,10 +744,16 @@ mod tests {
         let jpeg = [0xff, 0xd8, 0xff, 0xe0, 0, 16, b'J', b'F', b'I', b'F', 0];
         let staged = lib.stage_image(&jpeg[..])?;
         assert_eq!(staged.extension().and_then(|e| e.to_str()), Some("img"));
-        assert_eq!(std::fs::read(&staged).map_err(|e| Error::io(&staged, e))?, jpeg);
+        assert_eq!(
+            std::fs::read(&staged).map_err(|e| Error::io(&staged, e))?,
+            jpeg
+        );
         let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
         lib.stage_image(&png[..])?;
-        assert!(matches!(lib.stage_image(&b"%PDF-1.7\n"[..]), Err(Error::InvalidArgument(_))));
+        assert!(matches!(
+            lib.stage_image(&b"%PDF-1.7\n"[..]),
+            Err(Error::InvalidArgument(_))
+        ));
         assert!(matches!(lib.stage_image(&b""[..]), Err(Error::EmptyFile)));
         lib.unstage(&staged.to_string_lossy())?;
         assert!(!staged.exists());
