@@ -9,10 +9,14 @@ const PORT = 4173;
  * carries the same strict CSP as the Tauri app.
  *
  * `visual-390` compares each screen with the approved phone design
- * (docs/design/p1-ui-brief.md: 390×844, light / dark / sepia). Baselines are per
- * OS (`*-win32.png`, `*-linux.png`); a missing one is written on first run
- * (CI uploads it with the report, so a new Linux baseline can be committed).
+ * (docs/design/p1-ui-brief.md: 390×844, light / dark / sepia). One baseline set, Linux, made by
+ * CI (ubuntu-24.04): the project only exists on Linux (ADR 0019). Comparison is exact
+ * (`maxDiffPixels: 0`): the same Chromium on the same OS renders the same pixels, and any
+ * tolerance hides small components (pixelmatch skips anti-aliased pixels, so a new line of text
+ * counts only a few hundred). In CI a missing baseline fails (`updateSnapshots: "none"`); its
+ * render is in the report artifact to review and commit (CONTRIBUTING.md).
  */
+const visual = process.platform === "linux";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
@@ -22,8 +26,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
   timeout: 60_000,
-  expect: { timeout: 15_000, toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: "disabled", caret: "hide" } },
-  updateSnapshots: "missing",
+  expect: { timeout: 15_000, toHaveScreenshot: { maxDiffPixels: 0, animations: "disabled", caret: "hide" } },
+  updateSnapshots: process.env.CI ? "none" : "missing",
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",
@@ -53,16 +57,20 @@ export default defineConfig({
         },
       },
     },
-    {
-      name: "visual-390",
-      testMatch: "**/visual.spec.ts",
-      use: {
-        ...devices["Pixel 7"],
-        viewport: { width: 390, height: 844 },
-        screen: { width: 390, height: 844 },
-        deviceScaleFactor: 2,
-      },
-    },
+    ...(visual
+      ? [
+          {
+            name: "visual-390",
+            testMatch: "**/visual.spec.ts",
+            use: {
+              ...devices["Pixel 7"],
+              viewport: { width: 390, height: 844 },
+              screen: { width: 390, height: 844 },
+              deviceScaleFactor: 2,
+            },
+          },
+        ]
+      : []),
   ],
   webServer: {
     command: `npm run build:mock && npm run preview:mock`,

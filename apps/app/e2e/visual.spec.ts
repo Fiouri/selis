@@ -438,9 +438,7 @@ for (const lang of LANGS) {
         await page.getByTestId("pack-passphrase-again").fill("correct hors");
         await expect(page.getByTestId("pack-mismatch")).toBeVisible();
         await settle(page);
-        // The bottom-anchored sheet has a fractional height: one field's borders land on
-        // either side of a pixel boundary from run to run (~700 px of 1-px shift).
-        await expect(page).toHaveScreenshot(shot("pack-export"), { maxDiffPixelRatio: 0.004 });
+        await expect(page).toHaveScreenshot(shot("pack-export"));
         await page.getByTestId("pack-passphrase-again").fill("correct horse");
         await page.getByTestId("pack-export-create").click();
         await expect(page.getByTestId("pack-export-sheet")).toHaveCount(0);
@@ -495,7 +493,7 @@ for (const lang of LANGS) {
         await page.getByTestId("tool-export-image").click();
         await expect(page.getByTestId("tools-export-pixels")).toBeVisible();
         await settle(page);
-        await expect(page).toHaveScreenshot(shot("tools-export"), { maxDiffPixelRatio: 0.004 });
+        await expect(page).toHaveScreenshot(shot("tools-export"));
       });
 
       test(`tools: sheet, protect, compressed, unlock (${theme})`, async ({ page }) => {
@@ -513,8 +511,7 @@ for (const lang of LANGS) {
         await page.getByTestId("tools-restrictions").click();
         await expect(page.getByTestId("tools-password-problem")).toBeVisible();
         await settle(page);
-        // Bottom-anchored sheet with fields: see "selispack export".
-        await expect(page).toHaveScreenshot(shot("tools-protect"), { maxDiffPixelRatio: 0.004 });
+        await expect(page).toHaveScreenshot(shot("tools-protect"));
         await page.goBack();
         await page.getByTestId("tool-compress").click();
         await expect(page.getByTestId("tools-compressed")).toBeVisible();
@@ -542,12 +539,12 @@ for (const lang of LANGS) {
         // The fake camera repeats one frame: the eased outline settles on it.
         await page.waitForTimeout(1500);
         await settle(page);
-        await expect(page).toHaveScreenshot(shot("scan-camera"), { maxDiffPixelRatio: 0.004 });
+        await expect(page).toHaveScreenshot(shot("scan-camera"));
         await page.getByTestId("scan-shutter").click();
         await expect(page.getByTestId("scan-still")).toBeVisible({ timeout: 20_000 });
         await expect.poll(() => page.getByTestId("scan-still").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
         await settle(page);
-        await expect(page).toHaveScreenshot(shot("scan-adjust"), { maxDiffPixelRatio: 0.004 });
+        await expect(page).toHaveScreenshot(shot("scan-adjust"));
         await page.getByTestId("scan-filter-bw").click();
         await page.getByTestId("scan-keep").click();
         await expect(page.getByTestId("scan-queue-open")).toBeVisible({ timeout: 20_000 });
@@ -582,13 +579,13 @@ for (const lang of LANGS) {
         await page.getByTestId("tool-ocr").click();
         await expect(page.getByTestId("ocr-sheet")).toBeVisible();
         await settle(page);
-        await expect(page).toHaveScreenshot(shot("ocr-sheet"), { maxDiffPixelRatio: 0.004 });
+        await expect(page).toHaveScreenshot(shot("ocr-sheet"));
         await page.getByTestId("ocr-start").click();
         await expect(page.getByTestId("ocr-label")).toHaveText(ui(lang, "ocr.reading", { page: "1", total: "2" }), { timeout: 30_000 });
         await page.getByTestId("ocr-cancel").click();
         await expect(page.getByTestId("ocr-card")).toHaveAttribute("data-step", "stopped");
         await settle(page);
-        await expect(page).toHaveScreenshot(shot("ocr-stopped"), { maxDiffPixelRatio: 0.004 });
+        await expect(page).toHaveScreenshot(shot("ocr-stopped"));
       });
 
       test(`recent (${theme})`, async ({ page }) => {

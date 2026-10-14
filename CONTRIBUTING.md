@@ -32,18 +32,18 @@ The unit tests check the PDFs the engine writes with [qpdf](https://qpdf.readthe
 npm ci
 npm run fixtures
 npm run verify:tier1        # tsc, eslint, vitest, rustfmt, clippy, cargo test, cargo deny
-npm run e2e                 # Playwright mobile smoke + 390×844 visual snapshots (mock backend)
+npm run e2e                 # Playwright mobile smoke (mock backend); 390×844 visual snapshots on Linux
 ```
 
 ### Visual snapshots
 
 `apps/app/e2e/visual.spec.ts` compares every screen at the reference phone size (390×844) in
 light, dark and sepia with the approved design (`docs/design/p1-ui-brief.md`). English is the primary set
-(`<screen>-<theme>-…png`) and Greek the second (`<screen>-el-<theme>-…png`). Baselines are per
-OS (`e2e/visual.spec.ts-snapshots/*-win32.png`, `*-linux.png`, …) and a missing one is written on
-the first run. CI uploads its snapshot folder in the `playwright-report` artifact: after a UI change,
-download the new `*-linux.png` files from there, inspect them, and commit them. Update intended
-changes locally with `npx playwright test --project=visual-390 --update-snapshots`.
+(`<screen>-<theme>-…png`) and Greek the second (`<screen>-el-<theme>-…png`). There is one baseline
+set, `e2e/visual.spec.ts-snapshots/*-linux.png`, rendered by CI (ubuntu-24.04), and the comparison
+is exact (ADR 0019); the `visual-390` project only runs on Linux. After a UI change CI fails on the
+screens that changed (or have no baseline yet): download the `playwright-report` artifact,
+inspect `test-results/**/*-actual.png`, and commit each as the matching `*-linux.png`.
 
 Android: `npm run tauri -- android dev`. See the README for prerequisites.
 
