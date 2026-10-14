@@ -1,0 +1,57 @@
+# Picks 10 photos in the system photo picker (images.yaml). Two picker versions: one marks a
+# selected photo "Selected Photo taken on …" (Galaxy S23), one keeps its description (AVD API 36):
+# there each of the first ten is tapped by position.
+appId: com.anywecon.selis
+---
+- extendedWaitUntil:
+    visible: "Photo taken on.*"
+    timeout: 20000
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- tapOn:
+    text: "Photo taken on.*"
+    index: 0
+- runFlow:
+    when:
+      visible: "Selected Photo taken on.*"
+    commands:
+      - repeat:
+          while:
+            notVisible: "10 photos or videos selected"
+          times: 15
+          commands:
+            - tapOn: "Photo taken on.*"
+- runFlow:
+    when:
+      notVisible: "Selected Photo taken on.*"
+    commands:
+            - tapOn:
+                text: "Photo taken on.*"
+                index: 1
+            - tapOn:
+                text: "Photo taken on.*"
+                index: 2
+            - tapOn:
+                text: "Photo taken on.*"
+                index: 3
+            - tapOn:
+                text: "Photo taken on.*"
+                index: 4
+            - tapOn:
+                text: "Photo taken on.*"
+                index: 5
+            - tapOn:
+                text: "Photo taken on.*"
+                index: 6
+            - tapOn:
+                text: "Photo taken on.*"
+                index: 7
+            - tapOn:
+                text: "Photo taken on.*"
+                index: 8
+            - tapOn:
+                text: "Photo taken on.*"
+                index: 9
+- assertVisible: "10 photos or videos selected"
+- tapOn: "Done"

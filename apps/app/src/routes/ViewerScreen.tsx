@@ -261,7 +261,8 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
       showToast(t("annotate.saveFailed"), "error");
       return;
     }
-    void useTools.getState().open(docId, () => setReloadKey((key) => key + 1));
+    const pageContext = state.status === "ready" ? { doc: state.doc, page, title: title || t("library.untitled") } : undefined;
+    void useTools.getState().open(docId, () => setReloadKey((key) => key + 1), pageContext);
   };
 
   const startEditing = (next: Exclude<Mode, "view">) => {

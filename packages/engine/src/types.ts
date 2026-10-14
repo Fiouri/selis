@@ -128,6 +128,11 @@ export interface DocHandle {
   importLosses(bytes: ArrayBuffer): Promise<ImportLosses>;
   /** The pages `indices` as a new PDF (forms kept fillable). */
   extractPages(indices: readonly number[]): Promise<ArrayBuffer>;
+  /**
+   * Page `index` as a PNG or JPEG at `dpi` (with annotations and form values), within the
+   * engine's bitmap limit (`limits.maxBitmapPixels`; see `exportPixels`).
+   */
+  exportPageImage(index: number, options: { readonly dpi: number; readonly format: "png" | "jpeg" }): Promise<ExportedImage>;
   /** Bumped by every change to the list of pages (count, order, sizes). */
   structureRevision(): number;
   onStructureChange(listener: () => void): () => void;
@@ -158,8 +163,23 @@ export type ImportLosses = {
   readonly scripts: number;
 };
 
+/** Images → PDF (P4b), one image at a time (see `images.ts`). */
+export type ImagePdfSession = {
+  /** Adds a page for the image (JPEG kept as is, others decoded); resolves to the page count. */
+  add(bytes: ArrayBuffer, mime: string, size: "fit" | "a4" | "letter"): Promise<number>;
+  /** The PDF; the session is over. */
+  finish(): Promise<ArrayBuffer>;
+  /** Drops what was built. */
+  discard(): Promise<void>;
+};
+
+/** A page exported as an image. */
+export type ExportedImage = { readonly bytes: ArrayBuffer; readonly mime: string; readonly width: number; readonly height: number };
+
 export interface PdfEngine {
   open(bytes: ArrayBuffer, options?: OpenOptions): Promise<DocHandle>;
+  /** Starts building a PDF from images. */
+  createImagePdf(): Promise<ImagePdfSession>;
   /** Current render limits (resolution cap, bitmap budget, page cache bounds). */
   readonly limits: RenderLimits;
   /** Applies limits for this device (see `renderLimitsFor`). */

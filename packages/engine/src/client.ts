@@ -6,6 +6,8 @@ import {
   type Annotation,
   type DocHandle,
   EngineError,
+  type ExportedImage,
+  type ImagePdfSession,
   type OpenOptions,
   type PageSize,
   type PdfEngine,
@@ -51,6 +53,36 @@ export class WorkerPdfEngine implements PdfEngine {
     this.cache = WorkerPdfEngine.makeCache(limits);
     this.worker.onmessage = (event) => this.onMessage(event.data);
     this.worker.onerror = (event) => this.failAll(new EngineError("init", event.message || "engine worker crashed"));
+  }
+
+  async createImagePdf(): Promise<ImagePdfSession> {
+    const begun = await this.request<Extract<WorkerResponse, { type: "imagesBuilder" }>>((reqId) => ({ type: "imagesBegin", reqId }));
+    const builder = begun.builder;
+    let over = false;
+    const ensure = () => {
+      if (over) throw new EngineError("closed", "image session is over");
+    };
+    return {
+      add: async (bytes, mime, size) => {
+        ensure();
+        const msg = await this.request<Extract<WorkerResponse, { type: "imagesAdded" }>>(
+          (reqId) => ({ type: "imagesAdd", reqId, builder, bytes, mime, size }),
+          [bytes],
+        );
+        return msg.pages;
+      },
+      finish: async () => {
+        ensure();
+        over = true;
+        const msg = await this.request<Extract<WorkerResponse, { type: "imagesDone" }>>((reqId) => ({ type: "imagesFinish", reqId, builder }));
+        return msg.bytes;
+      },
+      discard: async () => {
+        if (over) return;
+        over = true;
+        await this.request<Extract<WorkerResponse, { type: "closed" }>>((reqId) => ({ type: "imagesDiscard", reqId, builder }));
+      },
+    };
   }
 
   async open(bytes: ArrayBuffer, options: OpenOptions = {}): Promise<DocHandle> {
@@ -310,6 +342,22 @@ export class WorkerPdfEngine implements PdfEngine {
         );
         return msg.losses;
       },
+      exportPageImage: async (index, options) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "exportedImage" }>>((reqId) => ({
+          type: "exportImage",
+          reqId,
+          docId,
+          index,
+          dpi: options.dpi,
+          format: options.format,
+          maxPixels: this.currentLimits.maxBitmapPixels,
+        }));
+        if (msg.mime !== RAW_RGBA) return { bytes: msg.bytes, mime: msg.mime, width: msg.width, height: msg.height };
+        // A WebKit without OffscreenCanvas in workers: encode here.
+        return encodeExportOnMainThread(msg.width, msg.height, msg.bytes, options.format);
+      },
       extractPages: async (indices) => {
         ensureOpen();
         const msg = await this.request<Extract<WorkerResponse, { type: "extracted" }>>((reqId) => ({
@@ -469,6 +517,22 @@ export class WorkerPdfEngine implements PdfEngine {
     for (const p of this.pending.values()) p.reject(err);
     this.pending.clear();
   }
+}
+
+async function encodeExportOnMainThread(width: number, height: number, pixels: ArrayBuffer, format: "png" | "jpeg"): Promise<ExportedImage> {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new EngineError("unknown", "no 2d context for export");
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), 0, 0);
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, format === "png" ? "image/png" : "image/jpeg", 0.92);
+  });
+  canvas.width = 0;
+  canvas.height = 0;
+  if (!blob) throw new EngineError("unknown", "export encoding failed");
+  return { bytes: await blob.arrayBuffer(), mime: blob.type, width, height };
 }
 
 /** Fallback for WebKits without OffscreenCanvas in workers: encode a (small) thumbnail here. */

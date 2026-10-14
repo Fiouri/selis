@@ -5,6 +5,7 @@ pub mod device;
 pub mod library;
 pub mod open_with;
 pub mod pack;
+pub mod photos;
 pub mod picker;
 pub mod requests;
 pub mod save;

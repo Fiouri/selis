@@ -3,8 +3,10 @@
  * the password sheets and the result. Every operation that changes the file saves a new
  * version (Rust); the host (viewer or library) is told through `onSaved` and reloads.
  */
+import type { DocHandle } from "@selis/engine";
 import { create } from "zustand";
 import { ApiError, api, type Document, type ProtectionView, type ToolProblem, type ToolRequest } from "../../lib/api";
+import { upload } from "../../lib/save";
 import { clearThumbnailState, markThumbnailLocked } from "../library/thumbnails";
 
 /** Same floor as `.selispack` passphrases. */
@@ -14,13 +16,22 @@ export const MAX_PASSWORD_BYTES = 127;
 
 export type ToolKind = ToolRequest["kind"];
 
+/** The open document and page, when the Tools sheet comes from the viewer (page export, P4b). */
+export type PageContext = { readonly doc: DocHandle; readonly page: number; readonly title: string };
+
+export type ExportFormat = "png" | "jpeg";
+export const EXPORT_DPIS = [96, 150, 300] as const;
+export type ExportDpi = (typeof EXPORT_DPIS)[number];
+
 export type ToolsView =
   | { step: "menu" }
   | { step: "protect" }
   | { step: "unprotect"; wrong: boolean }
   | { step: "running"; kind: ToolKind }
   | { step: "compressed"; inputBytes: number; outputBytes: number }
-  | { step: "notSmaller"; inputBytes: number };
+  | { step: "notSmaller"; inputBytes: number }
+  | { step: "export" }
+  | { step: "exporting" };
 
 /** One-line outcomes shown as a toast (i18n keys under `tools.`). */
 export type ToolsNotice =
@@ -33,6 +44,8 @@ export type ToolsNotice =
   | "notApplicable"
   | "unsavedEdits"
   | "tooLarge"
+  | "exported"
+  | "exportFailed"
   | "failed";
 
 type ToolsState = {
@@ -42,7 +55,9 @@ type ToolsState = {
   notice: { key: ToolsNotice; error: boolean; seq: number } | null;
   /** The host reloads the document (a new version is current). */
   onSaved: ((document: Document) => void) | null;
-  open: (docId: string, onSaved: (document: Document) => void) => Promise<void>;
+  page: PageContext | null;
+  open: (docId: string, onSaved: (document: Document) => void, page?: PageContext) => Promise<void>;
+  exportPage: (format: ExportFormat, dpi: ExportDpi) => Promise<void>;
   close: () => void;
   show: (view: ToolsView) => void;
   run: (request: ToolRequest) => Promise<void>;
@@ -60,9 +75,10 @@ export const useTools = create<ToolsState>()((set, get) => ({
   view: { step: "menu" },
   notice: null,
   onSaved: null,
+  page: null,
 
-  open: async (docId, onSaved) => {
-    set({ docId, onSaved, protection: null, view: { step: "menu" } });
+  open: async (docId, onSaved, page) => {
+    set({ docId, onSaved, page: page ?? null, protection: null, view: { step: "menu" } });
     try {
       const protection = await api.documentProtection(docId);
       if (get().docId === docId) set({ protection });
@@ -73,8 +89,28 @@ export const useTools = create<ToolsState>()((set, get) => ({
   },
 
   close: () => {
-    if (get().view.step === "running") return;
-    set({ docId: null, protection: null, view: { step: "menu" }, onSaved: null });
+    const step = get().view.step;
+    if (step === "running" || step === "exporting") return;
+    set({ docId: null, protection: null, view: { step: "menu" }, onSaved: null, page: null });
+  },
+
+  exportPage: async (format, dpi) => {
+    const { page, view } = get();
+    if (!page || view.step === "exporting") return;
+    const notify = (key: ToolsNotice, error = false) => set({ notice: { key, error, seq: ++noticeSeq } });
+    set({ view: { step: "exporting" } });
+    try {
+      const image = await page.doc.exportPageImage(page.page, { dpi, format });
+      const ext = format === "png" ? "png" : "jpg";
+      const name = `${page.title} p${String(page.page + 1)}.${ext}`;
+      const shared = await api.shareExport(await upload(image.bytes), name, image.mime);
+      set({ docId: null, protection: null, view: { step: "menu" }, onSaved: null, page: null });
+      if (shared) notify("exported");
+    } catch (err) {
+      console.warn("selis: page export failed", err);
+      set({ view: { step: "export" } });
+      notify("exportFailed", true);
+    }
   },
 
   show: (view) => set({ view }),
@@ -83,7 +119,7 @@ export const useTools = create<ToolsState>()((set, get) => ({
     const { docId, view } = get();
     if (!docId || view.step === "running") return;
     const notify = (key: ToolsNotice, error = false) => set({ notice: { key, error, seq: ++noticeSeq } });
-    const finish = () => set({ docId: null, protection: null, view: { step: "menu" }, onSaved: null });
+    const finish = () => set({ docId: null, protection: null, view: { step: "menu" }, onSaved: null, page: null });
     set({ view: { step: "running", kind: request.kind } });
     let outcome;
     try {

@@ -58,7 +58,8 @@
             "$APPDATA/thumbs/*.png",
             "$APPDATA/thumbs/*.jpg",
             "$APPDATA/signatures/*.png",
-            "$APPDATA/work/stage/*.pdf"
+            "$APPDATA/work/stage/*.pdf",
+            "$APPDATA/work/stage/*.img"
           ],
           "requireLiteralLeadingDot": true
         }

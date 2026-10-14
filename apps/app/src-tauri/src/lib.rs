@@ -93,6 +93,9 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::pack::pick_pack::<tauri::Wry>,
         commands::tools::document_protection,
         commands::tools::run_tool,
+        commands::photos::pick_photos::<tauri::Wry>,
+        commands::photos::stage_photo::<tauri::Wry>,
+        commands::photos::share_export::<tauri::Wry>,
         commands::requests::take_result,
     ])
 }
@@ -105,6 +108,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(commands::open_with::init())
         .plugin(commands::share::init())
+        .plugin(commands::photos::init())
         .plugin(commands::transfer::init())
         .plugin(device_key::init())
         .invoke_handler(builder.invoke_handler())

@@ -7,6 +7,7 @@
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { createMockPack, PACK_COMMANDS } from "./mock-pack";
+import { createMockPhotos, PHOTO_COMMANDS } from "./mock-photos";
 import { createMockTools, TOOL_COMMANDS } from "./mock-tools";
 import { createMockTransfer, TRANSFER_COMMANDS } from "./mock-transfer";
 import type {
@@ -524,6 +525,24 @@ export function installMockIpc(): void {
     },
   });
   (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.tools = tools.hooks;
+  const photos = createMockPhotos({
+    fail,
+    runOnce,
+    file: (token) => files.get(token),
+    register: registerMockFile,
+    takeUpload: (uploadId) => {
+      const chunks = uploads.get(uploadId) ?? fail("notFound", uploadId);
+      uploads.delete(uploadId);
+      const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+      let at = 0;
+      for (const c of chunks) {
+        out.set(c, at);
+        at += c.length;
+      }
+      return out;
+    },
+  });
+  (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.photos = photos.hooks;
   mockIPC(async (cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     const id = String(args.id);
@@ -531,6 +550,7 @@ export function installMockIpc(): void {
     if (TRANSFER_COMMANDS.has(cmd)) return transfer.handle(cmd, args);
     if (PACK_COMMANDS.has(cmd)) return pack.handle(cmd, args);
     if (TOOL_COMMANDS.has(cmd)) return tools.handle(cmd, args);
+    if (PHOTO_COMMANDS.has(cmd)) return photos.handle(cmd, args);
     switch (cmd) {
       case "import_document":
         return runOnce(cmd, String(args.requestId), () =>

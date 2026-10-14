@@ -3,23 +3,25 @@
  * the document `useTools` holds. Mounted once (App); the viewer's ⋮ sheet and the library's
  * document menu open it with `useTools.getState().open(id, onSaved)`.
  */
+import { exportPixels } from "@selis/engine";
 import { Button, Switch } from "@selis/ui";
-import { ChevronDown, ChevronRight, Gauge, LockKeyhole, LockKeyholeOpen, Shrink, Wrench } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Gauge, Image, LockKeyhole, LockKeyholeOpen, Shrink, Wrench } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Sheet } from "../../components/Sheet";
 import { useToast } from "../../components/Toast";
+import { currentRenderLimits } from "../../lib/engine";
 import { formatBytes } from "../transfer/format";
 import { Busy, Card } from "../transfer/parts";
-import { MAX_PASSWORD_BYTES, MIN_PASSWORD, passwordBytes, useTools } from "./toolsStore";
+import { EXPORT_DPIS, type ExportDpi, type ExportFormat, MAX_PASSWORD_BYTES, MIN_PASSWORD, passwordBytes, useTools } from "./toolsStore";
 
 const row =
   "selis-focus flex min-h-14 w-full items-center gap-4 px-5 py-2 text-left text-md text-neutral-12 active:bg-neutral-3 disabled:active:bg-transparent";
 const field =
   "selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12";
 const icon = (Icon: typeof Wrench) => <Icon size={22} strokeWidth={1.75} className="text-neutral-11" aria-hidden="true" />;
-/** Rows block height (5 rows): the busy state keeps it, so the sheet does not jump. */
-const ROWS_MIN_HEIGHT = "min-h-[296px]";
+/** Rows block height (6 rows): the busy state keeps it, so the sheet does not jump. */
+const ROWS_MIN_HEIGHT = "min-h-[352px]";
 
 function ToolRow({
   label,
@@ -66,6 +68,7 @@ function ToolsMenu() {
   const { t } = useTranslation();
   const protection = useTools((s) => s.protection);
   const view = useTools((s) => s.view);
+  const hasPage = useTools((s) => s.page !== null);
   const show = useTools((s) => s.show);
   const run = useTools((s) => s.run);
   const close = useTools((s) => s.close);
@@ -150,6 +153,14 @@ function ToolsMenu() {
         onClick={() => void run({ kind: "repair" })}
         chevron={false}
         testId="tool-repair"
+      />
+      <ToolRow
+        label={t("tools.exportImage")}
+        reason={hasPage ? null : t("tools.reasonNoPage")}
+        glyph={icon(Image)}
+        onClick={() => show({ step: "export" })}
+        chevron
+        testId="tool-export-image"
       />
     </ul>
   );
@@ -348,6 +359,110 @@ function UnprotectForm() {
   );
 }
 
+function RadioRows<T extends string | number>({
+  label,
+  options,
+  value,
+  onChange,
+  testId,
+}: {
+  label: string;
+  options: readonly { value: T; label: string; note: string | null; disabled: boolean }[];
+  value: T;
+  onChange: (value: T) => void;
+  testId: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[13px] font-medium text-neutral-11">{label}</span>
+      <div role="radiogroup" aria-label={label} className="flex flex-col overflow-hidden rounded-[14px] border border-neutral-5" data-testid={testId}>
+        {options.map((option, i) => (
+          <button
+            key={String(option.value)}
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            disabled={option.disabled}
+            onClick={() => onChange(option.value)}
+            className={`selis-focus flex min-h-12 items-center justify-between gap-3 px-4 text-left text-md text-neutral-12 disabled:opacity-50 ${i > 0 ? "border-t border-neutral-5" : ""}`}
+            data-testid={`${testId}-${String(option.value)}`}
+          >
+            <span className="flex flex-col">
+              <span>{option.label}</span>
+              {option.note ? <span className="text-[13px] text-neutral-11">{option.note}</span> : null}
+            </span>
+            {value === option.value ? <Check size={20} strokeWidth={2} aria-hidden="true" className="text-accent-11" /> : null}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExportSheet() {
+  const { t } = useTranslation();
+  const step = useTools((s) => s.view.step);
+  const page = useTools((s) => s.page);
+  const show = useTools((s) => s.show);
+  const exportPage = useTools((s) => s.exportPage);
+  const open = page !== null && (step === "export" || step === "exporting");
+  const [format, setFormat] = useState<ExportFormat>("png");
+  const [chosen, setDpi] = useState<ExportDpi | null>(null);
+  const size = page ? page.doc.pages[page.page] : undefined;
+  const maxPixels = currentRenderLimits().maxBitmapPixels;
+  const fits = (dpi: ExportDpi) => {
+    if (!size) return false;
+    const px = exportPixels(size, dpi);
+    return px.width * px.height <= maxPixels;
+  };
+  const best = [...EXPORT_DPIS].reverse().find((d) => d <= 150 && fits(d)) ?? EXPORT_DPIS[0];
+  const dpi = chosen !== null && fits(chosen) ? chosen : best;
+  const px = size ? exportPixels(size, dpi) : null;
+  const dpiLabel = { 96: "tools.dpi96", 150: "tools.dpi150", 300: "tools.dpi300" } as const;
+  return (
+    <Sheet open={open} onClose={() => show({ step: "menu" })} title={t("tools.exportTitle")} testId="tools-export-sheet">
+      <div className="flex flex-col gap-3 px-5 pb-5">
+        <RadioRows
+          label={t("tools.format")}
+          options={[
+            { value: "png" as const, label: t("tools.png"), note: null, disabled: false },
+            { value: "jpeg" as const, label: t("tools.jpeg"), note: null, disabled: false },
+          ]}
+          value={format}
+          onChange={setFormat}
+          testId="tools-format"
+        />
+        <RadioRows
+          label={t("tools.resolution")}
+          options={EXPORT_DPIS.map((d) => ({
+            value: d,
+            label: t(dpiLabel[d]),
+            note: fits(d) ? null : t("tools.tooLargeHere"),
+            disabled: !fits(d),
+          }))}
+          value={dpi}
+          onChange={setDpi}
+          testId="tools-dpi"
+        />
+        {page && px ? (
+          <p className="text-[13px] text-neutral-11 tabular-nums" data-testid="tools-export-pixels">
+            {t("tools.pixels", { page: page.page + 1, width: px.width, height: px.height })}
+          </p>
+        ) : null}
+        {step === "exporting" ? (
+          <div className="flex h-12 items-center justify-center">
+            <Busy label={t("tools.exporting")} testId="tools-exporting" />
+          </div>
+        ) : (
+          <Button onClick={() => void exportPage(format, dpi)} data-testid="tools-export-save">
+            {t("tools.save")}
+          </Button>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
 /** Mounted once: the Tools sheet, its password sheets, and its notices as toasts. */
 export function ToolsSheets() {
   const { t } = useTranslation();
@@ -364,7 +479,7 @@ export function ToolsSheets() {
     useToast.getState().show(t(`tools.notice.${notice.key}`), notice.error ? "error" : "info");
   }, [notice, t]);
 
-  const menuOpen = docId !== null && step !== "protect" && step !== "unprotect";
+  const menuOpen = docId !== null && step !== "protect" && step !== "unprotect" && step !== "export" && step !== "exporting";
   return (
     <>
       <Sheet open={menuOpen} onClose={close} title={t("tools.title")} testId="tools-sheet">
@@ -372,6 +487,7 @@ export function ToolsSheets() {
       </Sheet>
       <ProtectSheet />
       <UnprotectSheet />
+      <ExportSheet />
     </>
   );
 }

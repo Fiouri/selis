@@ -43,3 +43,25 @@ Found on the S23 by this check: the fixture, compressed (object streams) and the
 made `qpdf --check` warn about the outline hint table — qpdf 12.4 itself does the same from its
 command line. Linearize now writes without object streams (ADR 0015); a Rust regression test
 (100 pages with an outline, checked by the qpdf CLI) covers it.
+
+## P4b — images to PDF, page as image (2026-10-14)
+
+`images.yaml` + `images.sh` (debug builds): 20 phone-like photos (4000×3000, textured, ~4.3 MB
+each, 85.8 MB in all; EXIF orientation 1–8, camera make/model/date, GPS, XMP, IPTC, a comment)
+pushed to Pictures/SelisTest and picked in the system photo picker (`com.google.android.photopicker`,
+no storage permission) ten at a time; "Fit image"; then page 1 saved as PNG (150 dpi).
+
+| Device | RSS around "Create PDF" (`dumpsys meminfo`, ~0.7 s samples) | PDF |
+| --- | --- | --- |
+| Galaxy S23 | 383 → 470 MB (+86 MB); a second run 377 → 563 MB (+186 MB) | 20 pages, 85.8 MB: the JPEG data as it was (no re-encoding) |
+| AVD `selis-midrange-api36` (3 GB) | 312 → 385 MB (+73 MB); a second run 318 → 385 MB (+67 MB) | same |
+
+Every PDF passes `qpdf --check`, and none of the planted metadata (EXIF, GPS, XMP, IPTC, the
+comment, maker strings) is in it, raw or inflated (`images-check.ts`); the stage is empty after.
+The peak follows the photos' total size (PDFium holds the JPEG data, then the saved PDF goes up in
+3 MB chunks), not their pixel count: nothing is decoded except the 240 px grid thumbnails.
+
+Found on the devices: the asset protocol scope did not include the staged photos
+(`work/stage/*.img`), so the grid had no thumbnails and "Create PDF" failed — the mock (blob URLs)
+could not show it. The two photo picker versions differ: the S23's marks a selected photo
+"Selected Photo taken on …", the AVD's does not (`pick-ten-photos.yaml` handles both).

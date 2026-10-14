@@ -38,6 +38,19 @@ pub const MAX_CHUNK_BYTES: usize = 8 * 1024 * 1024;
 /// Largest document accepted for saving (offsets travel over IPC as `u32`).
 pub const MAX_UPLOAD_BYTES: u64 = u32::MAX as u64;
 const MAX_UPLOAD_ID_LEN: usize = 64;
+/// Largest picked image accepted for images → PDF.
+pub const MAX_STAGED_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// JPEG, PNG, WebP, GIF, HEIF/HEIC/AVIF (ISO BMFF `ftyp`), BMP.
+pub(crate) fn looks_like_image(head: &[u8]) -> bool {
+    head.starts_with(&[0xff, 0xd8, 0xff])
+        || head.starts_with(b"\x89PNG\r\n\x1a\n")
+        || (head.len() >= 12 && &head[..4] == b"RIFF" && &head[8..12] == b"WEBP")
+        || head.starts_with(b"GIF87a")
+        || head.starts_with(b"GIF89a")
+        || (head.len() >= 12 && &head[4..8] == b"ftyp")
+        || head.starts_with(b"BM")
+}
 
 /// How a version came to be.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,12 +137,33 @@ impl Library {
         Ok(dest)
     }
 
+    /// Copies a picked image into the stage (images → PDF, P4b) and returns its absolute path
+    /// (read by the WebView through the asset protocol, then `unstage`d). Only the image
+    /// formats the app can use are accepted (JPEG, PNG, WebP, GIF, HEIF/HEIC, BMP), up to
+    /// `MAX_STAGED_IMAGE_BYTES`.
+    pub fn stage_image(&self, reader: impl Read) -> Result<PathBuf> {
+        let dir = self.root.join(STAGE_DIR);
+        let tmp = HashedTempFile::from_reader(&dir, reader.take(MAX_STAGED_IMAGE_BYTES + 1))?;
+        if tmp.size_bytes == 0 {
+            return Err(Error::EmptyFile);
+        }
+        if tmp.size_bytes > MAX_STAGED_IMAGE_BYTES {
+            return Err(Error::InvalidArgument("image too large"));
+        }
+        if !looks_like_image(&tmp.head) {
+            return Err(Error::InvalidArgument("not an image"));
+        }
+        let dest = dir.join(format!("{}.img", Uuid::now_v7()));
+        tmp.persist(&dest)?;
+        Ok(dest)
+    }
+
     /// Removes a staged file once it has been read. Only files in the stage go. Idempotent.
     pub fn unstage(&self, path: &str) -> Result<()> {
         let path = Path::new(path);
         let dir = self.root.join(STAGE_DIR);
-        let inside =
-            path.parent().is_some_and(|p| p == dir) && path.extension().is_some_and(|e| e == "pdf");
+        let inside = path.parent().is_some_and(|p| p == dir)
+            && path.extension().is_some_and(|e| e == "pdf" || e == "img");
         if !inside {
             return Err(Error::InvalidArgument("not a staged file"));
         }
@@ -195,6 +229,20 @@ impl Library {
             .and_then(|_| file.set_len(end))
             .map_err(|e| Error::io(&path, e))?;
         Ok(end)
+    }
+
+    /// Moves a finished upload (e.g. an exported page image) to `dest` (fsync, rename) and
+    /// returns its size. The upload is gone afterwards.
+    pub fn move_upload(&self, upload_id: &str, dest: &Path) -> Result<u64> {
+        let path = self.upload_path(upload_id)?;
+        let size = std::fs::metadata(&path)
+            .map_err(|e| Error::io(&path, e))?
+            .len();
+        if size == 0 {
+            return Err(Error::EmptyFile);
+        }
+        rename_durable(&path, dest)?;
+        Ok(size)
     }
 
     /// Drops an upload that will not be committed.
@@ -687,6 +735,30 @@ mod tests {
             std::fs::read(&path).map_err(|e| Error::io(&path, e))?,
             pdf("b")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn images_are_staged_and_unstaged_other_files_refused() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let jpeg = [0xff, 0xd8, 0xff, 0xe0, 0, 16, b'J', b'F', b'I', b'F', 0];
+        let staged = lib.stage_image(&jpeg[..])?;
+        assert_eq!(staged.extension().and_then(|e| e.to_str()), Some("img"));
+        assert_eq!(
+            std::fs::read(&staged).map_err(|e| Error::io(&staged, e))?,
+            jpeg
+        );
+        let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+        lib.stage_image(&png[..])?;
+        assert!(matches!(
+            lib.stage_image(&b"%PDF-1.7\n"[..]),
+            Err(Error::InvalidArgument(_))
+        ));
+        assert!(matches!(lib.stage_image(&b""[..]), Err(Error::EmptyFile)));
+        lib.unstage(&staged.to_string_lossy())?;
+        assert!(!staged.exists());
+        // Only stage files go.
+        assert!(lib.unstage("/etc/passwd").is_err());
         Ok(())
     }
 }

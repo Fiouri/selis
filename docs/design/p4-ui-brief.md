@@ -12,9 +12,10 @@ no layout shift (fixed-height placeholders while busy).
   "Rotate view", chevron right → opens the Tools sheet for the open document.
 - **Library document menu** (long-press / ⋮ on a card): a row "Tools" in the same position style
   as "Share" → the same Tools sheet, without opening the viewer.
-- **Library FAB menu**: the "Import PDF" FAB keeps its action; images and scanning come in P4b/P4c
-  as rows of a small sheet the FAB opens once there is more than one way to add ("Import PDF",
-  "Images to PDF", "Scan"). Precedent: document menu sheet.
+- **Library**: the "Import PDF" FAB keeps its action (every flow and habit relies on it). A small
+  secondary FAB above it (48×48, radius 16, `--surface-raised`, 1 px `--neutral-5`, icon
+  `ImagePlus`, label "Images to PDF") opens the photo picker; P4c stacks "Scan" the same way. The
+  empty library offers "Images to PDF" as a ghost button under "Import PDF".
 
 ## 1. Tools sheet (P4a; rows added by P4b–P4d)
 
@@ -28,7 +29,7 @@ second sheet). Title "Tools" / "Εργαλεία".
 | Compress | `Shrink` | Make the file smaller | Μείωση μεγέθους | P4a | runs, then result card |
 | Linearize | `Gauge` | Optimise for fast web view | Βελτιστοποίηση για γρήγορη προβολή | P4a | runs, then toast |
 | Repair | `Wrench` | Repair the file | Επισκευή αρχείου | P4a | runs, then toast |
-| Export image | `Image` | Save page as image | Αποθήκευση σελίδας ως εικόνα | P4b | Export image sheet |
+| Export image | `Image` | Save page as image | Αποθήκευση σελίδας ως εικόνα | P4b | Export image sheet (viewer only; from the library: disabled, "Open the document to choose a page") |
 | OCR | `ScanText` | Make text searchable | Αναζήτηση στο κείμενο (OCR) | P4d | OCR sheet |
 
 - Rows that do not apply are not hidden (no layout shift) but disabled with a one-line reason
@@ -89,11 +90,12 @@ Precedent: the pack import result card (`Card` with title, centred count line, a
 Precedent: the Transfer "Choose documents" list (rows with a checkbox) and the Pages grid
 (3-column thumbnails, long-press drag to reorder).
 
-- From the FAB sheet "Images to PDF": the system photo picker (Android photo picker / iOS
-  PHPicker, multi-select, no storage permission). Then a screen "Images to PDF" (detail top
-  bar): 3-column grid of the picked images (reorder by long-press drag, remove by the ✕ badge
-  44×44), segmented control "Page size": "Fit image" / "A4" / "Letter" (default Fit image),
-  primary "Create PDF". Progress `Busy` "Creating the PDF…". Result: the new document opens in
+- From the "Images to PDF" button: the system photo picker (Android photo picker / iOS
+  PHPicker, multi-select, no storage permission). Then a full-screen "Images to PDF" (top bar:
+  close, title, count, "Add photos"): 3-column grid of 240 px thumbnails; each tile has ✕
+  (remove, 44×44) and ‹ › (move earlier / later, 44×44) — buttons rather than drag over a
+  scrolling photo grid. Footer: segmented control "Page size": "Fit image" / "A4" / "Letter"
+  (default Fit image), the privacy line, primary "Create PDF". Progress `Busy` "Creating the PDF…". Result: the new document opens in
   the viewer. Location and other photo metadata are never copied (stated in the screen's help
   line: "Photo details such as location are not copied.").
 
@@ -102,9 +104,9 @@ Precedent: the Transfer "Choose documents" list (rows with a checkbox) and the P
 Precedent: the pack export sheet (radio group + primary button).
 
 - Sheet "Save page as image": radio "PNG" / "JPEG"; radio "Resolution": "Screen (96 dpi)",
-  "Print (150 dpi)", "High (300 dpi)" — options above the device cap are disabled with
+  "Print (150 dpi)" (default), "High (300 dpi)" — options above the device cap are disabled with
   "Too large for this device" (cap = the adaptive render limits). Line "Page 3 · 2480 × 3508 px".
-  Primary "Save" → share sheet (Android/iOS) or save dialog (desktop).
+  Primary "Save" → share sheet (Android) or save dialog (desktop); toast "Page saved as an image."
 
 ## 7. Scan (P4c)
 

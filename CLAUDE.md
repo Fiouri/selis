@@ -120,6 +120,11 @@ Tier 2 — end of every feature:
   reopen with the password, editing off, remove it (wrong first); compress / optimise / repair the
   1000-page fixture; every version pulled from the device passes the host's `qpdf --check` and
   pdf.js, page content streams kept, work folder empty; prints the RSS around the compress).
+  And `images.yaml` with `PRE_RUN="…/images.sh pre"` and `POST_RUN="…/images.sh check"` (P4b: 20
+  phone-like photos with EXIF/GPS pushed and picked in the system photo picker, ten at a time
+  (`pick-ten-photos.yaml` handles both picker versions); one 20-page PDF that passes qpdf and has
+  no photo metadata; a page saved as PNG through the share sheet; stage empty; prints the RSS
+  around "Create PDF").
   run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro
