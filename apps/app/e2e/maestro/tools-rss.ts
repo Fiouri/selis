@@ -2,8 +2,9 @@
  * RSS around the compress in tools.yaml: `node tools-rss.ts <rss.log> <maestro tests dir>`.
  * rss.log has "<epoch ms> <TOTAL RSS kB>" lines (tools.sh samples dumpsys meminfo); Maestro's
  * commands.json gives when "Make the file smaller" was tapped and when its result showed.
- * Prints the RSS just before (median of the 5 s before the tap), the peak until the result and
- * the difference.
+ * Prints the RSS just before (median of the 5 s before the tap), the peak from the tap until 1 s
+ * after the result (samples come every ~0.7 s; the S23 compresses the fixture faster) and the
+ * difference.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -20,10 +21,12 @@ const newest = readdirSync(root)
 if (newest === undefined) throw new Error(`no "${flow}" run under ${root}`);
 const commands = JSON.parse(readFileSync(newest, "utf8")) as Command[];
 const label = (c: Command) => Object.values(c.command)[0]?.label;
-const compress = commands.find((c) => label(c) === "RSS compress");
-if (compress === undefined) throw new Error("no step labelled RSS compress");
-const start = compress.metadata.timestamp;
-const end = start + compress.metadata.duration;
+const at = commands.findIndex((c) => label(c) === "RSS compress");
+const wait = commands[at];
+const tap = commands[at - 1];
+if (wait === undefined || tap === undefined) throw new Error("no step labelled RSS compress");
+const start = tap.metadata.timestamp;
+const end = wait.metadata.timestamp + wait.metadata.duration + 1_000;
 const samples = readFileSync(log, "utf8")
   .split("\n")
   .map((l) => l.trim().split(/\s+/).map(Number))

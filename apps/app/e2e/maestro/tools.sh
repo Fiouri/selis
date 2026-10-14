@@ -30,6 +30,8 @@ case "$mode" in
     mkdir -p "$state"
     [ -f "$state/sampler.pid" ] && kill "$(cat "$state/sampler.pid")" 2>/dev/null || true
     adb -s "$serial" shell pm clear "$app" >/dev/null
+    # A picker left in selection mode by an earlier run would select instead of open.
+    adb -s "$serial" shell am force-stop com.google.android.documentsui
     : > "$state/rss.log"
     # At most 15 minutes: POST_RUN (which stops it) does not run after a failed flow.
     (

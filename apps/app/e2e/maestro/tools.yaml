@@ -29,8 +29,7 @@ name: Selis tools (qpdf)
 - tapOn: "Password again"
 - inputText: "correct horse"
 - hideKeyboard
-- tapOn:
-    id: "tools-protect-submit"
+- tapOn: "Protect"
 - extendedWaitUntil:
     visible: "This document is protected"
     timeout: 30000
@@ -39,16 +38,14 @@ name: Selis tools (qpdf)
 - tapOn: "Password"
 - inputText: "wrong horse"
 - hideKeyboard
-- tapOn:
-    id: "unlock-submit"
+- tapOn: "Open"
 - extendedWaitUntil:
     visible: "Wrong password."
     timeout: 15000
 - tapOn: "Password"
 - inputText: "correct horse"
 - hideKeyboard
-- tapOn:
-    id: "unlock-submit"
+- tapOn: "Open"
 - extendedWaitUntil:
     visible: "Page 1 of 2"
     timeout: 20000
@@ -66,16 +63,14 @@ name: Selis tools (qpdf)
 - tapOn: "Current password"
 - inputText: "wrong horse"
 - hideKeyboard
-- tapOn:
-    id: "tools-unprotect-submit"
+- tapOn: "Remove"
 - extendedWaitUntil:
     visible: "Wrong password."
     timeout: 15000
 - tapOn: "Current password"
 - inputText: "correct horse"
 - hideKeyboard
-- tapOn:
-    id: "tools-unprotect-submit"
+- tapOn: "Remove"
 - extendedWaitUntil:
     visible: "Saved as a new version."
     timeout: 30000
@@ -101,8 +96,7 @@ name: Selis tools (qpdf)
       id: "tools-done"
     timeout: 120000
     label: "RSS compress"
-- tapOn:
-    id: "tools-done"
+- tapOn: "Done"
 - extendedWaitUntil:
     visible: "Page 1 of 1000"
     timeout: 30000
