@@ -96,6 +96,12 @@ EOF
 restore() {
   adb -s "$serial" shell wm size reset || true
   adb -s "$serial" shell am broadcast -a com.android.systemui.demo -e command exit > /dev/null || true
+  # The samples must not stay in the picker's Recent list: the other flows pick fixtures by name.
+  for f in "$samples"/*.pdf; do
+    name="$(basename "$f")"
+    adb -s "$serial" shell rm -f "\"/sdcard/Download/selis-samples/$lang/$name\"" > /dev/null || true
+    adb -s "$serial" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE       -d "\"file:///sdcard/Download/selis-samples/$lang/$name\"" > /dev/null || true
+  done
 }
 trap restore EXIT
 adb -s "$serial" shell wm size 1080x1920
