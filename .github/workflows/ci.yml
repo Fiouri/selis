@@ -35,8 +35,10 @@ jobs:
           # qpdf checks the files the engine writes (unit tests, @selis/fixtures/oracle).
           sudo apt-get install -y qpdf
 
-      - name: Rust toolchain (rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
+      - name: Rust toolchain (rust-toolchain.toml) + WebAssembly target (scan module, ADR 0016)
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
 
@@ -50,6 +52,8 @@ jobs:
       - name: Build the frontend (required by tauri::generate_context!)
         run: npm run build:web -w @selis/app
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: clippy for the scan module's WebAssembly ABI (crates/selis-scan/src/wasm.rs)
+        run: cargo clippy -p selis-scan --target wasm32-unknown-unknown -- -D warnings
       - run: cargo test --workspace
       - name: Generated IPC bindings are up to date
         run: git diff --exit-code -- apps/app/src/lib/ipc/bindings.ts
@@ -95,7 +99,7 @@ jobs:
       - name: Rust toolchain + Android targets
         run: |
           rustup show active-toolchain || rustup toolchain install
-          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android wasm32-unknown-unknown
       # qpdf-sys runs bindgen for Android (ADR 0015): libclang; the NDK clang comes from scripts/tauri.ts.
       - name: libclang for bindgen
         run: sudo apt-get update -q && sudo apt-get install -y -q libclang-dev
@@ -131,7 +135,7 @@ jobs:
       - name: Rust toolchain + iOS simulator target
         run: |
           rustup show active-toolchain || rustup toolchain install
-          rustup target add aarch64-apple-ios-sim
+          rustup target add aarch64-apple-ios-sim wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
       # gen/apple is committed (generated on macOS; it cannot be generated on Windows).
@@ -157,7 +161,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - name: Rust toolchain
-        run: rustup show active-toolchain; if ($LASTEXITCODE -ne 0) { rustup toolchain install }
+        run: |
+          rustup show active-toolchain; if ($LASTEXITCODE -ne 0) { rustup toolchain install }
+          rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: npm ci
       - run: npm run tauri -- build --no-bundle

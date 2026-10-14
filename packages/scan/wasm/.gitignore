@@ -1,0 +1,2 @@
+# Built by scripts/build-scan-wasm.ts (npm pre-scripts)
+*.wasm

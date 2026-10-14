@@ -124,7 +124,12 @@ Tier 2 — end of every feature:
   phone-like photos with EXIF/GPS pushed and picked in the system photo picker, ten at a time
   (`pick-ten-photos.yaml` handles both picker versions); one 20-page PDF that passes qpdf and has
   no photo metadata; a page saved as PNG through the share sheet; stage empty; prints the RSS
-  around "Create PDF").
+  around "Create PDF"). And `scan.yaml` with `PRE_RUN="…/scan.sh pre"` and
+  `POST_RUN="…/scan.sh check"` (P4c: five pages through the camera — the AVD's virtual scene,
+  the S23's real camera — with each filter, one 5-page PDF that passes qpdf and pdf.js; prints
+  the live-detection stats and, on a real device, fails under 10 fps or on a UI frame gap over
+  200 ms). The scan module is Rust → WebAssembly (`crates/selis-scan`, ADR 0016), built by
+  `npm run build:scan` (npm pre-scripts; needs `rustup target add wasm32-unknown-unknown`).
   run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro

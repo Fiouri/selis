@@ -1,0 +1,9 @@
+[
+  { "file": "letter-wood.jpg", "corners": [[150, 140], [760, 190], [800, 1040], [95, 1010]], "source": "make-samples (synthetic)" },
+  { "file": "letter-granite-steep.jpg", "corners": [[250, 230], [650, 220], [860, 1130], [40, 1150]], "source": "make-samples (synthetic)" },
+  { "file": "table-fabric-rotated.jpg", "corners": [[230, 90], [830, 260], [650, 1110], [60, 930]], "source": "make-samples (synthetic)" },
+  { "file": "table-lightgrey-lowcontrast.jpg", "corners": [[110, 120], [790, 100], [820, 1080], [90, 1100]], "source": "make-samples (synthetic)" },
+  { "file": "receipt-wood.jpg", "corners": [[300, 110], [610, 140], [580, 1120], [250, 1090]], "source": "make-samples (synthetic)" },
+  { "file": "letter-fabric-shadow.jpg", "corners": [[120, 200], [780, 150], [840, 1100], [60, 1060]], "source": "make-samples (synthetic)" },
+  { "file": "avd-virtual-scene-tv.jpg", "corners": [[589, 463], [973, 391], [954, 766], [588, 722]], "source": "Android emulator virtual scene camera (selis-midrange-api36), screen capture of the preview; corners checked by eye against the outline drawn by examples/scan-debug" }
+]

@@ -72,6 +72,7 @@ const APP_COMMANDS: &[&str] = &[
     "pick_photos",
     "stage_photo",
     "share_export",
+    "open_app_settings",
     "take_result",
 ];
 

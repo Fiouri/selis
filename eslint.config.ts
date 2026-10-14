@@ -35,6 +35,8 @@ export default defineConfig(
           "./packages/engine/tsconfig.json",
           "./packages/engine/tsconfig.worker.json",
           "./packages/fixtures/tsconfig.json",
+          "./packages/scan/tsconfig.json",
+          "./packages/scan/tsconfig.worker.json",
           "./packages/ui/tsconfig.json",
         ],
         tsconfigRootDir: import.meta.dirname,

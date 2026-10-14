@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/selis-core", "crates/selis-pdfops", "crates/selis-transfer", "apps/app/src-tauri"]
+members = ["crates/selis-core", "crates/selis-pdfops", "crates/selis-scan", "crates/selis-transfer", "apps/app/src-tauri"]
 exclude = ["crates/selis-transfer/fuzz"]
 
 [workspace.package]
@@ -54,4 +54,19 @@ opt-level = 3
 opt-level = 3
 
 [profile.dev.package.blake3]
+opt-level = 3
+
+# The scan module (WebAssembly, ADR 0016): speed over size.
+[profile.wasm]
+inherits = "release"
+opt-level = 3
+
+# The scan tests straighten real-size photos: keep them quick unoptimized.
+[profile.dev.package.imageproc]
+opt-level = 3
+
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.selis-scan]
 opt-level = 3

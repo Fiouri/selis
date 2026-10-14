@@ -31,7 +31,12 @@ export default defineConfig({
   },
   projects: [
     { name: "pixel-7", use: { ...devices["Pixel 7"] }, testIgnore: ["**/visual.spec.ts", "**/transfer-camera.spec.ts"] },
-    { name: "iphone-15", use: { ...devices["iPhone 15"] }, testIgnore: ["**/visual.spec.ts", "**/transfer-camera.spec.ts"] },
+    {
+      name: "iphone-15",
+      use: { ...devices["iPhone 15"] },
+      // Playwright's WebKit has no MediaStream: the fake scan camera needs Chromium.
+      testIgnore: ["**/visual.spec.ts", "**/transfer-camera.spec.ts", "**/scan.spec.ts"],
+    },
     {
       // QR scanning with a camera that films the fixture code (Chromium's fake capture).
       name: "camera",

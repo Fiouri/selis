@@ -1,0 +1,67 @@
+# Document scan on Android (P4c, ADR 0016): five pages through the back camera (AVD: the
+# emulator's virtual scene; S23: whatever the camera sees — where no page is found the default
+# outline is used), each kept with a filter, then "Save as PDF" → one 5-page document in the
+# viewer. The camera permission is granted on first use (pm clear in scan.sh pre).
+# PRE_RUN="apps/app/e2e/maestro/scan.sh pre" POST_RUN="apps/app/e2e/maestro/scan.sh check".
+# Debug build (run-as). Run with ./run.sh.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis scan
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Scan a document"
+# WebView getUserMedia → the system camera permission dialog (first use only).
+- runFlow:
+    when:
+      visible: "While using the app"
+    commands:
+      - tapOn: "While using the app"
+- extendedWaitUntil:
+    visible:
+      text: "Take a photo of the page"
+      enabled: true
+    timeout: 30000
+# Let live detection run a while before the first capture (scan.sh reads its rate).
+- extendedWaitUntil:
+    visible: "never shown, waits five seconds"
+    timeout: 5000
+    optional: true
+- runFlow:
+    file: scan-page.yaml
+    env:
+      FILTER: "Original"
+      COUNT: "1 page"
+- runFlow:
+    file: scan-page.yaml
+    env:
+      FILTER: "Grey"
+      COUNT: "2 pages"
+- runFlow:
+    file: scan-page.yaml
+    env:
+      FILTER: "Black & white"
+      COUNT: "3 pages"
+- runFlow:
+    file: scan-page.yaml
+    env:
+      FILTER: "Original"
+      COUNT: "4 pages"
+- runFlow:
+    file: scan-page.yaml
+    env:
+      FILTER: "Black & white"
+      COUNT: "5 pages"
+- tapOn: "See the 5 scanned pages"
+- extendedWaitUntil:
+    visible: "Scanned pages"
+    timeout: 10000
+- tapOn: "Move page 2 earlier"
+- tapOn: "Save as PDF"
+- extendedWaitUntil:
+    visible: 'Page \d+ of 5.*'
+    timeout: 120000
+- back
+- assertVisible: "Import PDF"
