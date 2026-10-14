@@ -249,12 +249,12 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
             <button
               type="button"
               className="selis-focus relative size-11 overflow-hidden rounded-[8px] border border-[#ffffff]/40"
-              aria-label={t("scan.openQueue", { count: pages.length })}
               onClick={showQueue}
               data-testid="scan-queue-open"
             >
+              <span className="sr-only">{t("scan.openQueue", { count: pages.length })}</span>
               <img src={last.thumb} alt="" className="size-full object-cover" />
-              <span className="absolute -top-0 -right-0 min-w-5 rounded-bl-[6px] bg-accent-9 px-1 text-[12px] font-semibold text-accent-contrast tabular-nums">
+              <span className="absolute -top-0 -right-0 min-w-5 rounded-bl-[6px] bg-accent-9 px-1 text-[12px] font-semibold text-accent-contrast tabular-nums" aria-hidden="true">
                 {pages.length}
               </span>
             </button>
@@ -263,11 +263,12 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
         <button
           type="button"
           className="selis-focus flex size-[72px] items-center justify-center rounded-full border-4 border-[#ffffff] disabled:opacity-40"
-          aria-label={t("scan.shutter")}
           onClick={() => void onShutter()}
           disabled={status !== "live" || capturing || !client}
           data-testid="scan-shutter"
         >
+          {/* A visually hidden name, not aria-label: device tests find the button by its text. */}
+          <span className="sr-only">{t("scan.shutter")}</span>
           <span className="size-[56px] rounded-full bg-[#ffffff]" aria-hidden="true" />
         </button>
         <div className="flex size-11 items-center justify-center">

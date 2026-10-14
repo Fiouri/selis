@@ -6,7 +6,7 @@
 #
 # pre:   Selis cleared (empty library, camera permission not yet granted).
 # check: the one library document: 5 pages, qpdf --check, pdf.js, no photo metadata
-#        (images-check.ts); the live-detection stats the app printed (`[selis:perf] scan …`, one
+#        (scan-check.ts: no metadata segment in any page JPEG); the live-detection stats the app printed (`[selis:perf] scan …`, one
 #        line per camera session): on a real device every session must reach 10 detections a
 #        second with no animation-frame gap over 200 ms; on an emulator they are reported only.
 # Needs a debuggable build (run-as), qpdf on the host.
@@ -36,7 +36,7 @@ case "$mode" in
       status=1
     else
       adb -s "$serial" exec-out run-as "$app" cat "library/$files" > "$state/scan.pdf"
-      (cd "$here" && node images-check.ts "$(win "$state/scan.pdf")" 5) || status=1
+      (cd "$here" && node scan-check.ts "$(win "$state/scan.pdf")" 5) || status=1
     fi
     adb -s "$serial" logcat -d | tr -d '\r' | grep -o '\[selis:perf\] scan.*' > "$state/perf.log" || true
     cat "$state/perf.log"

@@ -3,11 +3,10 @@ appId: com.anywecon.selis
 ---
 - extendedWaitUntil:
     visible:
-      id: "scan-shutter"
+      text: "Take a photo of the page"
       enabled: true
     timeout: 30000
-- tapOn:
-    id: "scan-shutter"
+- tapOn: "Take a photo of the page"
 - extendedWaitUntil:
     visible: "Adjust corners"
     timeout: 60000

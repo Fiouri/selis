@@ -36,12 +36,22 @@ type ImageCaptureLike = {
 };
 type ImageCaptureCtor = new (track: MediaStreamTrack) => ImageCaptureLike;
 
-/** The photo size to ask for: the sensor's largest, scaled to at most `maxPixels`. */
+/** A sensor maximum up to this many times the device's pixel cap is taken as it is. */
+const FULL_SIZE_FACTOR = 2.5;
+
+/**
+ * The photo size to ask for. Cameras take only the sizes they support and map any other
+ * request to the nearest one, whatever its shape (the Galaxy S23 turns 3265 × 2449 into
+ * 3000 × 3000, cutting off the sides): so the sensor's maximum, an exact size, is asked for
+ * and the worker scales it down to the device's cap; only far larger sensors get a scaled
+ * request.
+ */
 export function photoSize(caps: PhotoCapabilities, maxPixels: number): { imageWidth: number; imageHeight: number } | null {
   const w = caps.imageWidth?.max;
   const h = caps.imageHeight?.max;
   if (!w || !h) return null;
-  const scale = Math.min(1, Math.sqrt(maxPixels / (w * h)));
+  if (w * h <= maxPixels * FULL_SIZE_FACTOR) return { imageWidth: w, imageHeight: h };
+  const scale = Math.sqrt(maxPixels / (w * h));
   const step = caps.imageWidth?.step && caps.imageWidth.step > 0 ? caps.imageWidth.step : 1;
   const imageWidth = Math.max(caps.imageWidth?.min ?? 1, Math.floor((w * scale) / step) * step);
   return { imageWidth, imageHeight: Math.round((imageWidth * h) / w) };
