@@ -10,3 +10,5 @@ cleanups. Not part of any build or check.
   inside the Selis WebView over DevTools, and its S23 / AVD results. The OpenCV.js build (5 MB,
   emsdk + a patched OpenCV 4.12 with `-sDYNAMIC_EXECUTION=0`) and the `.wasm` builds are not
   kept; `run-device.mjs <serial> <port> <scan.wasm>` expects them next to it.
+- `p4d-ocr-memory/` — docs/spike-p4.md (P4d follow-up): `ocr.sh`'s memory samples before and after
+  the grey render, one line per sample: `<epoch ms> <app PSS> <renderer PSS> <app RSS> <renderer RSS>` (kB).

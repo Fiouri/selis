@@ -67,8 +67,11 @@ version. Languages Greek + English by default, overridable.
   pdf.js reads 98.0 % / 96.2 % of the Greek words and ≥ 95 % of the English ones after OCR
   (Node test with the real PDFium and Tesseract; the same on devices, `ocr.yaml`). Known
   tessdata_fast misreads: `ΐ` as polytonic `ῖ`, the article `το` as Latin `TO`.
-- Memory: Tesseract's worker grows to a few hundred MB while it reads an A4 page at 300 dpi
-  and is gone when the job ends (AVD, app + WebView renderer: 623 → 995 MB peak → 777 MB;
-  docs/spike-p4.md).
+- Memory: the page goes to Tesseract as an 8-bit grey PGM rendered by PDFium straight into a
+  grey bitmap (no RGBA render, no PNG encode/decode), capped at 2480 × 3508 px and 3508 px on
+  the longest side; one page in flight; Tesseract's WebAssembly memory only grows, so its
+  worker is recreated every 8 pages and after each document. Peak PSS of app + our WebView
+  renderer while reading A4 at 300 dpi: AVD 539 MB (target ≤ 650), S23 613 MB (≤ 700);
+  docs/spike-p4.md (P4d follow-up).
 - Not in v1: page rotation detection (OSD needs the legacy models), languages beyond Greek and
   English, OCR from the library without opening the document.
