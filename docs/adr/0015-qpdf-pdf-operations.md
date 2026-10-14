@@ -60,7 +60,7 @@ implementation for exactly these operations and is what the test oracle already 
 
 ## Consequences
 
-- APK size: +~2 MB of native code per ABI (qpdf + zlib + libjpeg, release).
+- APK size: +1.5 MB per ABI (arm64 release with LTO: APK 23.3 → 24.8 MB, `.so` 20.5 → 21.9 MB).
 - Licenses (NOTICE): qpdf Apache-2.0 (with its public-domain Rijndael and sphlib's MIT-style
   SHA-2), zlib License, IJG License ("based in part on the work of the Independent JPEG
   Group"). `cargo deny` sees the crates as MIT/Apache; the C/C++ licenses are tracked by hand.

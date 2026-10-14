@@ -11,7 +11,8 @@
 | Android x86_64 (AVD) | same; 1000-page fixture: encrypt 61 ms, decrypt 50 ms, compress 35 ms, linearize 49 ms |
 | Android armv7 / i686, Linux, iOS simulator | CI (see the PR) |
 
-The app's `.so` needs no `libc++_shared.so` (`llvm-readelf -d`: libandroid, libdl, liblog, libm,
+Release arm64 (LTO, stripped): APK 23.3 → 24.8 MB (+1.46 MB), `libselis_app_lib.so` 20.46 →
+21.92 MB. The app's `.so` needs no `libc++_shared.so` (`llvm-readelf -d`: libandroid, libdl, liblog, libm,
 libc only).
 
 ### Large files (host, release, `examples/pdfops.rs`; peak working set polled every 100 ms)
