@@ -127,6 +127,28 @@ function backLanded(): void {
   if (backInFlight) window.clearTimeout(backInFlight.fallback);
   backInFlight = null;
   for (const overlay of waiting.splice(0)) pushEntry(overlay, false);
+  settle();
+}
+
+const settledWaiters: Array<() => void> = [];
+
+function settle(): void {
+  if (releasing || backInFlight) return;
+  for (const resolve of settledWaiters.splice(0)) resolve();
+}
+
+/**
+ * Resolves once a just-closed overlay's history entry is gone (its back has landed). Navigate
+ * after closing an overlay through this: a route pushed before the pop lands would be the one
+ * the pop removes. Waits one task first so React has run the overlay's cleanup.
+ */
+export function whenHistorySettled(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(() => {
+      settledWaiters.push(resolve);
+      settle();
+    }, 0);
+  });
 }
 
 function pushOverlay(onPopped: () => void): string {

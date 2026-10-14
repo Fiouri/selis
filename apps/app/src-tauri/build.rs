@@ -69,6 +69,9 @@ const APP_COMMANDS: &[&str] = &[
     "pick_pack",
     "document_protection",
     "run_tool",
+    "pick_photos",
+    "stage_photo",
+    "share_export",
     "take_result",
 ];
 

@@ -610,6 +610,20 @@
     "lockedEdit": "Remove the password to edit.",
     "unlockTitle": "This document is protected",
     "unlock": "Open",
+    "exportImage": "Save page as image",
+    "reasonNoPage": "Open the document to choose a page",
+    "exportTitle": "Save page as image",
+    "format": "Format",
+    "png": "PNG",
+    "jpeg": "JPEG",
+    "resolution": "Resolution",
+    "dpi96": "Screen (96 dpi)",
+    "dpi150": "Print (150 dpi)",
+    "dpi300": "High (300 dpi)",
+    "tooLargeHere": "Too large for this device",
+    "pixels": "Page {page} · {width} × {height} px",
+    "save": "Save",
+    "exporting": "Saving the image…",
     "notice": {
       "saved": "Saved as a new version.",
       "alreadyLinearized": "Already optimised for fast web view.",
@@ -620,7 +634,30 @@
       "notApplicable": "This doesn't apply to this file.",
       "unsavedEdits": "Save your edits first.",
       "tooLarge": "This file has a part too large to process on this device. Nothing was changed.",
-      "failed": "Something went wrong. Nothing was changed."
+      "failed": "Something went wrong. Nothing was changed.",
+      "exported": "Page saved as an image.",
+      "exportFailed": "The page could not be saved as an image."
     }
+  },
+  "images": {
+    "title": "Images to PDF",
+    "open": "Images to PDF",
+    "close": "Close",
+    "add": "Add photos",
+    "count": "{count, plural, one {# photo} other {# photos}}",
+    "remove": "Remove photo {number}",
+    "earlier": "Move photo {number} earlier",
+    "later": "Move photo {number} later",
+    "size": "Page size",
+    "sizeFit": "Fit image",
+    "sizeA4": "A4",
+    "sizeLetter": "Letter",
+    "privacy": "Photo details such as location are not copied.",
+    "create": "Create PDF",
+    "creating": "Creating the PDF… {done} of {total}",
+    "documentTitle": "Photos {date}",
+    "skipped": "{count, plural, one {# photo could not be read and was left out.} other {# photos could not be read and were left out.}}",
+    "noneReadable": "None of these photos could be read.",
+    "failed": "The PDF could not be created. Nothing was added."
   }
 }

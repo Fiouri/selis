@@ -225,6 +225,18 @@ export const commands = {
 	 *  Runs once per `request_id`.
 	 */
 	runTool: (requestId: string, id: string, request: ToolRequest) => typedError<ToolOutcome, CommandError>(__TAURI_INVOKE("run_tool", { requestId, id, request })),
+	/**  Opens the photo picker (Android). Elsewhere: `unsupported` (the UI uses a file input). */
+	pickPhotos: (requestId: string) => typedError<PhotoPick, CommandError>(__TAURI_INVOKE("pick_photos", { requestId })),
+	/**
+	 *  Copies one picked photo (a path or content:// URI, opened read-only) into the stage and
+	 *  returns its path for the asset protocol. Runs once per `request_id`.
+	 */
+	stagePhoto: (requestId: string, source: string) => typedError<string, CommandError>(__TAURI_INVOKE("stage_photo", { requestId, source })),
+	/**
+	 *  Shares (Android) or saves (desktop: save dialog) a finished upload — an exported page image
+	 *  — under `name`. `false` when the save dialog was cancelled. The upload is consumed.
+	 */
+	shareExport: (requestId: string, uploadId: string, name: string, mime: string) => typedError<boolean, CommandError>(__TAURI_INVOKE("share_export", { requestId, uploadId, name, mime })),
 	/**
 	 *  The state of a long-running request: still running, its final result, or
 	 *  unknown (never received, or expired). Read-only; a fresh call the UI makes
@@ -399,6 +411,8 @@ export type PendingOpen = {
 	/**  A `.selispack` (its magic bytes), not a PDF: the pack import takes it. */
 	pack: boolean,
 };
+
+export type PhotoPick = { status: "picked"; sources: string[] } | { status: "cancelled" };
 
 export type PickOutcome = { status: "picked"; source: string } | { status: "cancelled" };
 

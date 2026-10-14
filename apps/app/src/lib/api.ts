@@ -122,6 +122,11 @@ export const api = {
     unwrap(ipc().long("import_upload", (requestId) => commands.importUpload(requestId, uploadId, title), IMPORT)),
   stagePdf: (source: string) => unwrap(ipc().long("stage_pdf", (requestId) => commands.stagePdf(requestId, source), IMPORT)),
   unstage: (path: string) => unwrap(ipc().short("unstage", () => commands.unstage(path), READ)),
+  // Images → PDF and page export (P4b, ADR 0017).
+  pickPhotos: () => unwrap(ipc().long("pick_photos", (requestId) => commands.pickPhotos(requestId), PICK)),
+  stagePhoto: (source: string) => unwrap(ipc().long("stage_photo", (requestId) => commands.stagePhoto(requestId, source), IMPORT)),
+  shareExport: (uploadId: string, name: string, mime: string) =>
+    unwrap(ipc().long("share_export", (requestId) => commands.shareExport(requestId, uploadId, name, mime), PICK)),
   listSignatures: () => unwrap(ipc().short("list_signatures", () => commands.listSignatures(), READ)),
   // Keyed by the UI-chosen id: a repeat returns the stored signature.
   saveSignature: (id: string, kind: SignatureKind, pngBase64: string) =>
@@ -275,6 +280,7 @@ export type {
   PackProblem,
   PackSummary,
   PendingOpen,
+  PhotoPick,
   PingView,
   ReceiveView,
   ResumableView,
