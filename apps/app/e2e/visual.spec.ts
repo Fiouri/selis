@@ -53,6 +53,15 @@ const CONTENT = {
 async function settle(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(250);
+  // Focusing a field scrolls its container into view; inside a sheet that overflows by a
+  // fraction of a pixel that scroll can stop at a fractional offset, and borders then land a
+  // pixel apart from one run to the next (pack-export, ADR 0019). Snap every scroll offset.
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>("*")) {
+      if (el.scrollTop % 1 !== 0) el.scrollTop = Math.floor(el.scrollTop);
+      if (el.scrollLeft % 1 !== 0) el.scrollLeft = Math.floor(el.scrollLeft);
+    }
+  });
 }
 
 async function stockLibrary(page: Page, lang: Lang): Promise<void> {

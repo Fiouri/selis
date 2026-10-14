@@ -34,7 +34,12 @@ approved twice (win32 locally, Linux from CI), and the second set was the one th
   `playwright-report` artifact carries them (`e2e/visual.spec.ts-snapshots/`) to inspect and
   commit; a changed screen fails its comparison and leaves `test-results/…-actual.png`.
 - **Proof:** a temporary 4 px shift of one component (the library's Import button) made CI fail
-  on the screens that show it; the shift was reverted (PR "chore: P4 follow-ups").
+  on exactly the six screens that show it (library grid, en/el × light/dark/sepia; 669–1594
+  pixels each, run 38630947172); the shift was reverted. The fresh baselines passed a second CI
+  run unchanged, apart from one flake that exposed a real source of variance (below).
+- **Determinism fixes instead of tolerances:** `settle()` snaps fractional scroll offsets
+  (a focused field inside a sheet can leave its container scrolled by a fraction of a pixel, so
+  the field's borders moved by one pixel between runs — `pack-export-sepia`, 1451 pixels).
 
 ## Consequences
 
