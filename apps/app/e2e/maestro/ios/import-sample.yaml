@@ -1,40 +1,34 @@
 # One sample PDF from Files › On My iPhone/iPad into the library, then back (store-screenshots.yaml).
-# iPhone: a full-screen picker with a tab bar (Recents / Shared / Browse). iPad: a popover with a
-# sidebar that lists "On My iPad" directly. Either opens on Recents or where it was last.
+# iPhone: a full-screen picker with a tab bar (Recents / Shared / Browse), in the hierarchy.
+# iPad: a popover whose content is out of process (only its "dismiss popup" region is in the
+# hierarchy): its sidebar's "On My iPad", then the file, by position (POINT, from the script:
+# the Files grid sorts names in the device language).
 appId: com.anywecon.selis
 ---
 - tapOn: ${T_IMPORT}
 - extendedWaitUntil:
-    visible: "Browse|On My iPad|Recents|dismiss popup"
+    visible: "Browse|Recents|dismiss popup"
     timeout: 20000
-# iPad: the picker is a popover whose content is not in the accessibility hierarchy (only its
-# "dismiss popup" region is): its sidebar's "On My iPad" by position.
-- runFlow:
-    when:
-      visible: "dismiss popup"
-    commands:
-      - waitForAnimationToEnd:
-          timeout: 3000
-      - tapOn:
-          point: 23%, 46%
-      - waitForAnimationToEnd:
-          timeout: 3000
-      - takeScreenshot: ipad-picker
 - waitForAnimationToEnd:
     timeout: 3000
 - runFlow:
     when:
-      notVisible:
-        id: ${SAMPLE}
+      visible: "dismiss popup"
+    commands:
+      - tapOn:
+          point: 23%, 46%
+      - waitForAnimationToEnd:
+          timeout: 3000
+      - tapOn:
+          point: ${POINT}
+- runFlow:
+    when:
+      visible: "Browse"
     commands:
       - runFlow:
           when:
-            visible: "On My iPad"
-          commands:
-            - tapOn: "On My iPad"
-      - runFlow:
-          when:
-            notVisible: "On My iPad"
+            notVisible:
+              id: ${SAMPLE}
           commands:
             - tapOn: "Browse"
             - waitForAnimationToEnd:
@@ -42,28 +36,28 @@ appId: com.anywecon.selis
             - tapOn:
                 text: "On My iPhone"
                 optional: true
-# The grid animates in; a tap during the transition selects nothing.
-- extendedWaitUntil:
-    visible:
-      id: ${SAMPLE}
-    timeout: 15000
-- waitForAnimationToEnd:
-    timeout: 3000
-- tapOn:
-    id: ${SAMPLE}
-- waitForAnimationToEnd:
-    timeout: 3000
-# Still in the picker (a tap that did not take): again, a few times.
-- repeat:
-    while:
-      visible: "On My iPhone"
-    times: 4
-    commands:
-      - tapOn:
-          id: ${SAMPLE}
-          retryTapIfNoChange: true
+      # The grid animates in; a tap during the transition selects nothing.
+      - extendedWaitUntil:
+          visible:
+            id: ${SAMPLE}
+          timeout: 15000
       - waitForAnimationToEnd:
           timeout: 3000
+      - tapOn:
+          id: ${SAMPLE}
+      - waitForAnimationToEnd:
+          timeout: 3000
+      # Still in the picker (a tap that did not take): again, a few times.
+      - repeat:
+          while:
+            visible: "On My iPhone"
+          times: 4
+          commands:
+            - tapOn:
+                id: ${SAMPLE}
+                retryTapIfNoChange: true
+            - waitForAnimationToEnd:
+                timeout: 3000
 - extendedWaitUntil:
     visible: ${PAGE}
     timeout: 30000

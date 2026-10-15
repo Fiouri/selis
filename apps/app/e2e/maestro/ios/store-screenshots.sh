@@ -92,12 +92,17 @@ const [lease, trip, invoice, report] = samples(lang);
 // below is not tappable).
 const file = (s) => `${s.file.replace(/\.pdf$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, pdf`;
 const open = (title) => `${t("library.openDocument", { title }).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},.*`;
+// iPad picker: the Files grid (3 per row) sorts names in the device language; cell centres.
+const cells = ["51%, 35%", "66%, 35%", "80%, 35%", "51%, 50%"];
+const order = [lease, trip, invoice, report].map((s) => s.file.replace(/\.pdf$/, "")).sort((a, b) => a.localeCompare(b, lang));
+const at = (s) => cells[order.indexOf(s.file.replace(/\.pdf$/, ""))];
 const env = {
   LANG: lang,
   E_EMPTY: en("library.emptyTitle"),
   E_SETTINGS: en("tabs.settings"),
   E_LANGUAGE: `${en("settings.language")}.*`,
   S_LEASE: file(lease), S_TRIP: file(trip), S_INVOICE: file(invoice), S_REPORT: file(report),
+  P_LEASE: at(lease), P_TRIP: at(trip), P_INVOICE: at(invoice), P_REPORT: at(report),
   T_IMPORT: t("library.import"),
   T_LIBRARY: t("tabs.library"),
   T_TRANSFER: t("tabs.transfer"),

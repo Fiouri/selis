@@ -27,21 +27,25 @@ name: App Store screenshots (iOS)
     file: import-sample.yaml
     env:
       SAMPLE: ${S_TRIP}
+      POINT: ${P_TRIP}
       PAGE: ${T_PAGE_1}
 - runFlow:
     file: import-sample.yaml
     env:
       SAMPLE: ${S_INVOICE}
+      POINT: ${P_INVOICE}
       PAGE: ${T_PAGE_1}
 - runFlow:
     file: import-sample.yaml
     env:
       SAMPLE: ${S_REPORT}
+      POINT: ${P_REPORT}
       PAGE: ${T_PAGE_1}
 - runFlow:
     file: import-sample.yaml
     env:
       SAMPLE: ${S_LEASE}
+      POINT: ${P_LEASE}
       PAGE: ${T_PAGE_1_OF_2}
 - extendedWaitUntil:
     visible: ${T_OPEN_LEASE}
@@ -120,7 +124,7 @@ name: App Store screenshots (iOS)
 - takeScreenshot: 6-tools
 # The sheet's backdrop closes it.
 - tapOn:
-    point: 50%, 6%
+    point: 50%, 12%
 - tapOn: ${T_BACK}
 
 # Scan: no camera on the simulator, so "Scan a photo" with the sample photo → Adjust.
