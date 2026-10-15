@@ -48,7 +48,6 @@ function ThemeTiles() {
   const { t } = useTranslation();
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
-  const labelId = useId();
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = NEXT_KEYS.has(event.key) ? 1 : PREV_KEYS.has(event.key) ? -1 : 0;
@@ -63,44 +62,41 @@ function ThemeTiles() {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <span id={labelId} className="text-md font-medium text-neutral-12">
+      <span className="text-md font-medium text-neutral-12" aria-hidden="true">
         {t("settings.theme")}
       </span>
-      <div
-        role="radiogroup"
-        aria-labelledby={labelId}
-        onKeyDown={onKeyDown}
-        className="grid grid-cols-2 gap-2"
-        data-testid={`theme-choice-${theme}`}
-      >
-        {THEMES.map((option) => {
-          const selected = option.value === theme;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              tabIndex={selected ? 0 : -1}
-              data-value={option.value}
-              onClick={() => void setTheme(option.value)}
-              className={`selis-focus flex h-13 items-center gap-3 rounded-card px-3 text-left text-sm transition-colors duration-150 ease-standard ${
-                selected
-                  ? "bg-accent-3 font-semibold text-accent-selected shadow-[inset_0_0_0_2px_var(--accent-9)]"
-                  : "border border-control-line font-medium text-neutral-12 active:bg-neutral-3"
-              }`}
-            >
-              <span
-                aria-hidden="true"
-                className="relative h-[22px] w-[30px] shrink-0 rounded-[6px] border border-neutral-6"
-                style={{ background: option.swatch }}
+      {/* The current value as a test id, on a wrapper: Maestro takes the aria-label as the id. */}
+      <div data-testid={`theme-choice-${theme}`}>
+        <div role="radiogroup" aria-label={t("settings.theme")} onKeyDown={onKeyDown} className="grid grid-cols-2 gap-2">
+          {THEMES.map((option) => {
+            const selected = option.value === theme;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                tabIndex={selected ? 0 : -1}
+                data-value={option.value}
+                onClick={() => void setTheme(option.value)}
+                className={`selis-focus flex h-13 items-center gap-3 rounded-card px-3 text-left text-sm transition-colors duration-150 ease-standard ${
+                  selected
+                    ? "bg-accent-3 font-semibold text-accent-selected shadow-[inset_0_0_0_2px_var(--accent-9)]"
+                    : "border border-control-line font-medium text-neutral-12 active:bg-neutral-3"
+                }`}
               >
-                <span className="absolute right-[3px] bottom-[3px] size-2 rounded-full" style={{ background: option.accent }} />
-              </span>
-              <span className="min-w-0 truncate">{t(option.key)}</span>
-            </button>
-          );
-        })}
+                <span
+                  aria-hidden="true"
+                  className="relative h-[22px] w-[30px] shrink-0 rounded-[6px] border border-neutral-6"
+                  style={{ background: option.swatch }}
+                >
+                  <span className="absolute right-[3px] bottom-[3px] size-2 rounded-full" style={{ background: option.accent }} />
+                </span>
+                <span className="min-w-0 truncate">{t(option.key)}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -139,22 +135,28 @@ function SwitchRow({
   badge?: string;
   testId?: string;
 }) {
-  const labelId = useId();
-  const helperId = useId();
   return (
     <div className="flex items-center gap-3 py-2 pr-2 pl-4">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span id={labelId} className={`flex items-center gap-2 text-md ${disabled ? "text-neutral-11" : "text-neutral-12"}`}>
+        <span className={`flex items-center gap-2 text-md ${disabled ? "text-neutral-11" : "text-neutral-12"}`}>
           {label}
           {badge ? (
             <span className="rounded-full bg-neutral-3 px-2 py-0.5 text-[11px] font-semibold text-neutral-11">{badge}</span>
           ) : null}
         </span>
-        <span id={helperId} className="text-[13px] text-neutral-11">
+        <span className="text-[13px] text-neutral-11">
           {helper}
         </span>
       </div>
-      <Switch checked={checked} onChange={onChange} labelledBy={labelId} describedBy={helperId} disabled={disabled} testId={testId} />
+      {/* Name first, then the helper: a separate aria-describedby is read before the name on
+          Android (P5b TalkBack walkthrough). */}
+      <Switch
+        checked={checked}
+        onChange={onChange}
+        label={[label, badge, helper].filter(Boolean).join(", ")}
+        disabled={disabled}
+        testId={testId}
+      />
     </div>
   );
 }

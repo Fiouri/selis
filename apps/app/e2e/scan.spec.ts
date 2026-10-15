@@ -44,7 +44,7 @@ test("scans two pages, reorders them and saves one PDF", async ({ page }) => {
   await capture(page);
   await expect(page.getByTestId("scan-adjust-hint")).toHaveText("Drag the corners to the page's edges if needed.");
   await page.getByTestId("scan-filter-bw").click();
-  await expect(page.getByTestId("scan-filter-bw")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("scan-filter-bw")).toHaveAttribute("aria-checked", "true");
   await page.getByTestId("scan-keep").click();
   await expect(page.getByTestId("scan-camera")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("scan-count")).toHaveText("1 page");

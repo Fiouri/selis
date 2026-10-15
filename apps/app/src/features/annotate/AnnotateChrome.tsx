@@ -181,7 +181,7 @@ export const ToolSheet = forwardRef<HTMLElement>(function ToolSheet(_props, ref)
       >
         <span className="h-1 w-9 rounded-full bg-control-line" aria-hidden="true" />
       </button>
-      <div className="flex gap-1 overflow-x-auto px-3 pb-2 [scrollbar-width:none]" role="toolbar" aria-label={t("annotate.tools")}>
+      <div className="flex gap-1 overflow-x-auto px-3 pb-2 [scrollbar-width:none]" role="radiogroup" aria-label={t("annotate.tools")}>
         {TOOLS.map((name) => {
           const Icon = TOOL_ICONS[name];
           const selected = name === tool;
@@ -189,7 +189,8 @@ export const ToolSheet = forwardRef<HTMLElement>(function ToolSheet(_props, ref)
             <button
               key={name}
               type="button"
-              aria-pressed={selected}
+              role="radio"
+              aria-checked={selected}
               onClick={(e) => {
                 setTool(name);
                 // The row scrolls sideways: bring the chosen tool fully into view.
@@ -275,14 +276,10 @@ function ColorRow() {
   const selected = useTools((s) => s.colors[s.tool]);
   const setColor = useTools((s) => s.setColor);
   const names = colorsFor(tool);
-  const labelId = useId();
   if (names.length === 0) return null;
   return (
     <div className="flex items-center">
-      <span id={labelId} className="sr-only">
-        {t("annotate.color")}
-      </span>
-      <div role="radiogroup" aria-labelledby={labelId} className="flex flex-1 items-center">
+      <div role="radiogroup" aria-label={t("annotate.color")} className="flex flex-1 items-center">
         {names.map((name) => {
           const checked = name === selected;
           return (

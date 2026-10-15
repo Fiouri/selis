@@ -84,9 +84,9 @@ name: Annotate, save a version, recover after a kill
 - stopApp
 - launchApp
 - extendedWaitUntil:
-    visible: "Open Ελληνικό δοκιμαστικό"
+    visible: "Open Ελληνικό δοκιμαστικό,.*"
     timeout: 20000
-- tapOn: "Open Ελληνικό δοκιμαστικό"
+- tapOn: "Open Ελληνικό δοκιμαστικό,.*"
 - extendedWaitUntil:
     visible: "Unsaved changes"
     timeout: 10000

@@ -265,7 +265,8 @@ export function PagesGrid({ doc, structure, selected, onToggle, onMove, insetTop
           <li key={`${structure}:${index}`} className="absolute" style={{ left: cellLeft(col), top: cellTop(row), width: cellW, height: ROW_H }}>
             <button
               type="button"
-              aria-pressed={on}
+              role="checkbox"
+              aria-checked={on}
               aria-label={t("pages.pageLabel", { page: index + 1 })}
               data-index={index}
               onPointerDown={onPointerDown}

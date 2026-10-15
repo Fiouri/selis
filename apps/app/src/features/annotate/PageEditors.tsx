@@ -116,7 +116,6 @@ type NoteEditorProps = {
 export function NoteEditor({ anchorLeft, anchorTop, pageWidth, initial, canDelete, onSave, onDelete, onCancel }: NoteEditorProps) {
   const { t } = useTranslation();
   const id = useId();
-  const titleId = useId();
   const [text, setText] = useState(initial);
   const width = Math.min(NOTE_WIDTH, pageWidth - 8);
   const left = Math.min(Math.max(4, anchorLeft), Math.max(4, pageWidth - width - 4));
@@ -125,14 +124,14 @@ export function NoteEditor({ anchorLeft, anchorTop, pageWidth, initial, canDelet
     <div
       ref={ref}
       role="dialog"
-      aria-labelledby={titleId}
+      aria-label={t("annotate.noteTitle")}
       className="absolute z-10 flex flex-col gap-1.5 rounded-[8px] border border-note-border bg-note-paper p-2 text-note-ink shadow-2"
       style={{ ...KEEP_CLEAR, left, top: anchorTop + 4, width }}
       onPointerDown={(e) => e.stopPropagation()}
       data-testid="note-editor"
     >
       <div className="-mt-1 -mr-1 flex items-center justify-between">
-        <h3 id={titleId} className="text-sm font-semibold">
+        <h3 className="text-sm font-semibold">
           {t("annotate.noteTitle")}
         </h3>
         <button

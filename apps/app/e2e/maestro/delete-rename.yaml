@@ -26,11 +26,11 @@ name: Library rename and delete
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "Open Mixed page sizes fixture"
+    visible: "Open Mixed page sizes fixture,.*"
     timeout: 10000
 
 # Rename inline in the menu, then undo from the toast.
-- longPressOn: "Open Ελληνικό δοκιμαστικό"
+- longPressOn: "Open Ελληνικό δοκιμαστικό,.*"
 - tapOn: "Rename"
 # DevTools mode reports the input's DOM id (not data-testid): wait for its label.
 - extendedWaitUntil:
@@ -40,15 +40,15 @@ name: Library rename and delete
 - inputText: "Offer 2027"
 - pressKey: Enter
 - extendedWaitUntil:
-    visible: "Open Offer 2027"
+    visible: "Open Offer 2027,.*"
     timeout: 5000
 - tapOn: "Undo"
 - extendedWaitUntil:
-    visible: "Open Ελληνικό δοκιμαστικό"
+    visible: "Open Ελληνικό δοκιμαστικό,.*"
     timeout: 5000
 
 # Rename for good.
-- longPressOn: "Open Ελληνικό δοκιμαστικό"
+- longPressOn: "Open Ελληνικό δοκιμαστικό,.*"
 - tapOn: "Rename"
 - extendedWaitUntil:
     visible: "New title"
@@ -57,11 +57,11 @@ name: Library rename and delete
 - inputText: "Offer 2027"
 - pressKey: Enter
 - extendedWaitUntil:
-    visible: "Open Offer 2027"
+    visible: "Open Offer 2027,.*"
     timeout: 5000
 
 # Delete: Cancel keeps the document, Delete removes it.
-- longPressOn: "Open Mixed page sizes fixture"
+- longPressOn: "Open Mixed page sizes fixture,.*"
 - tapOn: "Delete"
 - extendedWaitUntil:
     visible:
@@ -72,8 +72,8 @@ name: Library rename and delete
     id: "delete-dialog-cancel"
 - assertNotVisible:
     id: "delete-dialog"
-- assertVisible: "Open Mixed page sizes fixture"
-- longPressOn: "Open Mixed page sizes fixture"
+- assertVisible: "Open Mixed page sizes fixture,.*"
+- longPressOn: "Open Mixed page sizes fixture,.*"
 - tapOn: "Delete"
 - extendedWaitUntil:
     visible:
@@ -85,15 +85,15 @@ name: Library rename and delete
     rightOf:
       id: "delete-dialog-cancel"
 - extendedWaitUntil:
-    notVisible: "Open Mixed page sizes fixture"
+    notVisible: "Open Mixed page sizes fixture,.*"
     timeout: 5000
-- assertVisible: "Open Offer 2027"
+- assertVisible: "Open Offer 2027,.*"
 
 # Restart: both changes are in SQLite.
 - stopApp
 - launchApp
 - extendedWaitUntil:
-    visible: "Open Offer 2027"
+    visible: "Open Offer 2027,.*"
     timeout: 20000
-- assertNotVisible: "Open Mixed page sizes fixture"
-- assertNotVisible: "Open Ελληνικό δοκιμαστικό"
+- assertNotVisible: "Open Mixed page sizes fixture,.*"
+- assertNotVisible: "Open Ελληνικό δοκιμαστικό,.*"

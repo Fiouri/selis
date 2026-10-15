@@ -1,5 +1,5 @@
 import { Button, Segmented, Switch } from "@selis/ui";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { Busy, LockFooter, Problem } from "../features/transfer/parts";
@@ -79,11 +79,10 @@ export function TransferScreen() {
 function ForceRelay() {
   const { t } = useTranslation();
   const [on, setOn] = useState(false);
-  const label = useId();
   return (
     <div className="flex items-center gap-3 rounded-[14px] border border-dashed border-neutral-6 py-2 pr-2 pl-4">
       <div className="flex min-w-0 flex-1 flex-col">
-        <span id={label} className="text-[13px] text-neutral-12">
+        <span className="text-[13px] text-neutral-12">
           {t("transfer.debug.forceRelay")}
         </span>
         <span className="text-[12px] text-neutral-11">{t("transfer.debug.forceRelayHelp")}</span>
@@ -94,7 +93,7 @@ function ForceRelay() {
           setOn(next);
           void api.transferDebugForceRelay(next).catch(() => setOn(!next));
         }}
-        labelledBy={label}
+        label={t("transfer.debug.forceRelay")}
         testId="transfer-force-relay"
       />
     </div>

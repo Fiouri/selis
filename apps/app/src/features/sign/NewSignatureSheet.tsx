@@ -25,13 +25,12 @@ const PEN_WIDTH = 2.6;
 
 function InkPicker({ value, onChange }: { value: Ink; onChange: (ink: Ink) => void }) {
   const { t } = useTranslation();
-  const labelId = useId();
   return (
     <div className="flex items-center gap-1">
-      <span id={labelId} className="mr-2 text-sm text-neutral-11">
+      <span className="mr-2 text-sm text-neutral-11" aria-hidden="true">
         {t("sign.ink")}
       </span>
-      <div role="radiogroup" aria-labelledby={labelId} className="flex">
+      <div role="radiogroup" aria-label={t("sign.ink")} className="flex">
         {(Object.keys(INKS) as Ink[]).map((ink) => (
           <button
             key={ink}
@@ -133,7 +132,6 @@ function TypePanel({
 }) {
   const { t } = useTranslation();
   const inputId = useId();
-  const groupId = useId();
   const [ready, setReady] = useState(false);
   useEffect(() => {
     const request = { live: true };
@@ -163,10 +161,10 @@ function TypePanel({
           data-testid="signature-name"
         />
       </div>
-      <span id={groupId} className="text-sm font-medium text-neutral-12">
+      <span className="text-sm font-medium text-neutral-12" aria-hidden="true">
         {t("sign.fonts")}
       </span>
-      <div role="radiogroup" aria-labelledby={groupId} className="flex flex-col gap-2">
+      <div role="radiogroup" aria-label={t("sign.fonts")} className="flex flex-col gap-2">
         {SIGNATURE_FONTS.map((f, i) => {
           const checked = f.id === font;
           return (
@@ -211,7 +209,6 @@ function PicturePanel({
   onPick: () => void;
 }) {
   const { t } = useTranslation();
-  const switchLabel = useId();
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-neutral-11">{t("sign.imageHint")}</p>
@@ -236,14 +233,14 @@ function PicturePanel({
       </div>
       {picture ? (
         <div className="flex items-center justify-between">
-          <span id={switchLabel} className="text-sm text-neutral-12">
+          <span className="text-sm text-neutral-12">
             {t("sign.removeBackground")}
           </span>
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={onPick}>
               {t("sign.pickAnother")}
             </Button>
-            <Switch checked={removeBackground} onChange={onRemoveBackground} labelledBy={switchLabel} testId="signature-remove-background" />
+            <Switch checked={removeBackground} onChange={onRemoveBackground} label={t("sign.removeBackground")} testId="signature-remove-background" />
           </div>
         </div>
       ) : null}

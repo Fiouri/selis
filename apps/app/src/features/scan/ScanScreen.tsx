@@ -11,6 +11,7 @@ import { CameraOff, Images, Settings, X, Zap, ZapOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { FullScreenLayer } from "../../components/FullScreenLayer";
 import { useToast } from "../../components/Toast";
 import { api } from "../../lib/api";
 import { type Camera, CameraError, type CameraFailure, openBackCamera } from "../../lib/camera";
@@ -342,7 +343,7 @@ export function ScanScreen({ onChoosePhotos }: { onChoosePhotos: () => void }) {
     );
 
   return (
-    <div className="fixed inset-0 z-30 flex flex-col bg-[#0c0c0f]" data-testid="scan-screen">
+    <FullScreenLayer label={t("scan.title")} className="bg-[#0c0c0f]" testId="scan-screen">
       {body}
       <ConfirmDialog
         open={confirming}
@@ -358,6 +359,6 @@ export function ScanScreen({ onChoosePhotos }: { onChoosePhotos: () => void }) {
         onCancel={() => setConfirming(false)}
         testId="scan-discard"
       />
-    </div>
+    </FullScreenLayer>
   );
 }

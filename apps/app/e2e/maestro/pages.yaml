@@ -94,5 +94,5 @@ name: Pages - rotate, duplicate, delete, add PDF, extract
 # Back in the library: the extracted page is a document of its own.
 - back
 - extendedWaitUntil:
-    visible: '.*— p. 8'
+    visible: '.*— p. 8.*'
     timeout: 10000

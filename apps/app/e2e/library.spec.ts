@@ -19,9 +19,9 @@ test("grid cards get page thumbnails; title search ignores case and accents", as
   await expect(search).toBeFocused();
   await search.fill("ΕΛΛΗΝΙΚΟ");
   await expect(cards(page)).toHaveCount(1);
-  await expect(cards(page).first()).toHaveAccessibleName("Open Ελληνικό δοκιμαστικό");
+  await expect(cards(page).first()).toHaveAccessibleName(/^Open Ελληνικό δοκιμαστικό,/);
   await search.fill("αιτηση");
-  await expect(cards(page).first()).toHaveAccessibleName("Open Αίτηση με φόρμα");
+  await expect(cards(page).first()).toHaveAccessibleName(/^Open Αίτηση με φόρμα,/);
   await search.fill("xyz");
   await expect(page.getByRole("heading", { name: "No results" })).toBeVisible();
 
@@ -36,7 +36,7 @@ test("sort and grid/list apply at once and survive a restart", async ({ page }) 
   await addToLibrary(page, "mixed-sizes.pdf", "beta.pdf");
   await addToLibrary(page, "greek.pdf", "alpha.pdf");
   // Newest activity first by default.
-  await expect(cards(page).first()).toHaveAccessibleName("Open alpha");
+  await expect(cards(page).first()).toHaveAccessibleName(/^Open alpha,/);
 
   await page.getByRole("button", { name: "Sort" }).click();
   await page.getByRole("radio", { name: "Size" }).click();
@@ -45,8 +45,8 @@ test("sort and grid/list apply at once and survive a restart", async ({ page }) 
 
   await page.getByRole("button", { name: "Sort" }).click();
   await page.getByRole("radio", { name: "Name" }).click();
-  await expect(cards(page).first()).toHaveAccessibleName("Open alpha");
-  await expect(cards(page).nth(1)).toHaveAccessibleName("Open beta");
+  await expect(cards(page).first()).toHaveAccessibleName(/^Open alpha,/);
+  await expect(cards(page).nth(1)).toHaveAccessibleName(/^Open beta,/);
 
   await page.getByRole("button", { name: "Sort" }).click();
   await page.getByRole("radio", { name: "List" }).click();
@@ -72,8 +72,8 @@ test("favorites from the long-press menu, with their own filter", async ({ page 
   await expect(menu).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Open Συμβόλαιο" }).getByTestId("favorite-badge")).toBeVisible();
 
-  await page.getByRole("button", { name: "Favorites" }).click();
-  await expect(page.getByRole("button", { name: "Favorites" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("radio", { name: "Favorites" }).click();
+  await expect(page.getByRole("radio", { name: "Favorites" })).toHaveAttribute("aria-checked", "true");
   await expect(cards(page)).toHaveCount(1);
 
   await page.getByRole("button", { name: "Open Συμβόλαιο" }).click({ button: "right" });
@@ -100,11 +100,14 @@ test("tags: create and assign from the menu, filter, rename, delete", async ({ p
   const sheet = page.getByTestId("tags-sheet");
   await expect(sheet.getByRole("button", { name: /^Εργασία/ })).toContainText("1");
   await sheet.getByRole("button", { name: /^Εργασία/ }).click();
-  await expect(page.getByRole("button", { name: "Εργασία" })).toHaveAttribute("aria-pressed", "true");
+  await expect(sheet).toHaveCount(0);
+  // The Tags chip names the active tag; no filter radio is checked meanwhile.
+  await expect(page.getByRole("button", { name: "Εργασία", exact: true })).toBeVisible();
+  await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
   await expect(cards(page)).toHaveCount(1);
-  await expect(cards(page).first()).toHaveAccessibleName("Open Τιμολόγιο");
+  await expect(cards(page).first()).toHaveAccessibleName(/^Open Τιμολόγιο,/);
 
-  await page.getByRole("button", { name: "Εργασία" }).click();
+  await page.getByRole("button", { name: "Εργασία", exact: true }).click();
   await sheet.getByRole("button", { name: "Edit the tag “Εργασία”" }).click();
   await sheet.getByLabel("Tag name").fill("Δουλειά");
   await sheet.getByRole("button", { name: "Save" }).click();
@@ -115,7 +118,8 @@ test("tags: create and assign from the menu, filter, rename, delete", async ({ p
   await sheet.getByRole("button", { name: /Tap again to delete/ }).click();
   await expect(sheet.getByText("No tags yet.")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Tags", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Tags", exact: true })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "All" })).toHaveAttribute("aria-checked", "true");
   await expect(cards(page)).toHaveCount(2);
 });
 
@@ -129,8 +133,8 @@ test("Recent lists opened documents, most recent first", async ({ page }) => {
 
   await page.getByRole("navigation").getByRole("button", { name: "Recent" }).click();
   await expect(page.getByTestId("recent-screen")).toBeVisible();
-  await expect(cards(page).first()).toHaveAccessibleName("Open Πρώτο");
-  await expect(cards(page).nth(1)).toHaveAccessibleName("Open Δεύτερο");
+  await expect(cards(page).first()).toHaveAccessibleName(/^Open Πρώτο,/);
+  await expect(cards(page).nth(1)).toHaveAccessibleName(/^Open Δεύτερο,/);
   await expect(page.getByTestId("import-fab")).toHaveCount(0);
 });
 
@@ -172,7 +176,7 @@ test("rename from the menu (with undo) and delete after a confirm", async ({ pag
   const toast = page.getByTestId("toast");
   await expect(toast).toContainText("Renamed to “Προσφορά 2027”");
   await toast.getByRole("button", { name: "Undo" }).click();
-  await expect(page.getByRole("button", { name: "Open Προσφορά", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Open Προσφορά,/ })).toBeVisible();
 
   // Cancel keeps the document.
   await page.getByRole("button", { name: "Open Σημειώσεις" }).click({ button: "right" });
@@ -191,5 +195,5 @@ test("rename from the menu (with undo) and delete after a confirm", async ({ pag
   await expect(dialog).toHaveCount(0);
   await expect(page.getByTestId("toast")).toContainText("Deleted “Σημειώσεις”");
   await expect(cards(page)).toHaveCount(1);
-  await expect(cards(page).first()).toHaveAccessibleName("Open Προσφορά");
+  await expect(cards(page).first()).toHaveAccessibleName(/^Open Προσφορά,/);
 });

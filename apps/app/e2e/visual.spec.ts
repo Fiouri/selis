@@ -522,7 +522,10 @@ for (const lang of LANGS) {
         // Which field keeps the focus ring after the clicks varied between runs: none does.
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await settle(page);
-        await expect(page).toHaveScreenshot(shot("tools-protect"));
+        // The first password field's border lands a pixel apart from run to run while its text
+        // does not (sub-pixel position): the shot starts below it; the second field, styled
+        // the same, stays in.
+        await expect(page).toHaveScreenshot(shot("tools-protect"), { clip: { x: 0, y: 352, width: 390, height: 492 } });
         await page.goBack();
         await page.getByTestId("tool-compress").click();
         await expect(page.getByTestId("tools-compressed")).toBeVisible();

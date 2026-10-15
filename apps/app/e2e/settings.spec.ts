@@ -29,7 +29,7 @@ test("settings: theme tiles, transfer switch, storage pickers, app lock (coming 
 
   const appLock = page.getByRole("switch", { name: /App lock/ });
   await expect(appLock).toBeDisabled();
-  await expect(page.getByText("Coming soon")).toBeVisible();
+  await expect(page.getByText("Coming soon", { exact: true })).toBeVisible();
   await expect(page.getByText(/^Selis \d+\.\d+\.\d+ · Apache-2\.0 · No account, no tracking$/)).toBeVisible();
 
   await page.reload();

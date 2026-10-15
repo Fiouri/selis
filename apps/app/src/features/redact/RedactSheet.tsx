@@ -39,7 +39,7 @@ export const RedactSheet = forwardRef<HTMLElement, { busy: boolean; onApply: () 
       <div className="flex h-5 w-full items-start justify-center pt-2" aria-hidden="true">
         <span className="h-1 w-9 rounded-full bg-control-line" />
       </div>
-      <div className="flex justify-center gap-1 px-3 pb-2" role="toolbar" aria-label={t("redact.tools")}>
+      <div className="flex justify-center gap-1 px-3 pb-2" role="radiogroup" aria-label={t("redact.tools")}>
         {REDACT_TOOLS.map((name) => {
           const Icon = ICONS[name];
           const selected = name === tool;
@@ -47,7 +47,8 @@ export const RedactSheet = forwardRef<HTMLElement, { busy: boolean; onApply: () 
             <button
               key={name}
               type="button"
-              aria-pressed={selected}
+              role="radio"
+              aria-checked={selected}
               onClick={() => setTool(name)}
               className={`selis-focus flex h-[60px] w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-[12px] ${
                 selected ? "bg-accent-3 font-semibold text-accent-selected" : "font-medium text-neutral-11 active:bg-neutral-3"
