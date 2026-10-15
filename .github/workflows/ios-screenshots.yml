@@ -66,7 +66,7 @@ jobs:
           echo "built $app"
           # A tarball: artifacts drop the executable bit inside the bundle.
           mkdir -p dist && cp -R "$app" dist/Selis.app && tar -czf dist/selis-sim.tgz -C dist Selis.app
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: selis-ios-sim-app
           path: dist/selis-sim.tgz
@@ -141,7 +141,7 @@ jobs:
             [ "$got" = "$want" ] || { echo "::error::$f is $got, App Store wants $want"; exit 1; }
           done
           echo "all $want"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ios-screenshots-${{ matrix.device.slug }}-${{ matrix.lang }}

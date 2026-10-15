@@ -185,7 +185,7 @@ jobs:
           cd dist && find . -type f \( -name '*.apk' -o -name '*.aab' \) | sort | xargs sha256sum | tee SHA256SUMS-android.txt
           # The embedded front end, file by file: the reproducibility job compares it on a mismatch.
           (cd ../apps/app/dist && find . -type f | sort | xargs sha256sum) > frontend-sha256.txt
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: selis-android-release
           path: dist
@@ -262,7 +262,7 @@ jobs:
           pipx install apksigcopier==1.1.1
           apksigcopier compare "${{ github.workspace }}/first/signed/selis-$v-arm64-v8a.apk" --unsigned "$OUT/apk/arm64/release/app-arm64-release-unsigned.apk"
           echo "apksigcopier: our signature verifies on the independently built APK" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: reproducible-diff

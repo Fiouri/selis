@@ -81,7 +81,7 @@ jobs:
             echo "$new"
             exit 1
           fi
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
@@ -134,7 +134,7 @@ jobs:
       # Google Play: 16 KB pages (LOAD and GNU_RELRO), zipalign -P 16, targetSdk (ADR 0021).
       - name: Release APK store checks
         run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" scripts/check-android-release.sh apps/app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: selis-android-debug-apk
           path: apps/app/src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk
