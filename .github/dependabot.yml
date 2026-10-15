@@ -54,3 +54,10 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # appcompat 1.8.0 brings Kotlin 2.1 metadata, which the Tauri template's Kotlin Gradle plugin
+      # 1.9.25 cannot read (PR #16, with Material 1.14.0). Taken with the Tauri line that moves to
+      # Kotlin 2.x.
+      - dependency-name: "androidx.appcompat:appcompat"
+        versions: [">= 1.8.0"]
+      - dependency-name: "com.google.android.material:material"
+        versions: [">= 1.14.0"]
