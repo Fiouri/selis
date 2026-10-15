@@ -123,7 +123,7 @@ export const api = {
   stagePdf: (source: string) => unwrap(ipc().long("stage_pdf", (requestId) => commands.stagePdf(requestId, source), IMPORT)),
   unstage: (path: string) => unwrap(ipc().short("unstage", () => commands.unstage(path), READ)),
   // Images → PDF and page export (P4b, ADR 0017).
-  pickPhotos: () => unwrap(ipc().long("pick_photos", (requestId) => commands.pickPhotos(requestId), PICK)),
+  pickPhotos: (max = 50) => unwrap(ipc().long("pick_photos", (requestId) => commands.pickPhotos(requestId, max), PICK)),
   stagePhoto: (source: string) => unwrap(ipc().long("stage_photo", (requestId) => commands.stagePhoto(requestId, source), IMPORT)),
   shareExport: (uploadId: string, name: string, mime: string) =>
     unwrap(ipc().long("share_export", (requestId) => commands.shareExport(requestId, uploadId, name, mime), PICK)),

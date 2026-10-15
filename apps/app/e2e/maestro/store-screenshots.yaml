@@ -155,7 +155,6 @@ name: Store screenshots
 - tapOn: ${T_LIBRARY}
 
 # Tools: protect, compress, repair, text recognition, page as image.
-# (A scan screenshot needs a real page in front of a real camera; the AVD's scene has none.)
 - tapOn: ${T_OPEN_REPORT}
 - extendedWaitUntil:
     visible: ${T_PAGE_1}
@@ -168,3 +167,28 @@ name: Store screenshots
       id: "tool-protect"
     timeout: 10000
 - takeScreenshot: 6-tools
+- back
+- back
+
+# Scan: a photo of a delivery note on a desk (docs/store/scan-sample, pushed by the script)
+# through "Scan a photo": the Adjust step with the page found and its corners.
+- tapOn: ${T_LIBRARY}
+- tapOn: ${T_SCAN}
+- tapOn:
+    text: "While using the app"
+    optional: true
+- tapOn: ${T_FROM_PHOTO}
+- extendedWaitUntil:
+    visible: "Photo taken on.*"
+    timeout: 20000
+- tapOn:
+    text: "Photo taken on.*"
+    index: 0
+- extendedWaitUntil:
+    visible: ${T_ADJUST}
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "never shown, lets the photo render"
+    timeout: 2000
+    optional: true
+- takeScreenshot: 7-scan

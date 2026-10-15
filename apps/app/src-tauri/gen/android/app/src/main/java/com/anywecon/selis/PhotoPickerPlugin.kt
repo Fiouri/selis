@@ -16,7 +16,7 @@ import app.tauri.plugin.Plugin
 
 @InvokeArg
 class PickPhotosArgs {
-  /** Most photos one pick returns (2–100; the system picker may allow fewer). */
+  /** Most photos one pick returns (1: the single-photo picker; up to 100). */
   var max: Int = 50
 }
 
@@ -28,18 +28,30 @@ class PickPhotosArgs {
 @TauriPlugin
 class PhotoPickerPlugin(private val activity: Activity) : Plugin(activity) {
   private var contract = PickMultipleVisualMedia(50)
+  private val single = PickVisualMedia()
+  private var one = false
 
   @Command
   fun pick(invoke: Invoke) {
     val args = invoke.parseArgs(PickPhotosArgs::class.java)
-    contract = PickMultipleVisualMedia(args.max.coerceIn(2, 100))
-    val intent = contract.createIntent(activity, PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+    one = args.max <= 1
+    val request = PickVisualMediaRequest(PickVisualMedia.ImageOnly)
+    val intent = if (one) {
+      single.createIntent(activity, request)
+    } else {
+      contract = PickMultipleVisualMedia(args.max.coerceIn(2, 100))
+      contract.createIntent(activity, request)
+    }
     startActivityForResult(invoke, intent, "picked")
   }
 
   @ActivityCallback
   fun picked(invoke: Invoke, result: ActivityResult) {
-    val uris = contract.parseResult(result.resultCode, result.data)
+    val uris = if (one) {
+      listOfNotNull(single.parseResult(result.resultCode, result.data))
+    } else {
+      contract.parseResult(result.resultCode, result.data)
+    }
     val out = JSObject()
     out.put("uris", JSArray(uris.map { it.toString() }))
     invoke.resolve(out)

@@ -2,25 +2,28 @@
  * Scan (P4c, ADR 0016; docs/design/p4-ui-brief.md §7): full screen over the library. The
  * camera with the live page outline → "Adjust corners" (handles, filters) → the queue of
  * scanned pages → "Save as PDF" (a new document, opened in the viewer). Back steps out of
- * Adjust and the queue; leaving with scanned pages asks first.
+ * Adjust and the queue; leaving with scanned pages asks first. "Scan a photo" takes a photo already
+ * on the device through the same Adjust step (no camera, e.g. the iOS simulator).
  */
 import { placement, type Quad, scaleQuad, smoothQuad, svgPoints, toBox } from "@selis/scan";
 import { Button, IconButton } from "@selis/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { CameraOff, Images, Settings, X, Zap, ZapOff } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { CameraOff, ImageUp, Images, Settings, X, Zap, ZapOff } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FullScreenLayer } from "../../components/FullScreenLayer";
 import { useToast } from "../../components/Toast";
 import { api } from "../../lib/api";
 import { type Camera, CameraError, type CameraFailure, openBackCamera } from "../../lib/camera";
+import { assetUrl } from "../../lib/files";
 import { platform } from "../../lib/platform";
 import { useNavigation, useOverlay, whenHistorySettled } from "../../state/navigation";
+import { nativePicker } from "../images/imagesStore";
 import { documentsKey } from "../library/queries";
 import { Busy } from "../transfer/parts";
 import { AdjustCorners } from "./AdjustCorners";
-import { type Frame, sampleFrame, takeStill } from "./capture";
+import { type Frame, photoStill, sampleFrame, takeStill } from "./capture";
 import { ScanQueue } from "./ScanQueue";
 import { scanStats } from "./scanStats";
 import { stillPixels, useScan } from "./scanStore";
@@ -47,6 +50,52 @@ function useVisible(): boolean {
     return () => document.removeEventListener("visibilitychange", onChange);
   }, []);
   return visible;
+}
+
+/**
+ * One photo already on the device for the scan's Adjust step: the system photo picker on
+ * Android (single choice), a file input elsewhere (WKWebView shows PHPicker). The photo is
+ * staged, read and unstaged at once; nothing else keeps it.
+ */
+function usePickScanPhoto(onPhoto: (blob: Blob) => void, onFailed: () => void): { pick: () => void; input: ReactNode } {
+  const ref = useRef<HTMLInputElement>(null);
+  const input = nativePicker ? null : (
+    <input
+      ref={ref}
+      type="file"
+      accept="image/*"
+      hidden
+      data-testid="scan-photo-input"
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        // The same photo can be picked again.
+        event.target.value = "";
+        if (file) onPhoto(file);
+      }}
+    />
+  );
+  const pickNative = async () => {
+    try {
+      const picked = await api.pickPhotos(1);
+      const source = picked.status === "picked" ? picked.sources[0] : undefined;
+      if (!source) return;
+      const path = await api.stagePhoto(source);
+      try {
+        onPhoto(await (await fetch(assetUrl(path))).blob());
+      } finally {
+        void api.unstage(path).catch(() => undefined);
+      }
+    } catch {
+      onFailed();
+    }
+  };
+  return {
+    pick: () => {
+      if (nativePicker) void pickNative();
+      else ref.current?.click();
+    },
+    input,
+  };
 }
 
 function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; onClose: () => void }) {
@@ -159,6 +208,16 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
     if (!ok) useToast.getState().show(t("scan.captureFailed"), "error");
   };
 
+  const scanPhoto = usePickScanPhoto(
+    (blob) => {
+      void (async () => {
+        const ok = await capture(() => photoStill(blob, stillPixels(), !client?.canvasInWorker));
+        if (!ok) useToast.getState().show(t("scan.photoFailed"), "error");
+      })();
+    },
+    () => useToast.getState().show(t("scan.photoFailed"), "error"),
+  );
+
   const onTorch = async () => {
     const cam = camera.current;
     if (!cam) return;
@@ -184,6 +243,15 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
       >
         <IconButton label={t("scan.close")} icon={<X size={22} strokeWidth={1.75} />} onClick={onClose} className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!" />
         <h1 className="min-w-0 flex-1 truncate text-[17px] font-semibold">{t("scan.title")}</h1>
+        {scanPhoto.input}
+        <IconButton
+          label={t("scan.fromPhoto")}
+          icon={<ImageUp size={22} strokeWidth={1.75} />}
+          onClick={scanPhoto.pick}
+          disabled={capturing || !client}
+          className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!"
+          data-testid="scan-from-photo"
+        />
         <span className="px-3 text-sm tabular-nums text-[#c9c9d1]" data-testid="scan-count">
           {t("scan.count", { count: pages.length })}
         </span>
@@ -237,6 +305,15 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
                   {t("scan.tryAgain")}
                 </Button>
               ) : null}
+              <Button
+                variant={status === "denied" && platform === "android" ? "secondary" : "primary"}
+                icon={<ImageUp size={20} strokeWidth={1.75} />}
+                onClick={scanPhoto.pick}
+                disabled={!client}
+                data-testid="scan-problem-photo"
+              >
+                {t("scan.fromPhoto")}
+              </Button>
               <Button variant="ghost" className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!" icon={<Images size={20} strokeWidth={1.75} />} onClick={onChoosePhotos} data-testid="scan-choose-photos">
                 {t("scan.choosePhotos")}
               </Button>
