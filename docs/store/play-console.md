@@ -10,6 +10,13 @@ URL: `https://fiouri.github.io/selis/privacy/` (website/, generated from docs/PR
 `/el/privacy/`). Play requires a public, non-PDF, non-geofenced page
 (<https://support.google.com/googleplay/android-developer/answer/10144311>).
 
+## App signing (before the first release of any kind)
+
+Our own app signing key, not Google's default (ADR 0025): Protected with Play › Play Store
+distribution › Go to Play app signing › Change the app signing key › Provide a copy of your app
+signing key (PEPK), plus the upload certificate. Exact steps: `scripts/android-keystore.md`
+step 5.
+
 ## App access
 
 All functionality is available without special access (no login, no account).

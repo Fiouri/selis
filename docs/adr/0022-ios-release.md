@@ -31,8 +31,8 @@ an App Store Connect API key (`APPLE_API_KEY`, `APPLE_API_ISSUER`, `APPLE_API_KE
 - Purpose strings: camera for QR codes **and document scan** (the P4c scan was missing from the
   text), photo-library add for the share sheet's "Save Image" (without it iOS terminates the
   app when that action is chosen).
-- `ITSAppUsesNonExemptEncryption` is not set until the owner decides
-  (`docs/store/ios-export-compliance.md`: the correct value is YES; France needs a declaration).
+- `ITSAppUsesNonExemptEncryption` = YES, launch without France (owner decision, ADR 0025;
+  `docs/store/ios-export-compliance.md`).
 - CI's simulator build stays on `macos-15` (no signing, no upload).
 
 ## Consequences

@@ -130,14 +130,14 @@ jobs:
           pipx install fdroidserver==2.4.5
           fdroid scanner --exit-code dist/unsigned/*.apk
 
-      - name: Sign (release key from secrets)
+      - name: Sign (app signing key + Play upload key from secrets)
         id: sign
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          # Optional separate Play upload key for the AAB (scripts/android-keystore.md, option B).
+          # Play upload key for the AAB (ADR 0025); without it the AAB stays unsigned.
           UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
           ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
@@ -159,6 +159,8 @@ jobs:
           echo "signed=true" >> "$GITHUB_OUTPUT"
       - name: Signature checks (apksigner v2 + v3, jarsigner)
         if: steps.sign.outputs.signed == 'true'
+        env:
+          APK_CERT_SHA256: ${{ vars.SELIS_APK_CERT_SHA256 }}
         run: NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" scripts/check-android-release.sh --signed dist/signed/*
 
       - name: Sizes per ABI

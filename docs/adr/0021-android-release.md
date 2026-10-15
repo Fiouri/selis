@@ -36,8 +36,8 @@ Measured on the existing builds: the Rust library's LOAD segments were 16 KB ali
   v1), the AAB with jarsigner — the upload key if `ANDROID_UPLOAD_*` secrets exist, else the
   release key. Keystores come from base64 secrets into the runner's temp dir and are deleted at
   the end of the step; passwords go through the environment. Without secrets the job finishes
-  unsigned with a notice. Owner steps: `scripts/android-keystore.md` (including the choice
-  between one key on every channel and Google's key on Play).
+  unsigned with a notice. Owner steps: `scripts/android-keystore.md` (one app signing key on
+  every channel plus a Play upload key, ADR 0025).
 - **Store checks on every artifact** (`scripts/check-android-release.sh`): `zipalign -c -P 16`,
   LOAD alignment 2**14 and GNU_RELRO end on 16 KB for arm64-v8a and x86_64, targetSdk and
   compileSdk ≥ 36, versionCode/versionName as ADR 0020 derives them, the existing
