@@ -87,7 +87,7 @@ jobs:
           # confirm: its preview's ✓; keyboard: the iPad software keyboard's hide key.
           - { slug: iphone-6.9, type: "^iPhone 17 Pro Max$", size: "1320 2868", photo: "17%, 24%", confirm: "90%, 12%", keyboard: "" }
           - { slug: iphone-6.3, type: "^iPhone 17 Pro$", size: "1206 2622", photo: "17%, 24%", confirm: "90%, 12%", keyboard: "" }
-          - { slug: ipad-13, type: "^iPad Pro 13-inch \\(M5\\)", size: "2064 2752", photo: "30%, 38%", confirm: "80%, 12%", keyboard: "97%, 96%" }
+          - { slug: ipad-13, type: "^iPad Pro 13-inch \\(M5\\)", size: "2064 2752", photo: "45%, 35%", confirm: "83%, 29%", keyboard: "97%, 96%" }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
