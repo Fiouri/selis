@@ -11,6 +11,6 @@ androidWebViewHierarchy: devtools
 - assertNotVisible: "Η βιβλιοθήκη σου είναι άδεια"
 - tapOn: "Settings"
 - extendedWaitUntil:
-    visible: "English"
+    visible: "Language English"
     timeout: 10000
 - assertNotVisible: "Ρυθμίσεις"

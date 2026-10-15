@@ -47,7 +47,7 @@ case "$mode" in
       adb -s "$serial" exec-out run-as "$app" cat "$f" > "$state/$f" 2>/dev/null || rm -f "$state/$f"
     done
     adb -s "$serial" shell cmd locale set-app-locales "$app" --locales ""
-    python -I - "$state" <<'PY'
+    python -I - "$(win "$state")" <<'PY'
 import sqlite3, sys
 state = sys.argv[1]
 db = sqlite3.connect(f"{state}/selis.db")
