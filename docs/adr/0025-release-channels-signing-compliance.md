@@ -1,6 +1,6 @@
 # ADR 0025 — Release decisions: one app signing key, IzzyOnDroid first, export compliance, name, iPad
 
-- Status: accepted (owner decisions, 2026-10-15)
+- Status: accepted (owner decisions, 2026-10-15); amended 2026-10-15 (Amendment 1: IzzyOnDroid dropped)
 - Date: 2026-10-15
 
 ## Context
@@ -47,3 +47,21 @@ each document).
   Recorded in `docs/store/izzyondroid.md`.
 - IzzyOnDroid's 30 MB per-APK limit leaves 1.9 MB of headroom on the arm64 APK (28.1 MB).
 - A French App Store release needs the ANSSI attestation and a new `Info.plist` key first.
+
+## Amendment 1 (2026-10-15): IzzyOnDroid dropped; v1.0 on Google Play and GitHub Releases
+
+- **Decision (owner):** IzzyOnDroid is dropped. Its inclusion policy rejects apps created fully
+  or in part with generative AI tools (<https://izzyondroid.org/docs/general/AppInclusionPolicy/>),
+  and Selis's code is written with Claude Code. `docs/store/izzyondroid.md` is kept only as a
+  record and is not submitted.
+- **Channels for v1.0:** Google Play and GitHub Releases (signed per-ABI and universal APKs,
+  `selis-<version>-<abi>.apk`; `release.yml` fails on any other APK asset name so Obtainium filters
+  keep working; the Obtainium setup is in the README). The App Store follows its own track.
+- **Main F-Droid stays later.** Its policy on AI-assisted code was looked up first and recorded
+  in `docs/store/fdroid/README.md` with sources: as of 2026-10-15 the Inclusion Policy says
+  nothing about AI, and an interim AI policy is only a proposal under discussion.
+- **Transparency:** the README and the website say "Developed with AI assistance (Claude Code);
+  every change is reviewed and tested by the maintainer."
+- Point 1 above still holds: the one app signing key signs the GitHub APKs (and later F-Droid's,
+  via apksigcopier) and Play's copy, so users can move between Play, GitHub/Obtainium and F-Droid
+  installs without reinstalling.

@@ -1,6 +1,11 @@
-# IzzyOnDroid — launch channel for F-Droid clients (draft submission)
+# IzzyOnDroid — dropped (record only)
 
-Status 2026-10-15: **prepared, not submitted.** Owner decision (ADR 0025): the F-Droid-client
+> **Dropped 2026-10-15 (ADR 0025, Amendment 1).** IzzyOnDroid's inclusion policy rejects apps
+> created fully or in part with generative AI tools, and Selis's code is written with Claude Code.
+> Nothing below is submitted; it is kept as a record. v1.0 ships on Google Play and GitHub
+> Releases (README › Install).
+
+Status 2026-10-15 (before the amendment): **prepared, not submitted.** Owner decision (ADR 0025): the F-Droid-client
 launch channel is IzzyOnDroid with our developer-signed, reproducible APK; the main F-Droid
 repository (PDFium and Tesseract WebAssembly built from source) is a later spike
 (`fdroid/README.md`). Submitting needs a first tagged release with signed APKs and a Codeberg

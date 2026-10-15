@@ -16,6 +16,8 @@
 
 > **Status:** release candidate 1.0 — not yet in the stores.
 
+Developed with AI assistance (Claude Code); every change is reviewed and tested by the maintainer.
+
 ## Features
 
 - **Library** on the device: imports are copies, the original file is never modified; search,
@@ -44,6 +46,28 @@
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6-tools.png" width="200" alt="Tools: protect, compress, optimise, repair, save as image, OCR">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7-scan.png" width="200" alt="Scan: adjusting the corners of a photographed delivery note">
 </p>
+
+## Install
+
+Selis 1.0 is distributed through **Google Play** and **GitHub Releases** (signed APKs); the App
+Store follows. Android needs version 8.0 or newer with **Android System WebView 111** or newer
+(updated through Google Play); on an older WebView Selis shows an "Update Android System WebView"
+screen ([ADR 0031](docs/adr/0031-webview-minimum-and-fgs-below-android-14.md)). Not yet in F-Droid (see [docs/store/fdroid/README.md](docs/store/fdroid/README.md)).
+
+**GitHub Releases:** every release has one signed APK per ABI and a universal APK, named
+`selis-<version>-<abi>.apk` (`arm64-v8a` for nearly every phone; also `armeabi-v7a`, `x86`,
+`x86_64`, `universal`), with a `SHA256SUMS` file. The APK signing certificate's SHA-256 is
+published on the [download page](https://fiouri.github.io/selis/download/).
+
+**Updates with [Obtainium](https://github.com/ImranR98/Obtainium):**
+
+1. Obtainium › Add app › App source URL: `https://github.com/Fiouri/selis`.
+2. Additional options › **Filter APKs by regular expression**: `arm64-v8a\.apk$` (or the ABI of
+   your device, or `universal\.apk$`). Asset names keep this pattern from release to release.
+3. Optional: **Include prereleases** to get release candidates (`1.0.0-rc.N`) too.
+4. Add, then Install. Obtainium checks GitHub for new releases and installs updates signed with the
+   same key; Play and GitHub installs use the same app signing key, so you can switch between
+   them without reinstalling.
 
 ## Transfer (device to device, no account)
 

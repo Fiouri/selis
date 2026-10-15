@@ -1,12 +1,34 @@
 # F-Droid readiness
 
-Status 2026-10-15: not submitted. **Owner decisions (ADR 0025):** no self-declared anti-feature;
-the F-Droid-client launch channel is **IzzyOnDroid** (`../izzyondroid.md`, developer-signed
-reproducible APK); the main F-Droid repository with PDFium and Tesseract built from source is a
-later spike (estimate below). Sources: Inclusion Policy <https://f-droid.org/docs/Inclusion_Policy/>,
+Status 2026-10-15: not submitted. **Owner decisions (ADR 0025 and its Amendment 1):** no
+self-declared anti-feature; IzzyOnDroid is dropped (its policy rejects apps written with
+generative AI, see below); v1.0 ships on Google Play and GitHub Releases; the main F-Droid
+repository with PDFium and Tesseract built from source is a later spike (estimate below), to be
+started only after F-Droid's position on AI-assisted code is clear. Sources: Inclusion Policy <https://f-droid.org/docs/Inclusion_Policy/>,
 Anti-Features <https://f-droid.org/docs/Anti-Features/>, Reproducible Builds
 <https://f-droid.org/docs/Reproducible_Builds/>, Build Metadata Reference
 <https://f-droid.org/docs/Build_Metadata_Reference/>.
+
+## F-Droid and AI-assisted code (checked 2026-10-15)
+
+Selis's code is written with AI assistance (Claude Code) and reviewed and tested by the
+maintainer; any submission must say so.
+
+- **Inclusion Policy:** no rule on AI- or LLM-written code. The page
+  (<https://f-droid.org/docs/Inclusion_Policy/>, "© 2010-2026") mentions neither AI, LLMs nor
+  generated code.
+- **Under discussion, not adopted:** an F-Droid board member wrote on 2026-09-05 that "There is a
+  proposal for F-Droid to adopt an interim AI policy, along the lines of Debian's pro-AI policy",
+  and that he personally does not "want to see genAI code in either F-Droid's own software, or in
+  apps in F-Droid's repository" (Neil Brown, <https://neilzone.co.uk/2026/09/my-views-on-genai-and-f-droid/>;
+  his views, not F-Droid's). Forum thread without a team statement:
+  <https://forum.f-droid.org/t/does-f-droid-have-a-formal-policy-on-libre-ai/33279>.
+- **For comparison, IzzyOnDroid** has an explicit rule against apps created fully or in part with
+  generative AI (<https://izzyondroid.org/docs/general/AppInclusionPolicy/>), which is why it was
+  dropped.
+
+Before starting the main-repository spike: check the Inclusion Policy and the forum again; if an
+AI policy has been adopted, follow it (or record why Selis stays off F-Droid).
 
 ## In place
 
@@ -57,8 +79,8 @@ by apksigcopier yet (F-Droid docs).
    description states the n0 relay fallback, "Local network only" and the self-hosted relay
    option (`fastlane/metadata/android/*/full_description.txt`, the privacy policy). If F-Droid's
    reviewers still ask for NonFreeNet, the commented block in the YAML is ready.
-3. **Launch channel:** IzzyOnDroid (`../izzyondroid.md`; note its AI policy there). The YAML here
-   stays a draft for the main repository.
+3. **Launch channels:** Google Play and GitHub Releases (Obtainium); IzzyOnDroid dropped
+   (ADR 0025, Amendment 1). The YAML here stays a draft for the main repository.
 4. **Main F-Droid:** later; the WebAssembly-from-source effort is estimated below.
 
 ## Spike estimate: main F-Droid with WebAssembly built from source

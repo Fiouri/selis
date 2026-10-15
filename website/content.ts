@@ -23,6 +23,7 @@ export type Copy = {
     privacyLink: string;
     openTitle: string;
     openBody: string;
+    aiNote: string;
     openLink: string;
   };
   features: { title: string; lead: string; groups: Array<{ title: string; items: string[] }> };
@@ -80,6 +81,7 @@ export const COPY: Record<Lang, Copy> = {
       privacyLink: "Read the privacy policy",
       openTitle: "Open source",
       openBody: "Selis is licensed under the Apache License 2.0. Read the code, report issues, or build it yourself.",
+      aiNote: "Developed with AI assistance (Claude Code); every change is reviewed and tested by the maintainer.",
       openLink: "Source code on GitHub",
     },
     features: {
@@ -115,7 +117,7 @@ export const COPY: Record<Lang, Copy> = {
       certificate: "APK signing certificate (SHA-256)",
       certificatePending: "published with the first signed release",
       obtainium: "Obtainium",
-      obtainiumBody: "Get updates straight from GitHub Releases: add https://github.com/Fiouri/selis in Obtainium.",
+      obtainiumBody: "Get updates straight from GitHub Releases: in Obtainium, add https://github.com/Fiouri/selis and set the APK filter to arm64-v8a\\.apk$ (or universal\\.apk$). Turn on pre-releases to get release candidates too.",
     },
     footer: { license: "Apache License 2.0", source: "Source code", trademarks: "Google Play and the Google Play logo are trademarks of Google LLC. App Store is a service mark of Apple Inc." },
     notFound: { title: "Page not found", body: "This page does not exist.", home: "Go to the home page" },
@@ -147,6 +149,7 @@ export const COPY: Record<Lang, Copy> = {
       privacyLink: "Διάβασε την πολιτική απορρήτου",
       openTitle: "Ανοιχτός κώδικας",
       openBody: "Το Selis διατίθεται με την άδεια Apache 2.0. Διάβασε τον κώδικα, ανέφερε προβλήματα ή χτίσ' το μόνος σου.",
+      aiNote: "Αναπτύσσεται με τη βοήθεια AI (Claude Code)· κάθε αλλαγή ελέγχεται και δοκιμάζεται από τον συντηρητή.",
       openLink: "Ο κώδικας στο GitHub",
     },
     features: {
@@ -182,7 +185,7 @@ export const COPY: Record<Lang, Copy> = {
       certificate: "Πιστοποιητικό υπογραφής APK (SHA-256)",
       certificatePending: "δημοσιεύεται με την πρώτη υπογεγραμμένη έκδοση",
       obtainium: "Obtainium",
-      obtainiumBody: "Ενημερώσεις κατευθείαν από τα GitHub Releases: πρόσθεσε το https://github.com/Fiouri/selis στο Obtainium.",
+      obtainiumBody: "Ενημερώσεις κατευθείαν από τα GitHub Releases: στο Obtainium πρόσθεσε το https://github.com/Fiouri/selis και βάλε φίλτρο APK arm64-v8a\\.apk$ (ή universal\\.apk$). Άνοιξε τις προ-εκδόσεις για να παίρνεις και τις υποψήφιες εκδόσεις.",
     },
     footer: { license: "Άδεια Apache 2.0", source: "Πηγαίος κώδικας", trademarks: "Τα Google Play και το λογότυπο Google Play είναι εμπορικά σήματα της Google LLC. Το App Store είναι σήμα υπηρεσιών της Apple Inc." },
     notFound: { title: "Η σελίδα δεν βρέθηκε", body: "Αυτή η σελίδα δεν υπάρχει.", home: "Στην αρχική σελίδα" },

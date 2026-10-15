@@ -1,6 +1,6 @@
 # DRAFT fdroiddata metadata for Selis (docs/store/fdroid/README.md). Not submitted.
 # For the main F-Droid repository, after the WebAssembly-from-source spike (README) and a first
-# tagged release. The launch channel is IzzyOnDroid (docs/store/izzyondroid.md, ADR 0025).
+# tagged release. v1.0 ships on Google Play and GitHub Releases (ADR 0025, Amendment 1).
 # Field reference:
 # https://f-droid.org/docs/Build_Metadata_Reference/
 

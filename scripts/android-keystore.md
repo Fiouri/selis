@@ -1,14 +1,14 @@
 # Android signing keys — what the owner runs
 
 Decision (owner, 2026-10-15; ADR 0025): **one app signing key on every channel** (GitHub
-Releases / Obtainium, IzzyOnDroid, F-Droid, and Google Play through "use my own key") and a
+Releases / Obtainium, F-Droid later, and Google Play through "use my own key") and a
 **separate Play upload key**. Android installs an update only when it carries the same signing
 certificate as the installed app, so with one key a user can move between Play, GitHub and
 F-Droid installs without uninstalling (and losing the library).
 
 | Key | File / alias | Signs | Who holds it |
 | --- | --- | --- | --- |
-| App signing key | `selis-release.jks` / `selis` | Every APK we publish (GitHub release, IzzyOnDroid, F-Droid via apksigcopier); Play re-signs Play installs with its copy | You (offline backups), GitHub secrets, Google (one encrypted copy via PEPK) |
+| App signing key | `selis-release.jks` / `selis` | Every APK we publish (GitHub release, later F-Droid via apksigcopier); Play re-signs Play installs with its copy | You (offline backups), GitHub secrets, Google (one encrypted copy via PEPK) |
 | Upload key | `selis-upload.jks` / `selis-upload` | Only the AAB sent to Play | You, GitHub secrets. Google knows only its certificate |
 
 The keystores are made on your machine and go straight into the GitHub secrets and your
@@ -62,7 +62,7 @@ keytool -list -v -keystore selis-upload.jks -alias selis-upload | Select-String 
 ```
 
 The app signing key's SHA-256 goes, lowercase hex without colons, into F-Droid's
-`AllowedAPKSigningKeys`, the IzzyOnDroid request and the website's download page. Set the
+`AllowedAPKSigningKeys` and the website's download page. Set the
 website variable yourself or send me only that line:
 
 ```powershell
@@ -118,7 +118,7 @@ fingerprint; "Upload key certificate" SHA-256 = step 3's upload fingerprint.
 
 ## 6. Backup (do this before step 5 and before the first release)
 
-**Losing the app signing key means no updates ever again for GitHub, IzzyOnDroid and F-Droid
+**Losing the app signing key means no updates ever again for GitHub/Obtainium and F-Droid
 users** — they would have to uninstall (losing the library unless they move it first) and
 install an app signed with a new key. Play users keep updating (Google holds a copy and can
 rotate it), and a lost or leaked upload key can be reset through Play Console (App signing ›
