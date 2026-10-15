@@ -127,3 +127,5 @@ jobs:
             fastlane/screenshots
             .tmp/ios-shots
           if-no-files-found: warn
+          # Maestro's takeScreenshot files live under .maestro/ in the debug output.
+          include-hidden-files: true

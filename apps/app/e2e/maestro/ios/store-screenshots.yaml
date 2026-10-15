@@ -131,14 +131,13 @@ name: App Store screenshots (iOS)
 - tapOn:
     text: ${T_FROM_PHOTO}
     index: 0
-- extendedWaitUntil:
-    visible: "Photo.*|Photos"
-    timeout: 20000
-    optional: true
+# PHPicker runs out of process (not in the hierarchy): the newest photo, the sample, is the
+# first cell; its position comes from the script per device.
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: photo-picker
 - tapOn:
-    text: "Photo.*"
-    index: 0
-    optional: true
+    point: ${PHOTO_POINT}
 - extendedWaitUntil:
     visible: ${T_ADJUST}
     timeout: 30000

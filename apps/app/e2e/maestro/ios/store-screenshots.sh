@@ -128,6 +128,8 @@ const env = {
   T_FROM_PHOTO: t("scan.fromPhoto"),
   T_ADJUST: t("scan.adjustTitle"),
   SIGNER: lang === "el" ? "Δανιήλ Ρήγας" : "Daniel Reyes",
+  // The first photo in PHPicker (iPhone: full-screen grid; iPad: the sheet's grid).
+  PHOTO_POINT: process.env.PHOTO_POINT || "17%, 24%",
 };
 console.log("appId: com.anywecon.selis");
 console.log("env:");
