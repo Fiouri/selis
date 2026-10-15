@@ -12,6 +12,11 @@ name: iOS screenshots
 
 on:
   workflow_dispatch:
+    inputs:
+      app_run_id:
+        description: Reuse the simulator app of this earlier run (skips the build)
+        required: false
+        default: ""
   pull_request:
     paths:
       - .github/workflows/ios-screenshots.yml
@@ -20,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ios-screenshots-${{ github.ref }}
@@ -32,6 +38,7 @@ env:
 jobs:
   build:
     name: Simulator build (release)
+    if: inputs.app_run_id == '' || inputs.app_run_id == null
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -66,6 +73,7 @@ jobs:
   shots:
     name: Screenshots ${{ matrix.device.slug }} (${{ matrix.lang }})
     needs: build
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: macos-26
     timeout-minutes: 45
     strategy:
@@ -87,6 +95,8 @@ jobs:
         with:
           name: selis-ios-sim-app
           path: dist
+          run-id: ${{ inputs.app_run_id || github.run_id }}
+          github-token: ${{ github.token }}
       - run: tar -xzf dist/selis-sim.tgz -C dist
       - uses: actions/setup-java@v6
         with:
