@@ -1,4 +1,4 @@
-**Current:** P5c follow-ups — PRs #54 (English first), #55 (distribution), #56 (Android < 14, WebView) ready; Dependabot #14/#35 merged, #16 closed, #15 rebasing
+**Current:** P5c follow-ups — #54 (English first), #55 (distribution) merged; #56 (Android < 14, WebView, signed AAB check) merging; Dependabot #14/#15/#35 merged, #16 closed
 **Next step:** owner: upload docs/store/github-social-preview.png (repo Settings › Social preview), then the go for the v1.0.0-rc.1 tag
 **Last session:** 2026-10-16 — P5c: settings schema 7, README/store/repo in English, IzzyOnDroid dropped, FGS path verified on API 33; Tier 1 green, Maestro AVD 36 + S23 + API 33 green
 
