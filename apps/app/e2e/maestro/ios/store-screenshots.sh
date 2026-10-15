@@ -88,8 +88,9 @@ const t = tr(strings(lang));
 const en = tr(strings("en"));
 const { samples } = await import(`file://${join(root, "packages/fixtures/src/samples.ts")}`);
 const [lease, trip, invoice, report] = samples(lang);
-// Files shows names without ".pdf"; a regex either way.
-const file = (s) => `${s.file.replace(/\.pdf$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\.pdf)?`;
+// A file in the Files grid is a cell whose id is "<name without extension>, pdf" (its label
+// below is not tappable).
+const file = (s) => `${s.file.replace(/\.pdf$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, pdf`;
 const open = (title) => `${t("library.openDocument", { title }).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},.*`;
 const env = {
   LANG: lang,
