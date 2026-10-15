@@ -160,6 +160,10 @@ Tier 2 — end of every feature:
   the OCR; the new version passes qpdf and pdf.js reads ≥ 95 % of the words of each page; the
   viewer's search finds an accented Greek word). OCR assets (tesseract.js worker, cores,
   tessdata_fast) are copied into `apps/app/public/ocr/` by `scripts/copy-ocr-assets.ts`.
+  And `upgrade-locale.yaml` with `OLD_APK=<previous debug build> NEW_APK=<this debug build>`,
+  `PRE_RUN="…/upgrade-locale.sh pre"` and `POST_RUN="…/upgrade-locale.sh post"` (ADR 0030: the
+  previous build on a Greek-locale app with "Same as the device" is updated; it opens in English;
+  the database is at schema 7 with locale "en"; the app's locale is reset).
   run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro

@@ -1,0 +1,16 @@
+# Run by upgrade-locale.sh pre on the previous build (schema 6), the app's locale Greek: it
+# opens in English (English first, #31), then the language goes to "Same as the device" and the
+# UI turns Greek, as an install from before English first had it.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 60000
+- tapOn: "Settings"
+- tapOn: "Language.*"
+- tapOn: "Same as the device"
+- extendedWaitUntil:
+    visible: "Ρυθμίσεις"
+    timeout: 10000
