@@ -92,8 +92,11 @@ const [lease, trip, invoice, report] = samples(lang);
 // below is not tappable).
 const file = (s) => `${s.file.replace(/\.pdf$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, pdf`;
 const open = (title) => `${t("library.openDocument", { title }).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},.*`;
-// iPad picker: the Files grid (3 per row) sorts names in the device language; cell centres.
-const cells = ["51%, 35%", "66%, 35%", "80%, 35%", "51%, 50%"];
+// The Files picker grid (3 per row) sorts names in the device language; a file is tapped on its
+// thumbnail, whose position per device comes from the workflow (GRID_X / GRID_Y).
+const gx = (process.env.GRID_X || "18%,50%,82%").split(",");
+const gy = (process.env.GRID_Y || "29%,52%").split(",");
+const cells = [0, 1, 2, 3].map((i) => `${gx[i % 3]}, ${gy[Math.floor(i / 3)]}`);
 const order = [lease, trip, invoice, report].map((s) => s.file.replace(/\.pdf$/, "")).sort((a, b) => a.localeCompare(b, lang));
 const at = (s) => cells[order.indexOf(s.file.replace(/\.pdf$/, ""))];
 const env = {

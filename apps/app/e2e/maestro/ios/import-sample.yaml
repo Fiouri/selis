@@ -1,8 +1,9 @@
 # One sample PDF from Files › On My iPhone/iPad into the library, then back (store-screenshots.yaml).
 # iPhone: a full-screen picker with a tab bar (Recents / Shared / Browse), in the hierarchy.
 # iPad: a popover whose content is out of process (only its "dismiss popup" region is in the
-# hierarchy): its sidebar's "On My iPad", then the file, by position (POINT, from the script:
-# the Files grid sorts names in the device language).
+# hierarchy): its sidebar's "On My iPad". Either way the file is tapped on its thumbnail (POINT,
+# from the script: the grid sorts names in the device language); a tap on the cell's centre
+# lands on its name label and did not open the file.
 appId: com.anywecon.selis
 ---
 - tapOn: ${T_IMPORT}
@@ -17,10 +18,24 @@ appId: com.anywecon.selis
     commands:
       - tapOn:
           point: 23%, 46%
-      - waitForAnimationToEnd:
+      # The grid is out of process (nothing to wait on): a fixed pause for it to load.
+      - extendedWaitUntil:
+          visible: "selis-never-shown"
           timeout: 3000
+          optional: true
       - tapOn:
           point: ${POINT}
+      - repeat:
+          while:
+            visible: "dismiss popup"
+          times: 3
+          commands:
+            - extendedWaitUntil:
+                visible: "selis-never-shown"
+                timeout: 3000
+                optional: true
+            - tapOn:
+                point: ${POINT}
 - runFlow:
     when:
       visible: "Browse"
@@ -44,20 +59,24 @@ appId: com.anywecon.selis
       - waitForAnimationToEnd:
           timeout: 3000
       - tapOn:
-          id: ${SAMPLE}
-      - waitForAnimationToEnd:
-          timeout: 3000
-      # Still in the picker (a tap that did not take): again, a few times.
+          point: ${POINT}
       - repeat:
           while:
-            visible: "On My iPhone"
-          times: 4
+            visible:
+              id: ${SAMPLE}
+          times: 3
           commands:
-            - tapOn:
-                id: ${SAMPLE}
-                retryTapIfNoChange: true
-            - waitForAnimationToEnd:
+            - extendedWaitUntil:
+                visible: "selis-never-shown"
                 timeout: 3000
+                optional: true
+            - runFlow:
+                when:
+                  visible:
+                    id: ${SAMPLE}
+                commands:
+                  - tapOn:
+                      point: ${POINT}
 - extendedWaitUntil:
     visible: ${PAGE}
     timeout: 30000

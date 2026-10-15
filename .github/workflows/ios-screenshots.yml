@@ -84,9 +84,11 @@ jobs:
         lang: [en, el]
         device:
           # photo: where PHPicker's first cell is (its content is out of process, not in the hierarchy).
-          - { slug: iphone-6.9, type: "^iPhone 17 Pro Max$", size: "1320 2868", photo: "17%, 24%" }
-          - { slug: iphone-6.3, type: "^iPhone 17 Pro$", size: "1206 2622", photo: "17%, 24%" }
-          - { slug: ipad-13, type: "^iPad Pro 13-inch \\(M5\\)", size: "2064 2752", photo: "30%, 38%" }
+          # gx/gy: the Files picker grid's thumbnail columns and rows (a file is tapped on its
+          # thumbnail: XCUITest taps on a cell's centre, its name label, did not open it).
+          - { slug: iphone-6.9, type: "^iPhone 17 Pro Max$", size: "1320 2868", photo: "17%, 24%", gx: "17%,50%,82%", gy: "28%,48%" }
+          - { slug: iphone-6.3, type: "^iPhone 17 Pro$", size: "1206 2622", photo: "17%, 24%", gx: "18%,50%,82%", gy: "29%,52%" }
+          - { slug: ipad-13, type: "^iPad Pro 13-inch \\(M5\\)", size: "2064 2752", photo: "30%, 38%", gx: "51%,66%,80%", gy: "35%,50%" }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -114,6 +116,8 @@ jobs:
       - name: Screenshots
         env:
           PHOTO_POINT: ${{ matrix.device.photo }}
+          GRID_X: ${{ matrix.device.gx }}
+          GRID_Y: ${{ matrix.device.gy }}
         run: bash apps/app/e2e/maestro/ios/store-screenshots.sh dist/Selis.app "${{ matrix.device.type }}" "${{ matrix.device.slug }}" "${{ matrix.lang }}"
       - name: Sizes
         run: |
