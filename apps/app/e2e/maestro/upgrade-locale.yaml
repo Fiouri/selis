@@ -1,0 +1,16 @@
+# English first after an update (ADR 0030). upgrade-locale.sh pre installed the previous build,
+# set "Same as the device" on a Greek-locale app (UI Greek) and updated to this build: it must
+# open in English, with English as the language in Settings. post checks the database.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 60000
+- assertNotVisible: "Η βιβλιοθήκη σου είναι άδεια"
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible: "Language English"
+    timeout: 10000
+- assertNotVisible: "Ρυθμίσεις"

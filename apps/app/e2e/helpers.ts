@@ -54,6 +54,7 @@ export async function presetSettings(
   await page.addInitScript((s) => {
     const merged = { locale: "system", theme: "system", librarySort: "recent", libraryView: "grid", nightMode: false, ...s };
     localStorage.setItem("selis.mock.settings", JSON.stringify(merged));
-    localStorage.setItem("selis.boot-settings", JSON.stringify(merged));
+    // v: the boot mirror's version (state/settings.ts); without it "system" reads as English.
+    localStorage.setItem("selis.boot-settings", JSON.stringify({ v: 2, ...merged }));
   }, settings);
 }
