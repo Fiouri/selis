@@ -124,10 +124,19 @@ name: App Store screenshots (iOS)
 - tapOn:
     text: ${T_FROM_PHOTO}
     index: 0
+# WebKit's file input menu (system language: the simulator's, English).
+- extendedWaitUntil:
+    visible: "Photo Library"
+    timeout: 10000
+- tapOn: "Photo Library"
 # PHPicker runs out of process (not in the hierarchy): the newest photo, the sample, is the
 # first cell; its position comes from the script per device.
 - waitForAnimationToEnd:
     timeout: 5000
+- extendedWaitUntil:
+    visible: "never shown, lets the photos load"
+    timeout: 3000
+    optional: true
 - takeScreenshot: photo-picker
 - tapOn:
     point: ${PHOTO_POINT}
