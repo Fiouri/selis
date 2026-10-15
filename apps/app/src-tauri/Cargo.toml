@@ -24,7 +24,7 @@ measure = ["tauri/devtools"]
 tauri-build = { version = "~2.7.2", features = [] }
 
 [dependencies]
-base64 = "0.22.1"
+base64 = "0.23.1"
 selis-core = { workspace = true, features = ["specta"] }
 selis-pdfops.workspace = true
 selis-transfer = { path = "../../../crates/selis-transfer" }
