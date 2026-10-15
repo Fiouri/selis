@@ -70,6 +70,10 @@ targets:
         NSCameraUsageDescription: Selis uses the camera to scan the QR code of a transfer from your other device and to photograph document pages you scan. Pictures stay on this device.
         # The share sheet's "Save Image" (a page saved as PNG/JPEG goes through the Web Share API).
         NSPhotoLibraryAddUsageDescription: Selis adds a page you export as an image to your photos only when you choose Save Image.
+        # Export compliance (docs/store/ios-export-compliance.md, owner decision 2026-10-15): our own
+        # TLS / AEAD (rustls, RustCrypto, qpdf) is standard but not Apple's, so non-exempt. No France
+        # at launch, hence no ITSEncryptionExportComplianceCode yet.
+        ITSAppUsesNonExemptEncryption: true
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]

@@ -1,8 +1,12 @@
-# iOS export compliance (encryption) — decision for the owner
+# iOS export compliance (encryption)
 
-Status 2026-10-14: **open**. `ITSAppUsesNonExemptEncryption` is deliberately **not set** in
-`Info.plist` until you decide (without the key, App Store Connect asks the questions at each
-upload; TestFlight builds wait on the answer). Not legal advice.
+Status 2026-10-15: **decided** (owner; ADR 0025). Not legal advice.
+
+- `ITSAppUsesNonExemptEncryption` = **YES** (`gen/apple/project.yml` → `Info.plist`).
+- **Launch without France**: France is excluded in App Store Connect › Pricing and Availability.
+- No `ITSEncryptionExportComplianceCode` yet. When France is wanted, file the ANSSI declaration
+  drafted in `ios-france-declaration.md`, upload ANSSI's attestation in App Store Connect › App
+  Information › App Encryption Documentation and put the code Apple returns into `project.yml`.
 
 ## What Selis encrypts
 
@@ -49,16 +53,24 @@ authentication-only, so in Apple's terms the app **uses non-exempt encryption of
 standard algorithm" kind**. No CCATS. The only paperwork Apple can require is the French
 declaration, and only for the French App Store.
 
-**Correct value: `ITSAppUsesNonExemptEncryption` = `YES`.** Setting `NO` would be a false
-declaration (the transfer and pack encryption are neither OS-provided nor authentication-only).
+## What the owner answers in App Store Connect
 
-## Decision needed
+Apple: "App Store Connect provides a set of questions to help you determine whether app
+encryption documentation is required" — App Information › App Encryption Documentation › +, or
+**Manage** next to a build that is missing the information on the TestFlight / Distribution tab
+(<https://developer.apple.com/help/app-store-connect/manage-app-information/determine-and-upload-app-encryption-documentation>).
+Answer them with the classification above: encryption **not** limited to Apple's OS, **not**
+exempt, **standard (published) algorithms**, **not distributed in France**. That combination
+needs no document. Without an `ITSEncryptionExportComplianceCode` App Store Connect can ask
+again for new builds (the **Manage** link on the build); the answers stay the same. Exclude France
+in Pricing and Availability **before** answering, as Apple asks to "manage availability for your
+app on the App Store before providing this documentation".
 
-| Option | What you do | Then in the repo |
-| --- | --- | --- |
-| **A — distribute in France** (recommended if France matters) | File the ANSSI "déclaration de fourniture d'un moyen de cryptologie" (free; ANSSI answers within a month), upload it in App Store Connect › App Information › App Encryption Documentation, Apple returns a code | `ITSAppUsesNonExemptEncryption` YES + `ITSEncryptionExportComplianceCode` = Apple's code; no questions at upload |
-| **B — not in France** | Exclude France in App Store availability; answer "standard algorithms" + "not available in France" in App Store Connect | `ITSAppUsesNonExemptEncryption` YES; App Store Connect still asks the short questionnaire per build (or once Apple records the answer) |
-| C — claim an exemption | — | Not recommended: the exemptions Apple lists do not cover encrypting user data with our own TLS / AEAD |
+## France later
 
-TestFlight internal testing needs the same answer before a build can be installed. Tell me A or
-B; I add the key(s) to `project.yml` and `Info.plist` in the same commit.
+1. File the declaration (`ios-france-declaration.md`) on demarche.numerique.gouv.fr (free;
+   ANSSI's online procedure since 31 March 2026).
+2. Upload ANSSI's attestation in App Store Connect › App Information › App Encryption
+   Documentation; Apple returns an export compliance code.
+3. Add `ITSEncryptionExportComplianceCode: <code>` next to `ITSAppUsesNonExemptEncryption` in
+   `gen/apple/project.yml` and `Info.plist`, then add France in Pricing and Availability.

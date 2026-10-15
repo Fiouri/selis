@@ -76,6 +76,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Selis uses the camera to scan the QR code of a transfer from your other device and to photograph document pages you scan. Pictures stay on this device.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<true/>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Selis adds a page you export as an image to your photos only when you choose Save Image.</string>
 	<key>CFBundleExecutable</key>
