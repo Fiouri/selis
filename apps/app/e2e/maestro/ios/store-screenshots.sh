@@ -102,9 +102,10 @@ const env = {
   T_LIBRARY: t("tabs.library"),
   T_TRANSFER: t("tabs.transfer"),
   T_BACK: t("viewer.back"),
-  T_OPEN_LEASE: open(lease.title),
-  T_OPEN_TRIP: open(trip.title),
-  T_OPEN_REPORT: open(report.title),
+  // Titles here come from the file names (the picker hands over a copy named like the file).
+  T_OPEN_LEASE: open(lease.file.replace(/\.pdf$/, "")),
+  T_OPEN_TRIP: open(trip.file.replace(/\.pdf$/, "")),
+  T_OPEN_REPORT: open(report.file.replace(/\.pdf$/, "")),
   // VoiceOver joins the header's lines ("Page 1 of 2 · saved"): match inside.
   T_PAGE_1: `.*${t("viewer.pageIndicator", { page: "1", total: "1" })}.*`,
   T_PAGE_1_OF_2: `.*${t("viewer.pageIndicator", { page: "1", total: "2" })}.*`,
