@@ -16,7 +16,7 @@ async function more(page: Page, item: string, role: "button" | "switch" = "butto
 }
 
 /** The mock backend titles a picked file by its name. */
-const LARGE = /^Open (Selis 1000-page fixture|large-1000)$/;
+const LARGE = /^Open (Selis 1000-page fixture|large-1000),/;
 
 test("top bar, dock (annotate, sign, pages + coming-soon send), page chip while scrolling", async ({ page }, info) => {
   await openFixture(page, "large-1000.pdf");

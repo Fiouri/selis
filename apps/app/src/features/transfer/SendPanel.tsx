@@ -1,6 +1,6 @@
 import { Button, EmptyState, Switch } from "@selis/ui";
 import { Check } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TransferIllustration } from "../../components/Illustrations";
 import { useToast } from "../../components/Toast";
@@ -75,7 +75,6 @@ function ChooseDocuments() {
   const pushTo = useTransfer((s) => s.pushTo);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [history, setHistory] = useState(false);
-  const historyLabel = useId();
   const list = useMemo(() => docs.data ?? [], [docs.data]);
   const chosen = list.filter((d) => selected.has(d.id));
   const size = chosen.reduce((sum, d) => sum + d.sizeBytes, 0);
@@ -127,12 +126,12 @@ function ChooseDocuments() {
       </ul>
       <div className="flex items-center gap-3 rounded-[14px] border border-neutral-5 bg-surface-raised py-2 pr-2 pl-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span id={historyLabel} className="text-md text-neutral-12">
+          <span className="text-md text-neutral-12">
             {t("transfer.send.includeHistory")}
           </span>
           <span className="text-[13px] text-neutral-11">{t("transfer.send.includeHistoryHelp")}</span>
         </div>
-        <Switch checked={history} onChange={setHistory} labelledBy={historyLabel} testId="transfer-history" />
+        <Switch checked={history} onChange={setHistory} label={`${t("transfer.send.includeHistory")}, ${t("transfer.send.includeHistoryHelp")}`} testId="transfer-history" />
       </div>
       {problem ? <Problem problem={problem} testId="transfer-send-problem" /> : null}
       <TrustedDevices

@@ -448,7 +448,9 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       data-testid={testId}
       data-zoom={zoom.toFixed(2)}
       aria-label={ariaLabel}
-      role="region"
+      // A group, not a region: TalkBack read the region as just "region" (Chrome on Android
+      // exposes a region's name as a pane title), a group by its name (P5b walkthrough).
+      role="group"
       tabIndex={0}
       onClick={onClick}
       className="selis-viewer-scroller relative h-full w-full overflow-auto bg-page-canvas outline-none"

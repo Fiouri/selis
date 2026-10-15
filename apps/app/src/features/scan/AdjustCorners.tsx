@@ -155,9 +155,9 @@ export function AdjustCorners() {
         <p className={`text-[13px] ${convex ? "text-neutral-11" : "text-danger-11"}`} role={convex ? undefined : "alert"} data-testid="scan-adjust-hint">
           {!convex ? t("scan.outlineInvalid") : still.detected ? t("scan.adjustHint") : t("scan.notFound")}
         </p>
-        <div role="group" aria-label={t("scan.filter")} className="flex gap-2" data-testid="scan-filters">
+        <div role="radiogroup" aria-label={t("scan.filter")} className="flex gap-2" data-testid="scan-filters">
           {(Object.keys(FILTER_KEYS) as ScanFilter[]).map((filter) => (
-            <Chip key={filter} pressed={still.filter === filter} onClick={() => void setFilter(filter)} disabled={keeping} data-testid={`scan-filter-${filter}`}>
+            <Chip key={filter} kind="radio" selected={still.filter === filter} onClick={() => void setFilter(filter)} disabled={keeping} data-testid={`scan-filter-${filter}`}>
               {t(FILTER_KEYS[filter])}
             </Chip>
           ))}

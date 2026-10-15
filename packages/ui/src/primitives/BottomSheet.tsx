@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "./cx";
 
@@ -19,7 +19,6 @@ export type BottomSheetProps = {
  * so focus and screen readers stay inside the sheet.
  */
 export function BottomSheet({ open, onClose, title, hideTitle = false, children, testId }: BottomSheetProps) {
-  const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   // Callers pass a fresh closure on every render; the open/close effect must
   // not re-run for that (it would move focus back to the panel each time).
@@ -59,7 +58,9 @@ export function BottomSheet({ open, onClose, title, hideTitle = false, children,
         // No aria-modal: Android WebView then hides the whole accessibility tree,
         // dialog included (TalkBack and UI tests see nothing). `inert` on #root
         // already keeps assistive tech inside the sheet.
-        aria-labelledby={titleId}
+        // aria-label, not aria-labelledby: Chrome on Android does not pass a labelledby name to
+        // TalkBack, which then announced the window ("Selis") instead of the sheet.
+        aria-label={title}
         tabIndex={-1}
         data-testid={testId}
         className={cx(
@@ -70,7 +71,7 @@ export function BottomSheet({ open, onClose, title, hideTitle = false, children,
         <div className="flex justify-center pt-2 pb-1" aria-hidden="true">
           <span className="h-1 w-9 rounded-full bg-control-line" />
         </div>
-        <h2 id={titleId} className={hideTitle ? "sr-only" : "px-5 pt-2 pb-3 text-md font-semibold text-neutral-12"}>
+        <h2 className={hideTitle ? "sr-only" : "px-5 pt-2 pb-3 text-md font-semibold text-neutral-12"}>
           {title}
         </h2>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>

@@ -60,7 +60,7 @@ test("annotate: markup, pen, shapes, text, note, eraser with undo/redo; Done mak
   await expect(page.getByTestId("annotate-sheet")).toBeVisible();
   await expect(page.getByTestId("viewer-dock")).toHaveCount(0);
   await expect(page.getByTestId("annotate-undo")).toBeDisabled();
-  await expect(page.getByTestId("tool-highlight")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("tool-highlight")).toHaveAttribute("aria-checked", "true");
   await page.screenshot({ path: `${SCREENSHOTS}/${info.project.name}-annotate-sheet.png` });
 
   const layer = page.getByTestId("annotation-layer-1");

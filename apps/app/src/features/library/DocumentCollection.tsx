@@ -1,6 +1,7 @@
 import { Skeleton } from "@selis/ui";
 import { Star } from "lucide-react";
-import { useId, useState } from "react";
+import { useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useLongPress } from "../../components/useLongPress";
 import type { Document, LibraryView } from "../../lib/api";
@@ -63,9 +64,19 @@ function Badges({ doc }: { doc: Document }) {
   );
 }
 
+/**
+ * "Open <title>, <size or pages · date>, Favorite, Received": one name, the verb and title first.
+ * Not aria-describedby: TalkBack on Android read the description before the name (P5b).
+ */
+function accessibleName(t: TFunction, title: string, meta: string, doc: Document): string {
+  const parts = [t("library.openDocument", { title }), meta];
+  if (doc.favorite) parts.push(t("library.favorite"));
+  if (doc.received) parts.push(t("library.received"));
+  return parts.join(", ");
+}
+
 function DocumentCard({ doc, meta, onOpen, onMenu }: ItemProps) {
   const { t } = useTranslation();
-  const describedBy = useId();
   const press = useLongPress(() => onMenu(doc));
   const title = documentTitle(doc, t("library.untitled"));
   return (
@@ -74,8 +85,7 @@ function DocumentCard({ doc, meta, onOpen, onMenu }: ItemProps) {
         type="button"
         {...press}
         onClick={() => onOpen(doc.id)}
-        aria-label={t("library.openDocument", { title })}
-        aria-describedby={describedBy}
+        aria-label={accessibleName(t, title, meta, doc)}
         data-testid="document-card"
         className="selis-focus group flex w-full flex-col rounded-card text-left"
       >
@@ -87,11 +97,7 @@ function DocumentCard({ doc, meta, onOpen, onMenu }: ItemProps) {
           <Badges doc={doc} />
         </span>
         <span className="mt-2 line-clamp-2 text-sm leading-[1.35] font-semibold text-neutral-12">{title}</span>
-        <span id={describedBy} className="mt-0.5 truncate text-xs text-neutral-11">
-          {meta}
-          {doc.favorite ? <span className="sr-only">, {t("library.favorite")}</span> : null}
-          {doc.received ? <span className="sr-only">, {t("library.received")}</span> : null}
-        </span>
+        <span className="mt-0.5 truncate text-xs text-neutral-11">{meta}</span>
       </button>
     </li>
   );
@@ -99,7 +105,6 @@ function DocumentCard({ doc, meta, onOpen, onMenu }: ItemProps) {
 
 function DocumentRow({ doc, meta, onOpen, onMenu }: ItemProps) {
   const { t } = useTranslation();
-  const describedBy = useId();
   const press = useLongPress(() => onMenu(doc));
   const title = documentTitle(doc, t("library.untitled"));
   return (
@@ -108,8 +113,7 @@ function DocumentRow({ doc, meta, onOpen, onMenu }: ItemProps) {
         type="button"
         {...press}
         onClick={() => onOpen(doc.id)}
-        aria-label={t("library.openDocument", { title })}
-        aria-describedby={describedBy}
+        aria-label={accessibleName(t, title, meta, doc)}
         data-testid="document-row"
         style={{ minHeight: ROW_HEIGHT }}
         className="selis-focus flex w-full items-center gap-3 rounded-[14px] border border-neutral-5 bg-surface-raised px-3 text-left transition-colors duration-150 ease-standard active:bg-neutral-3"
@@ -119,11 +123,7 @@ function DocumentRow({ doc, meta, onOpen, onMenu }: ItemProps) {
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-sm font-semibold text-neutral-12">{title}</span>
-          <span id={describedBy} className="truncate text-xs text-neutral-11">
-            {meta}
-            {doc.favorite ? <span className="sr-only">, {t("library.favorite")}</span> : null}
-            {doc.received ? <span className="sr-only">, {t("library.received")}</span> : null}
-          </span>
+          <span className="truncate text-xs text-neutral-11">{meta}</span>
         </span>
         {doc.received ? (
           <span className="shrink-0 rounded-full bg-accent-3 px-2 py-0.5 text-[11px] font-semibold text-accent-selected" aria-hidden="true">

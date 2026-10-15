@@ -3,8 +3,11 @@ import { cx } from "./cx";
 export type SwitchProps = {
   checked: boolean;
   onChange: (checked: boolean) => void;
-  /** id of the visible label (and optional helper text). */
-  labelledBy: string;
+  /**
+   * The visible label's text, as the accessible name. Not aria-labelledby: Chrome on Android
+   * does not hand a labelledby name to TalkBack ("Off, Switch"; P5b walkthrough).
+   */
+  label: string;
   describedBy?: string | undefined;
   disabled?: boolean;
   testId?: string | undefined;
@@ -14,13 +17,13 @@ export type SwitchProps = {
  * On/off switch: 48×28 track (on = accent, off = control-line), 22 px white knob,
  * 200 ms, inside a 52×44 button with role="switch".
  */
-export function Switch({ checked, onChange, labelledBy, describedBy, disabled = false, testId }: SwitchProps) {
+export function Switch({ checked, onChange, label, describedBy, disabled = false, testId }: SwitchProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-labelledby={labelledBy}
+      aria-label={label}
       aria-describedby={describedBy}
       disabled={disabled}
       data-testid={testId}

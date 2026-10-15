@@ -68,8 +68,6 @@ export function ExportPack({ selected }: { selected: string[] }) {
   const [protect, setProtect] = useState(false);
   const [pass, setPass] = useState("");
   const [again, setAgain] = useState("");
-  const historyLabel = useId();
-  const protectLabel = useId();
   const tooShort = protect && pass.length < MIN_PASSPHRASE;
   const mismatch = protect && pass !== again;
   const working = exportState.phase === "working";
@@ -129,17 +127,17 @@ export function ExportPack({ selected }: { selected: string[] }) {
           </div>
           {!whole ? (
             <div className="flex items-center gap-3">
-              <span id={historyLabel} className="flex-1 text-md text-neutral-12">
+              <span className="flex-1 text-md text-neutral-12">
                 {t("transfer.send.includeHistory")}
               </span>
-              <Switch checked={history} onChange={setHistory} labelledBy={historyLabel} testId="pack-history" />
+              <Switch checked={history} onChange={setHistory} label={t("transfer.send.includeHistory")} testId="pack-history" />
             </div>
           ) : null}
           <div className="flex items-center gap-3">
-            <span id={protectLabel} className="flex-1 text-md text-neutral-12">
+            <span className="flex-1 text-md text-neutral-12">
               {t("transfer.pack.protect")}
             </span>
-            <Switch checked={protect} onChange={setProtect} labelledBy={protectLabel} testId="pack-protect" />
+            <Switch checked={protect} onChange={setProtect} label={t("transfer.pack.protect")} testId="pack-protect" />
           </div>
           {protect ? <PassphraseFields value={pass} confirm={again} onChange={setPass} onConfirm={setAgain} /> : null}
           {protect && pass.length > 0 && tooShort ? (

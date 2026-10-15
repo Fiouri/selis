@@ -30,4 +30,4 @@ name: Import, scroll, back
     text: 'Page \d+ of 1000'
 - assertNotVisible: "Page 1 of 1000"
 - back
-- assertVisible: "Open Selis 1000-page fixture"
+- assertVisible: "Open Selis 1000-page fixture,.*"

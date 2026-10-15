@@ -102,7 +102,7 @@ name: Selis pack open with, passphrase, tamper
 - tapOn: "Close"
 - tapOn: "Library"
 # Titles come from the pack (the file names), not from the PDF metadata.
-- assertVisible: "Open greek"
+- assertVisible: "Open greek,.*"
 
 # Save the library as a plain (unencrypted) file: it waits in the app cache for the receiving
 # app; POST_RUN checks it is there, restarts Selis and checks it is gone.

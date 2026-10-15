@@ -212,13 +212,10 @@ function PasswordField({
 }
 
 function SwitchRow({ label, checked, onChange, testId }: { label: string; checked: boolean; onChange: (v: boolean) => void; testId: string }) {
-  const labelId = useId();
   return (
     <div className="flex min-h-12 items-center gap-3">
-      <span id={labelId} className="flex-1 text-md text-neutral-12">
-        {label}
-      </span>
-      <Switch checked={checked} onChange={onChange} labelledBy={labelId} testId={testId} />
+      <span className="flex-1 text-md text-neutral-12">{label}</span>
+      <Switch checked={checked} onChange={onChange} label={label} testId={testId} />
     </div>
   );
 }

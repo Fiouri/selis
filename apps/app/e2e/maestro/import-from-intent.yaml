@@ -21,4 +21,4 @@ name: Import from an Open-with intent
     timeout: 25000
 - assertVisible: "greek"
 - back
-- assertVisible: "Open greek"
+- assertVisible: "Open greek,.*"

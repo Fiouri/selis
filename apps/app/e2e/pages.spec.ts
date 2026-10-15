@@ -54,7 +54,7 @@ test("pages: select, rotate, duplicate, delete, reorder, undo/redo, add, extract
   await page.getByTestId("page-thumb-1").click();
   await page.getByTestId("page-thumb-3").click();
   await expect(page.getByTestId("pages-selected")).toHaveText("2 selected");
-  await expect(page.getByTestId("page-thumb-1")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("page-thumb-1")).toHaveAttribute("aria-checked", "true");
   const before = await thumbShape(page, 1);
   await page.getByTestId("pages-rotate").click();
   await expect(page.getByTestId("pages-undo")).toBeEnabled();
@@ -65,8 +65,8 @@ test("pages: select, rotate, duplicate, delete, reorder, undo/redo, add, extract
   // Duplicate: 9 pages, the copies (2 and 5) selected.
   await page.getByTestId("pages-duplicate").click();
   await expect(page.getByTestId("pages-hint")).toContainText("9 pages");
-  await expect(page.getByTestId("page-thumb-2")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("page-thumb-5")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("page-thumb-2")).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByTestId("page-thumb-5")).toHaveAttribute("aria-checked", "true");
 
   // Undo / redo the duplicate.
   await page.getByTestId("pages-undo").click();
@@ -108,7 +108,7 @@ test("pages: select, rotate, duplicate, delete, reorder, undo/redo, add, extract
   await expect(page.getByTestId("drop-marker")).toBeVisible();
   await page.mouse.up();
   await expect(page.getByText("Page order changed.")).toBeVisible();
-  await expect(page.getByTestId("page-thumb-1")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("page-thumb-1")).toHaveAttribute("aria-checked", "true");
   await expect.poll(() => thumbShape(page, 1)).toBe(lastShape);
 
   // Add a blank page after the selection, then a PDF with a form.
@@ -129,7 +129,7 @@ test("pages: select, rotate, duplicate, delete, reorder, undo/redo, add, extract
   await page.getByTestId("pages-loss-insert").click();
   await expect(page.getByTestId("pages-hint")).toContainText("9 pages");
   await expect(page.getByText("Added 1 page.")).toBeVisible();
-  await expect(page.getByTestId("page-thumb-9")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("page-thumb-9")).toHaveAttribute("aria-checked", "true");
 
   // Extract page 9 (the form) into a new document, then split before page 3.
   await page.getByTestId("pages-extract").click();

@@ -41,7 +41,6 @@ export function ConfirmDialog({
   onDismiss,
   testId,
 }: ConfirmDialogProps) {
-  const titleId = useId();
   const messageId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   // Callers pass a fresh closure on every render; the open/close effect must
@@ -78,12 +77,13 @@ export function ConfirmDialog({
       <div
         // No aria-modal (see BottomSheet): `inert` on #root keeps assistive tech here.
         role="alertdialog"
-        aria-labelledby={titleId}
+        // aria-label: a labelledby name does not reach TalkBack (see BottomSheet).
+        aria-label={title}
         aria-describedby={messageId}
         data-testid={testId}
         className="selis-fade-in relative w-full max-w-sm rounded-card border border-neutral-5 bg-surface-raised p-5 shadow-3"
       >
-        <h2 id={titleId} className="text-md font-semibold text-neutral-12">
+        <h2 className="text-md font-semibold text-neutral-12">
           {title}
         </h2>
         <div id={messageId}>

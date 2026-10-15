@@ -38,4 +38,4 @@ name: Viewer search, night mode, contents
 - assertVisible: "This document has no table of contents."
 - back
 - back
-- assertVisible: "Open Ελληνικό δοκιμαστικό"
+- assertVisible: "Open Ελληνικό δοκιμαστικό,.*"

@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Image as ImageIcon, ImagePlus, X } from "lucide-react";
 import { type ReactNode, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { FullScreenLayer } from "../../components/FullScreenLayer";
 import { useToast } from "../../components/Toast";
 import { useNavigation, useOverlay, whenHistorySettled } from "../../state/navigation";
 import { documentsKey } from "../library/queries";
@@ -91,7 +92,7 @@ export function ImagesScreen() {
     <>
       {input}
       {open ? (
-        <div className="fixed inset-0 z-30 flex flex-col bg-surface-app" data-testid="images-screen">
+        <FullScreenLayer label={t("images.title")} className="bg-surface-app" testId="images-screen">
           <header
             className="flex shrink-0 items-center gap-1 border-b border-neutral-5 px-1"
             style={{ paddingTop: "var(--safe-top)", height: "calc(var(--safe-top) + 52px)" }}
@@ -169,7 +170,7 @@ export function ImagesScreen() {
               </Button>
             )}
           </footer>
-        </div>
+        </FullScreenLayer>
       ) : null}
     </>
   );

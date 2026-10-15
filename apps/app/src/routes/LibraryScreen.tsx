@@ -95,13 +95,15 @@ function FilterChips({ onTags }: { onTags: () => void }) {
   const tags = useTags();
   const activeTag = tagId ? tags.data?.find((tag) => tag.id === tagId) : undefined;
   return (
-    <div role="group" aria-label={t("library.filters")} className="selis-scroll-x flex gap-2 px-5 pt-2 pb-4" data-testid="filter-chips">
-      {CHIPS.map(({ value, key }) => (
-        <Chip key={value} pressed={tagId === null && filter === value} onClick={() => setFilter(value)}>
-          {t(key)}
-        </Chip>
-      ))}
-      <Chip pressed={tagId !== null} onClick={onTags} aria-haspopup="dialog">
+    <div className="selis-scroll-x flex gap-2 px-5 pt-2 pb-4" data-testid="filter-chips">
+      <div role="radiogroup" aria-label={t("library.filters")} className="flex gap-2">
+        {CHIPS.map(({ value, key }) => (
+          <Chip key={value} kind="radio" selected={tagId === null && filter === value} onClick={() => setFilter(value)}>
+            {t(key)}
+          </Chip>
+        ))}
+      </div>
+      <Chip kind="menu" selected={tagId !== null} onClick={onTags} aria-haspopup="dialog">
         {activeTag ? activeTag.name : t("library.filterTags")}
         <ChevronDown size={16} strokeWidth={2} aria-hidden="true" />
       </Chip>
