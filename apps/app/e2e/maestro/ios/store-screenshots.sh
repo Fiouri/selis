@@ -47,8 +47,18 @@ xcrun simctl status_bar "$udid" override --time "9:41" --dataNetwork wifi --wifi
 xcrun simctl launch "$udid" com.apple.DocumentsApp >/dev/null 2>&1 || true
 sleep 5
 xcrun simctl terminate "$udid" com.apple.DocumentsApp >/dev/null 2>&1 || true
-files="$(xcrun simctl get_app_container "$udid" com.apple.DocumentsApp group.com.apple.FileProvider.LocalStorage)/File Provider Storage"
+group=group.com.apple.FileProvider.LocalStorage
+root_dir="$(xcrun simctl get_app_container "$udid" com.apple.DocumentsApp groups 2>/dev/null | awk -v g="$group" '$1 == g { print $2 }' || true)"
+if [ -z "$root_dir" ]; then
+  # Fallback: the app group's container is the one whose metadata names the group.
+  for d in "$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Containers/Shared/AppGroup"/*/; do
+    if grep -qa "$group" "$d.com.apple.mobile_container_manager.metadata.plist" 2>/dev/null; then root_dir="${d%/}"; break; fi
+  done
+fi
+[ -n "$root_dir" ] || { echo "no Files local storage container ($group)" >&2; exit 1; }
+files="$root_dir/File Provider Storage"
 mkdir -p "$files"
+echo "samples → $files"
 cp "$root/packages/fixtures/out/samples/$lang/"*.pdf "$files/"
 xcrun simctl addmedia "$udid" "$root/docs/store/scan-sample/$lang.jpg"
 xcrun simctl install "$udid" "$app"
