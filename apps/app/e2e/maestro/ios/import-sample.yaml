@@ -1,0 +1,15 @@
+# One sample PDF from Files › On My iPhone/iPad into the library, then back (store-screenshots.yaml).
+appId: com.anywecon.selis
+---
+- tapOn: ${T_IMPORT}
+- tapOn:
+    text: "Browse"
+    optional: true
+- tapOn:
+    text: "On My iPhone|On My iPad"
+    optional: true
+- tapOn: ${SAMPLE}
+- extendedWaitUntil:
+    visible: ${PAGE}
+    timeout: 30000
+- tapOn: ${T_BACK}

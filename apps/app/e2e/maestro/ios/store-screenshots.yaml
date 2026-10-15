@@ -1,0 +1,149 @@
+# App Store screenshots on the iOS simulator (P5b, ADR 0029), driven by store-screenshots.sh
+# (macOS CI: .github/workflows/ios-screenshots.yml). The script boots one device, puts the four
+# invented sample PDFs into Files › On My iPhone/iPad and the scan sample photo into Photos, and
+# passes the labels of the target language from apps/app/src/i18n in a wrapper flow's env.
+# No coordinates (iPhone and iPad layouts differ): everything is found by its accessible name.
+appId: com.anywecon.selis
+name: App Store screenshots (iOS)
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: ${E_EMPTY}
+    timeout: 90000
+
+# Language first (labels below are the target language's).
+- runFlow:
+    when:
+      true: ${LANG == "el"}
+    commands:
+      - tapOn: ${E_SETTINGS}
+      - tapOn: ${E_LANGUAGE}
+      - tapOn: "Ελληνικά"
+      - tapOn: ${T_LIBRARY}
+
+# The four samples through the document picker (Files › Browse › On My iPhone/iPad).
+- runFlow:
+    file: import-sample.yaml
+    env:
+      SAMPLE: ${S_TRIP}
+      PAGE: ${T_PAGE_1}
+- runFlow:
+    file: import-sample.yaml
+    env:
+      SAMPLE: ${S_INVOICE}
+      PAGE: ${T_PAGE_1}
+- runFlow:
+    file: import-sample.yaml
+    env:
+      SAMPLE: ${S_REPORT}
+      PAGE: ${T_PAGE_1}
+- runFlow:
+    file: import-sample.yaml
+    env:
+      SAMPLE: ${S_LEASE}
+      PAGE: ${T_PAGE_1_OF_2}
+- extendedWaitUntil:
+    visible: ${T_OPEN_LEASE}
+    timeout: 10000
+- takeScreenshot: 1-library
+
+# Reading.
+- tapOn: ${T_OPEN_TRIP}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1}
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "never shown, lets the page render"
+    timeout: 2500
+    optional: true
+- takeScreenshot: 2-viewer
+- tapOn: ${T_BACK}
+
+# Annotate: the tool sheet over the report.
+- tapOn: ${T_OPEN_REPORT}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1}
+    timeout: 30000
+- tapOn: ${T_ANNOTATE}
+- extendedWaitUntil:
+    visible: ${T_DONE}
+    timeout: 10000
+- takeScreenshot: 3-annotate
+- tapOn: ${T_DONE}
+- tapOn: ${T_BACK}
+
+# Sign: a typed signature being made for the lease.
+- tapOn: ${T_OPEN_LEASE}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1_OF_2}
+    timeout: 30000
+- tapOn: ${T_SIGN}
+- tapOn: ${T_NEW}
+- tapOn: ${T_MODE_TYPE}
+- tapOn: ${T_NAME_LABEL}
+- inputText: ${SIGNER}
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "never shown, lets the fonts render"
+    timeout: 1500
+    optional: true
+- takeScreenshot: 4-sign
+- tapOn: ${T_CANCEL}
+- tapOn: ${T_CLOSE_SIGNING}
+- tapOn: ${T_BACK}
+
+# Transfer: the code for sending all four documents.
+- tapOn: ${T_TRANSFER}
+- tapOn:
+    text: "Allow"
+    optional: true
+- tapOn: ${T_TAB_SEND}
+- tapOn: ${T_SELECT_ALL}
+- tapOn: ${T_SEND_ALL}
+- extendedWaitUntil:
+    visible: ${T_EXPIRES}
+    timeout: 60000
+- takeScreenshot: 5-transfer
+- tapOn: ${T_LIBRARY}
+
+# Tools over the report.
+- tapOn: ${T_OPEN_REPORT}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1}
+    timeout: 30000
+- tapOn: ${T_MORE}
+- tapOn: ${T_TOOLS}
+- extendedWaitUntil:
+    visible: ${T_PROTECT}
+    timeout: 10000
+- takeScreenshot: 6-tools
+# The sheet's backdrop closes it.
+- tapOn:
+    point: 50%, 6%
+- tapOn: ${T_BACK}
+
+# Scan: no camera on the simulator, so "Scan a photo" with the sample photo → Adjust.
+- tapOn: ${T_SCAN}
+- tapOn:
+    text: "Allow|OK"
+    optional: true
+- tapOn:
+    text: ${T_FROM_PHOTO}
+    index: 0
+- extendedWaitUntil:
+    visible: "Photo.*|Photos"
+    timeout: 20000
+    optional: true
+- tapOn:
+    text: "Photo.*"
+    index: 0
+    optional: true
+- extendedWaitUntil:
+    visible: ${T_ADJUST}
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "never shown, lets the photo render"
+    timeout: 2000
+    optional: true
+- takeScreenshot: 7-scan
