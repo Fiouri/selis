@@ -8,7 +8,20 @@ appId: com.anywecon.selis
 - tapOn:
     text: "On My iPhone|On My iPad"
     optional: true
+# The grid animates in; a tap during the transition selects nothing.
+- extendedWaitUntil:
+    visible: ${SAMPLE}
+    timeout: 15000
+- waitForAnimationToEnd:
+    timeout: 3000
 - tapOn: ${SAMPLE}
+- runFlow:
+    when:
+      visible: "On My iPhone|On My iPad"
+    commands:
+      - waitForAnimationToEnd:
+          timeout: 3000
+      - tapOn: ${SAMPLE}
 - extendedWaitUntil:
     visible: ${PAGE}
     timeout: 30000

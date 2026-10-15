@@ -39,6 +39,7 @@ cleanup() {
   if [ "$status" -ne 0 ]; then
     # What the screen showed when it failed, and Maestro's own logs, for the artifact.
     xcrun simctl io "$udid" screenshot "$work/failed.png" >/dev/null 2>&1 || true
+    "${MAESTRO:-maestro}" --device "$udid" hierarchy > "$work/failed-hierarchy.json" 2>/dev/null || true
     cp -R "$HOME/.maestro/tests" "$work/maestro-tests" 2>/dev/null || true
   fi
   xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
