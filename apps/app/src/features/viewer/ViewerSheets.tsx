@@ -77,7 +77,7 @@ export function ViewerMoreSheet({ open, onClose, rotation, night, onOutline, onT
             </span>
             <span
               aria-hidden="true"
-              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 ease-standard ${night ? "bg-accent-9" : "bg-neutral-6"}`}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 ease-standard ${night ? "bg-accent-9" : "bg-control-line"}`}
             >
               <span
                 className="absolute top-[3px] size-[22px] rounded-full bg-white shadow-1 transition-transform duration-200 ease-standard"

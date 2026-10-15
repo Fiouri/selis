@@ -87,7 +87,7 @@ function ThemeTiles() {
               className={`selis-focus flex h-13 items-center gap-3 rounded-card px-3 text-left text-sm transition-colors duration-150 ease-standard ${
                 selected
                   ? "bg-accent-3 font-semibold text-accent-selected shadow-[inset_0_0_0_2px_var(--accent-9)]"
-                  : "border border-neutral-5 font-medium text-neutral-12 active:bg-neutral-3"
+                  : "border border-control-line font-medium text-neutral-12 active:bg-neutral-3"
               }`}
             >
               <span
@@ -253,7 +253,7 @@ function RelaySheet({ open, onClose }: { open: boolean; onClose: () => void }) {
           }}
           aria-invalid={invalid}
           aria-describedby={invalid ? errorId : undefined}
-          className="selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12"
+          className="selis-focus h-12 w-full rounded-control border border-control-line bg-surface-app px-3 text-md text-neutral-12"
           data-testid="relay-input"
         />
         {invalid ? (

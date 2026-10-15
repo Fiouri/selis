@@ -159,7 +159,7 @@ function TypePanel({
           placeholder={t("sign.namePlaceholder")}
           autoComplete="name"
           maxLength={80}
-          className="selis-focus h-11 rounded-[12px] border border-neutral-6 bg-surface-app px-4 text-md text-neutral-12 placeholder:text-neutral-9"
+          className="selis-focus h-11 rounded-[12px] border border-control-line bg-surface-app px-4 text-md text-neutral-12 placeholder:text-neutral-9"
           data-testid="signature-name"
         />
       </div>
@@ -178,7 +178,7 @@ function TypePanel({
               aria-label={t("sign.fontOption", { index: i + 1 })}
               onClick={() => onFont(f.id)}
               className={`selis-focus flex h-16 items-center overflow-hidden rounded-card border bg-paper px-4 text-left ${
-                checked ? "border-transparent shadow-[inset_0_0_0_2px_var(--accent-9)]" : "border-neutral-5"
+                checked ? "border-transparent shadow-[inset_0_0_0_2px_var(--accent-9)]" : "border-control-line"
               }`}
               data-testid={`signature-font-${f.id}`}
             >

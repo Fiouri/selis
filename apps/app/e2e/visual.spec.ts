@@ -519,6 +519,8 @@ for (const lang of LANGS) {
         await page.getByTestId("tools-password-again").fill("correct hors");
         await page.getByTestId("tools-restrictions").click();
         await expect(page.getByTestId("tools-password-problem")).toBeVisible();
+        // Which field keeps the focus ring after the clicks varied between runs: none does.
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await settle(page);
         await expect(page).toHaveScreenshot(shot("tools-protect"));
         await page.goBack();

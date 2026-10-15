@@ -70,7 +70,7 @@ export const FormSheet = forwardRef<HTMLElement, SheetProps>(function FormSheet(
       data-testid="form-sheet"
     >
       <div className="flex justify-center pt-2 pb-1" aria-hidden="true">
-        <span className="h-1 w-9 rounded-full bg-neutral-6" />
+        <span className="h-1 w-9 rounded-full bg-control-line" />
       </div>
       <div className="flex items-center gap-1 px-3">
         <IconButton

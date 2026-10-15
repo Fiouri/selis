@@ -40,7 +40,7 @@ function SignatureCard({
       aria-pressed={selected}
       aria-label={t("sign.signatureLabel", { index: index + 1 })}
       className={`selis-focus ${CARD} flex items-center justify-center overflow-hidden border bg-paper p-2 ${
-        selected ? "border-transparent shadow-[inset_0_0_0_2px_var(--accent-9)]" : "border-neutral-5"
+        selected ? "border-transparent shadow-[inset_0_0_0_2px_var(--accent-9)]" : "border-control-line"
       }`}
       data-testid="signature-card"
     >
@@ -91,7 +91,7 @@ export const SignSheet = forwardRef<HTMLElement>(function SignSheet(_props, ref)
       data-testid="sign-sheet"
     >
       <div className="flex justify-center pt-2 pb-1" aria-hidden="true">
-        <span className="h-1 w-9 rounded-full bg-neutral-6" />
+        <span className="h-1 w-9 rounded-full bg-control-line" />
       </div>
       <div className="flex flex-col gap-1 px-5 pt-1 pb-3">
         <span className="self-start rounded-full bg-accent-3 px-2.5 py-0.5 text-xs font-semibold text-accent-selected" data-testid="sign-badge">
@@ -103,7 +103,7 @@ export const SignSheet = forwardRef<HTMLElement>(function SignSheet(_props, ref)
         <button
           type="button"
           onClick={() => setCreating(true)}
-          className={`selis-focus ${CARD} flex flex-col items-center justify-center gap-0.5 border border-dashed border-neutral-7 text-accent-selected active:bg-neutral-3`}
+          className={`selis-focus ${CARD} flex flex-col items-center justify-center gap-0.5 border border-dashed border-control-line text-accent-selected active:bg-neutral-3`}
           data-testid="signature-new"
         >
           <Plus size={22} strokeWidth={1.75} aria-hidden="true" />

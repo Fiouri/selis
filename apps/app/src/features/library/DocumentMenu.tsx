@@ -95,7 +95,7 @@ function RenameForm({ doc, onDone }: { doc: Document; onDone: () => void }) {
         enterKeyHint="done"
         autoComplete="off"
         data-testid="rename-input"
-        className="selis-focus h-11 min-w-0 flex-1 rounded-full border border-neutral-6 bg-surface-app px-4 text-md text-neutral-12"
+        className="selis-focus h-11 min-w-0 flex-1 rounded-full border border-control-line bg-surface-app px-4 text-md text-neutral-12"
       />
       <IconButton
         type="submit"

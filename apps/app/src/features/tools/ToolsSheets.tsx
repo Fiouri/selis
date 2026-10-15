@@ -19,7 +19,7 @@ import { EXPORT_DPIS, type ExportDpi, type ExportFormat, MAX_PASSWORD_BYTES, MIN
 const row =
   "selis-focus flex min-h-14 w-full items-center gap-4 px-5 py-2 text-left text-md text-neutral-12 active:bg-neutral-3 disabled:active:bg-transparent";
 const field =
-  "selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12";
+  "selis-focus h-12 w-full rounded-control border border-control-line bg-surface-app px-3 text-md text-neutral-12";
 const icon = (Icon: typeof Wrench) => <Icon size={22} strokeWidth={1.75} className="text-neutral-11" aria-hidden="true" />;
 /** Rows block height (7 rows): the busy state keeps it, so the sheet does not jump. */
 const ROWS_MIN_HEIGHT = "min-h-[408px]";

@@ -23,6 +23,13 @@
   --neutral-11: #5f574c;
   --neutral-12: #211f1a;
 
+  /*
+   * Boundary of a control (input, chip, outlined button, unchecked box, switch track, sheet
+   * grabber): ≥ 3:1 against every surface it sits on (WCAG 2.2 SC 1.4.11; tokens.test.ts).
+   * Steps 6–8 stay for dividers and containers, which need no contrast.
+   */
+  --control-line: #8f8577;
+
   /* Accent — deep ink blue */
   --accent-3: #e9eef9;
   --accent-4: #dce4f5;
@@ -153,6 +160,7 @@
   --neutral-10: #7c7569;
   --neutral-11: #b6ae9f;
   --neutral-12: #eeeae2;
+  --control-line: #726c60;
 
   --accent-3: #18213a;
   --accent-4: #1e2a4a;
@@ -200,6 +208,7 @@
     --neutral-10: #7c7569;
     --neutral-11: #b6ae9f;
     --neutral-12: #eeeae2;
+    --control-line: #726c60;
 
     --accent-3: #18213a;
     --accent-4: #1e2a4a;
@@ -247,6 +256,7 @@
   --neutral-10: #766244;
   --neutral-11: #5b4a31;
   --neutral-12: #2c2415;
+  --control-line: #8d7957;
 
   --accent-3: #e6e2d6;
   --accent-4: #dcd8cc;

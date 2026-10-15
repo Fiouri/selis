@@ -37,7 +37,7 @@ export const RedactSheet = forwardRef<HTMLElement, { busy: boolean; onApply: () 
       data-testid="redact-sheet"
     >
       <div className="flex h-5 w-full items-start justify-center pt-2" aria-hidden="true">
-        <span className="h-1 w-9 rounded-full bg-neutral-6" />
+        <span className="h-1 w-9 rounded-full bg-control-line" />
       </div>
       <div className="flex justify-center gap-1 px-3 pb-2" role="toolbar" aria-label={t("redact.tools")}>
         {REDACT_TOOLS.map((name) => {

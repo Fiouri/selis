@@ -93,7 +93,7 @@ h3 {
   height: 28px;
 }
 .top .lang {
-  border: 1px solid var(--neutral-6);
+  border: 1px solid var(--control-line);
   border-radius: 999px;
   padding: 6px 14px;
   min-height: 44px;
@@ -169,7 +169,7 @@ h3 {
 .button.ghost {
   background: transparent;
   color: var(--accent-selected);
-  border: 1px solid var(--neutral-7);
+  border: 1px solid var(--control-line);
 }
 .pillars {
   display: flex;
