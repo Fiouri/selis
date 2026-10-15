@@ -82,8 +82,18 @@ name: App Store screenshots (iOS)
 - tapOn: ${T_MODE_TYPE}
 - tapOn: ${T_NAME_LABEL}
 - inputText: ${SIGNER}
-# Not hideKeyboard: on iPad it dismissed the sheet. A tap on the sheet's title ends the editing.
-- tapOn: ${T_NEW_TITLE}
+# iPhone: hideKeyboard. iPad: it dismissed the sheet there, so the keyboard's own hide key.
+- runFlow:
+    when:
+      true: ${KEYBOARD_HIDE == ""}
+    commands:
+      - hideKeyboard
+- runFlow:
+    when:
+      true: ${KEYBOARD_HIDE != ""}
+    commands:
+      - tapOn:
+          point: ${KEYBOARD_HIDE}
 - extendedWaitUntil:
     visible: ${T_CANCEL}
     timeout: 10000
@@ -151,6 +161,18 @@ name: App Store screenshots (iOS)
 - takeScreenshot: photo-picker
 - tapOn:
     point: ${PHOTO_POINT}
+- extendedWaitUntil:
+    visible: ${T_ADJUST}
+    timeout: 8000
+    optional: true
+# A slow tap opens the photo's preview instead; its ✓ (top right) chooses it.
+- runFlow:
+    when:
+      notVisible: ${T_ADJUST}
+    commands:
+      - takeScreenshot: photo-preview
+      - tapOn:
+          point: ${PHOTO_CONFIRM}
 - extendedWaitUntil:
     visible: ${T_ADJUST}
     timeout: 30000

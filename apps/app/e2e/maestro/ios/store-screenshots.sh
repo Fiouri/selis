@@ -137,6 +137,10 @@ const env = {
   SIGNER: lang === "el" ? "Δανιήλ Ρήγας" : "Daniel Reyes",
   // The first photo in PHPicker (iPhone: full-screen grid; iPad: the sheet's grid).
   PHOTO_POINT: process.env.PHOTO_POINT || "17%, 24%",
+  // The ✓ of PHPicker's photo preview.
+  PHOTO_CONFIRM: process.env.PHOTO_CONFIRM || "90%, 12%",
+  // iPad only: the software keyboard's hide key (bottom right).
+  KEYBOARD_HIDE: process.env.KEYBOARD_HIDE || "",
 };
 console.log("appId: com.anywecon.selis");
 console.log("env:");
