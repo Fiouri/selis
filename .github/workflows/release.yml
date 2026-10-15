@@ -106,6 +106,12 @@ jobs:
             cp android/unsigned/*.apk assets/
           fi
           cp sbom/*.json assets/
+          # Obtainium users filter assets by these names (README › Install): keep them stable.
+          for f in assets/*.apk; do
+            n="$(basename "$f")"
+            [[ "$n" =~ ^selis-${v//./\\.}-(arm64-v8a|armeabi-v7a|x86|x86_64|universal)(-unsigned)?\.apk$ ]] \
+              || { echo "::error::unexpected APK asset name: $n"; exit 1; }
+          done
           (cd assets && sha256sum * > SHA256SUMS)
           cat assets/SHA256SUMS
       - name: Notes from CHANGELOG.md

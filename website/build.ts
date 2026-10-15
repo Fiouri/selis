@@ -160,7 +160,7 @@ ${picture(root, shots.get("1-library"), h.highlights[5]?.title ?? "", true)}
 <section><h2>${e(h.highlightsTitle)}</h2><ul class="cards">${cards}</ul></section>
 <section class="split">
 <div><h2>${e(h.privacyTitle)}</h2><p>${e(h.privacyBody)}</p><p><a href="${href({ lang, page: "" }, lang, "privacy/")}">${e(h.privacyLink)}</a></p></div>
-<div><h2>${e(h.openTitle)}</h2><p>${e(h.openBody)}</p><p><a href="${REPO}">${e(h.openLink)}</a></p></div>
+<div><h2>${e(h.openTitle)}</h2><p>${e(h.openBody)}</p><p>${e(h.aiNote)}</p><p><a href="${REPO}">${e(h.openLink)}</a></p></div>
 </section>`;
 }
 
