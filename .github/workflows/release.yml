@@ -69,7 +69,7 @@ jobs:
           cargo install cargo-cyclonedx --version 0.5.9 --locked
           cargo cyclonedx --manifest-path apps/app/src-tauri/Cargo.toml --format json --spec-version 1.5 --target all --no-build-deps --override-filename selis-rust
           mv apps/app/src-tauri/selis-rust.json "sbom/selis-${{ needs.verify.outputs.version }}-rust.cdx.json"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: selis-sbom
           path: sbom
