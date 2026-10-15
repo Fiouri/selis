@@ -336,16 +336,12 @@ async function handleText(req: Extract<WorkerRequest, { type: "text" }>): Promis
   }
   try {
     const rects = (await (await native()).getPageTextRects(doc, page).toPromise()) as PdfTextRectObject[];
+    // EmbedPDF's `content` can carry stray characters past the run (EmbeddedText.boundedTexts).
+    const boxes = rects.map((r) => ({ x: r.rect.origin.x, y: r.rect.origin.y, width: r.rect.size.width, height: r.rect.size.height }));
+    const texts = textStamps ? textStamps.boundedTexts(doc, page, boxes) : rects.map((r) => r.content);
     const runs: TextRun[] = rects
-      .filter((r) => r.content.trim() !== "")
-      .map((r) => ({
-        x: r.rect.origin.x,
-        y: r.rect.origin.y,
-        width: r.rect.size.width,
-        height: r.rect.size.height,
-        text: r.content,
-        fontSize: r.font.size,
-      }));
+      .map((r, i) => ({ ...(boxes[i] as PageRect), text: texts[i] ?? "", fontSize: r.font.size }))
+      .filter((r) => r.text.trim() !== "");
     post({ type: "text", reqId: req.reqId, runs });
   } catch (err) {
     post({ type: "error", reqId: req.reqId, ...toError(err) });

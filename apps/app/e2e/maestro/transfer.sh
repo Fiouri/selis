@@ -148,10 +148,11 @@ case "$cmd" in
     [ "$status" -eq 0 ] && echo "OK: gave up on the vanished sender cleanly"
     exit "$status"
     ;;
-  post)
+  post | post-release)
     want="$(sha256sum "$fixture" | cut -d' ' -f1)"
     status=0
-    "$0" check "$serial" "$want" || status=1
+    # post-release: a release build is not debuggable (no run-as): the library check is skipped.
+    [ "$cmd" = post ] && { "$0" check "$serial" "$want" || status=1; }
     # The flow left the Transfer screen: the endpoint must be gone.
     sleep 2
     "$0" sockets "$serial" || status=1

@@ -1,0 +1,94 @@
+name: Website
+
+# The static website (website/, ADR 0024) on GitHub Pages. Every build is checked with
+# Lighthouse (performance, accessibility, best practices, SEO ≥ 95 on every page, both
+# languages, mobile settings). Pull requests build and check; main and published releases
+# also deploy (the download page lists the newest release's APKs and SHA-256 sums).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - website/**
+      - docs/PRIVACY*.md
+      - packages/ui/src/tokens.css
+      - apps/app/assets/icon.svg
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - website/**
+      - docs/PRIVACY*.md
+      - packages/ui/src/tokens.css
+      - .github/workflows/pages.yml
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and Lighthouse
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Newest release (APKs and SHA256SUMS), if any
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          tag="$(gh release list --exclude-drafts -L 1 --json tagName --jq '.[0].tagName // empty')"
+          if [ -n "$tag" ]; then
+            gh release view "$tag" --json tagName,name,publishedAt,url,assets > "$RUNNER_TEMP/release/release.json"
+            gh release download "$tag" -p SHA256SUMS -D "$RUNNER_TEMP/release"
+            echo "SELIS_RELEASE_DIR=$RUNNER_TEMP/release" >> "$GITHUB_ENV"
+          fi
+      - name: Build (deploy copy)
+        env:
+          SELIS_APK_CERT_SHA256: ${{ vars.SELIS_APK_CERT_SHA256 }}
+        run: node website/build.ts website/dist
+      - name: Build (copy for Lighthouse at localhost) and check
+        env:
+          SITE_URL: http://localhost:8080/
+          SELIS_APK_CERT_SHA256: ${{ vars.SELIS_APK_CERT_SHA256 }}
+        run: |
+          node website/build.ts "$RUNNER_TEMP/lh-site"
+          (cd "$RUNNER_TEMP/lh-site" && python3 -m http.server 8080 > /dev/null 2>&1 &)
+          sleep 1
+          mkdir -p "$RUNNER_TEMP/lh"
+          for p in "" features/ privacy/ download/ el/ el/features/ el/privacy/ el/download/; do
+            name="$(printf '%s' "home/$p" | tr '/' '_')"
+            npx -y lighthouse@13.5.0 "http://localhost:8080/$p" --quiet \
+              --chrome-flags="--headless=new --no-sandbox" \
+              --only-categories=performance,accessibility,best-practices,seo \
+              --output=json --output-path="$RUNNER_TEMP/lh/$name.json"
+          done
+          node website/check-lighthouse.ts "$RUNNER_TEMP"/lh/*.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: website/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

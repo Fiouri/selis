@@ -1,0 +1,1 @@
+First release candidate of Selis 1.0: read, annotate, sign, fill forms, organise pages, redact, scan, recognise text (OCR) and send PDFs between your devices — no account, no cloud, no tracking.

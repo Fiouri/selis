@@ -1,0 +1,170 @@
+# Store screenshots (P5a): six key screens with the realistic sample documents
+# (packages/fixtures/src/samples.ts). Run through store-screenshots.sh, which pushes the
+# samples, sets a clean 1080×1920 screen and passes the labels of the target language
+# (from apps/app/src/i18n) in a wrapper flow's env; the script collects the six screenshots.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Store screenshots
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+
+# Import the four samples with the default (English) UI.
+- tapOn: "Import PDF"
+- tapOn: ${S_TRIP}
+- extendedWaitUntil:
+    visible: "Page 1 of 1"
+    timeout: 20000
+- back
+- tapOn: "Import PDF"
+- tapOn: ${S_INVOICE}
+- extendedWaitUntil:
+    visible: "Page 1 of 1"
+    timeout: 20000
+- back
+- tapOn: "Import PDF"
+- tapOn: ${S_REPORT}
+- extendedWaitUntil:
+    visible: "Page 1 of 1"
+    timeout: 20000
+- back
+- tapOn: "Import PDF"
+- tapOn: ${S_LEASE}
+- extendedWaitUntil:
+    visible: "Page 1 of 2"
+    timeout: 20000
+- back
+
+# Language and theme.
+- tapOn: "Settings"
+- runFlow:
+    when:
+      true: ${LANG == "el"}
+    commands:
+      - swipe:
+          start: 50%, 70%
+          end: 50%, 35%
+          duration: 500
+      - tapOn:
+          id: "setting-language"
+      - tapOn: "Ελληνικά"
+- swipe:
+    start: 50%, 35%
+    end: 50%, 80%
+    duration: 500
+- tapOn: ${T_THEME}
+- tapOn: ${T_LIBRARY}
+- extendedWaitUntil:
+    visible: ${T_OPEN_LEASE}
+    timeout: 10000
+- takeScreenshot: 1-library
+
+# Reading.
+- tapOn: ${T_OPEN_TRIP}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1}
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "never shown, lets the page render"
+    timeout: 2000
+    optional: true
+- takeScreenshot: 2-viewer
+- back
+
+# Annotate: highlight a sentence, a pen stroke under the chart.
+- tapOn: ${T_OPEN_REPORT}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1}
+    timeout: 20000
+- tapOn: ${T_ANNOTATE}
+- extendedWaitUntil:
+    visible: ${T_DONE}
+    timeout: 5000
+- swipe:
+    start: 15%, 23%
+    end: 60%, 23%
+    duration: 1500
+- tapOn: ${T_PEN}
+- swipe:
+    start: 68%, 59%
+    end: 88%, 59%
+    duration: 1200
+- takeScreenshot: 3-annotate
+- tapOn: ${T_DONE}
+- back
+
+# Sign: a typed signature on the tenant's line, top of page 2.
+- tapOn: ${T_OPEN_LEASE}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1_OF_2}
+    timeout: 20000
+- swipe:
+    start: 50%, 80%
+    end: 50%, 20%
+    duration: 600
+- swipe:
+    start: 50%, 80%
+    end: 50%, 30%
+    duration: 600
+- extendedWaitUntil:
+    visible: ${T_PAGE_2_OF_2}
+    timeout: 10000
+# Scrolling down hides the document tools; a short scroll back up shows them again.
+- swipe:
+    start: 50%, 50%
+    end: 50%, 56%
+    duration: 400
+- extendedWaitUntil:
+    visible: ${T_SIGN}
+    timeout: 5000
+- tapOn: ${T_SIGN}
+- tapOn: ${T_NEW}
+- tapOn: ${T_MODE_TYPE}
+# The name field (its accessible name is not exposed through DevTools here).
+- tapOn:
+    point: 50%, 38%
+- inputText: ${SIGNER}
+- hideKeyboard
+- tapOn: ${T_SAVE}
+- extendedWaitUntil:
+    visible: ${T_PLACE_HINT}
+    timeout: 10000
+- tapOn:
+    point: 72%, 38%
+- extendedWaitUntil:
+    visible:
+      id: ${T_REMOVE}
+    timeout: 10000
+- takeScreenshot: 4-sign
+- tapOn: ${T_DONE}
+- back
+
+# Transfer: the code for sending all four documents.
+- tapOn: ${T_TRANSFER}
+- tapOn: ${T_TAB_SEND}
+- tapOn: ${T_SELECT_ALL}
+- tapOn: ${T_SEND_ALL}
+- extendedWaitUntil:
+    visible: ${T_EXPIRES}
+    timeout: 30000
+- takeScreenshot: 5-transfer
+- back
+- tapOn: ${T_LIBRARY}
+
+# Tools: protect, compress, repair, text recognition, page as image.
+# (A scan screenshot needs a real page in front of a real camera; the AVD's scene has none.)
+- tapOn: ${T_OPEN_REPORT}
+- extendedWaitUntil:
+    visible: ${T_PAGE_1}
+    timeout: 20000
+- tapOn: ${T_MORE}
+- tapOn:
+    id: "more-tools"
+- extendedWaitUntil:
+    visible:
+      id: "tool-protect"
+    timeout: 10000
+- takeScreenshot: 6-tools

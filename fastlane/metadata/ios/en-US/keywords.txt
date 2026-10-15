@@ -1,0 +1,1 @@
+pdf,reader,annotate,sign,signature,forms,scanner,ocr,redact,merge,split,compress,transfer,offline

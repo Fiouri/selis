@@ -12,6 +12,7 @@
   },
   "scripts": {
     "generate": "node scripts/generate.ts",
+    "samples": "node scripts/generate-samples.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
