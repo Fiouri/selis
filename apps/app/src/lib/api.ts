@@ -166,11 +166,11 @@ export const api = {
   // A running receive is left alone: safe to repeat.
   transferResume: (id: string) => unwrap(ipc().short("transfer_resume", () => commands.transferResume(id), READ)),
   transferPause: () => unwrap(ipc().short("transfer_pause", () => commands.transferPause(), READ)),
-  transferForeground: (channel: string, title: string, text: string, progress: number, max: number) =>
+  transferForeground: (channel: string, title: string, text: string, progressKib: number, maxKib: number, upload: boolean) =>
     unwrap(
       ipc().short(
         "transfer_foreground",
-        () => commands.transferForeground(channel, title, text, progress, max),
+        () => commands.transferForeground(channel, title, text, progressKib, maxKib, upload),
         READ,
       ),
     ),

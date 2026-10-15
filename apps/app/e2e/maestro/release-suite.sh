@@ -3,7 +3,8 @@
 # RC QA (docs/release/1.0-rc.md): the Tier 2 Maestro flows on a release build (`measure` feature: release profile, not
 # debuggable, WebView readable over DevTools). run-as checks cannot run on a non-debuggable app:
 # their POST_RUN hooks are skipped (listed debug-only in docs/release/1.0-rc.md); hooks without
-# run-as run as in the debug suite. transfer-recover needs debug.selis.* properties: debug-only.
+# run-as run as in the debug suite. transfer-recover and transfer-background need debug.selis.*
+# properties: debug-only.
 set -u
 serial="$1"
 cd "$(dirname "$0")/../../../.."

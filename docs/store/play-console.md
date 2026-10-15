@@ -46,38 +46,20 @@ Not a news app; not a government app; no financial features; no health features.
 
 ## Foreground service permissions (Android 14+)
 
-Play: each foreground service type needs a description, the user impact if it is deferred or
-interrupted, a use case and a video link
-(<https://support.google.com/googleplay/android-developer/answer/13392821>).
+**No declaration** (ADR 0027, checked 2026-10-15). Play asks apps targeting Android 14+ to
+declare "any foreground service types that you use" and recommends "the user-initiated data
+transfer job instead of the dataSync foreground service type" for transfers the user starts
+(<https://support.google.com/googleplay/android-developer/answer/13392821>). Selis now:
 
-- **Type:** `dataSync` (`TransferPlugin.kt`, ADR 0010).
-- **Use case:** "Network transfer: Upload or download".
-- **Description:** "Selis transfers PDF documents between the user's devices, directly or
-  through a relay, end-to-end encrypted. The user starts each transfer on the Transfer screen
-  and confirms a 6-digit code. While it runs, a notification shows the progress and a Cancel
-  action; the service stops as soon as the transfer finishes, fails or is cancelled. The service
-  is never started in the background or without a user action."
-- **Impact if deferred:** "The transfer the user just started would not begin until the user
-  returns to the app, and the other device would wait or time out (the transfer code is valid
-  for 10 minutes)."
-- **Impact if interrupted:** "A large transfer stops half-way; Selis can resume it, but the user
-  has to reopen the app on both devices and wait again."
-- Play suggests a user-initiated data transfer job for user-started network transfers; the
-  transfer here is a long-lived peer-to-peer QUIC session that both devices must keep open
-  together, which a job the system may defer or stop does not provide. Keep this answer ready
-  if review asks.
-
-### Demo video (≤ 1 minute, unlisted YouTube link)
-
-Record on a phone with screen recording (no personal documents; use the sample PDFs):
-
-1. Open Selis › Transfer › Send, pick two sample PDFs, the QR code appears (0:00–0:10).
-2. On a second device: Transfer › Receive › Scan QR code; both screens show the same 6-digit
-   code; tap Confirm on the sender (0:10–0:25).
-3. Press Home on the sender while the transfer runs: the progress notification is visible in the
-   shade, with Cancel (0:25–0:40).
-4. The transfer completes, the notification disappears, the documents are in the receiver's
-   library (0:40–0:55).
+- Android 14+: a user-initiated data transfer job (`RUN_USER_INITIATED_JOBS`,
+  `TransferJobService` in `TransferPlugin.kt`) while a transfer the user started is running; the
+  system shows its notification and lists it in the Task Manager.
+- Android 8–13: a foreground service **without a type** (`FOREGROUND_SERVICE` with
+  `maxSdkVersion="33"`); types and their permissions only apply from Android 14.
+- The manifest has no `foregroundServiceType` and no `FOREGROUND_SERVICE_*` type permission,
+  so nothing triggers the declaration. If the form appears anyway: no foreground service types.
+- No demo video is needed. Behaviour checked by `transfer-background.yaml` (Maestro): the app in
+  the background for 60 s, the job running and the receive progressing throughout.
 
 ## Data safety
 
@@ -86,5 +68,5 @@ See `play-data-safety.md` ("No data collected", relay IP note).
 ## Permissions declarations
 
 No sensitive permissions that need a declaration form (no SMS, call log, location, all-files
-access, accessibility, VPN). Camera, notifications and the foreground service are explained in
+access, accessibility, VPN). Camera, notifications and background transfers are explained in
 the listing and the privacy policy.

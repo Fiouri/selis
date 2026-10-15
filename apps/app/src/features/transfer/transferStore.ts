@@ -115,7 +115,7 @@ export type TransferState = {
   resetReceive: () => void;
   /** Gives up on the current receive and goes back to scanning a new code. */
   newCode: () => Promise<void>;
-  /** Android's daily foreground-service limit: stop receives, keep them resumable. */
+  /** Android stopped the background transfer job: stop receives, keep them resumable. */
   pauseAll: () => Promise<void>;
   loadTrusted: () => Promise<void>;
   pingTrusted: () => Promise<void>;
@@ -137,6 +137,8 @@ export const POLL_MS = 400;
 const INCOMING_EVERY = 3;
 /** The notification is updated at most this often. */
 const NOTIFY_MS = 1_000;
+/** Largest KiB count Android takes (a Java int). */
+const KIB_MAX = 2 ** 31 - 1;
 
 export function sendRunning(view: SendView | null): boolean {
   return view !== null && (view.kind === "confirm" || view.kind === "sending" || view.kind === "interrupted");
@@ -216,13 +218,16 @@ export function createTransferStore(deps: TransferDeps): StoreApi<TransferState>
         void deps.api.transferNotifications().catch(() => false);
       }
       const pct = percent(running.bytes, running.total);
+      // KiB: the notification's bar and the bytes Android's transfer job reports (ADR 0027).
+      const kib = (bytes: number) => Math.min(KIB_MAX, Math.max(0, Math.floor(bytes / 1024)));
       await deps.api
         .transferForeground(
           deps.translate("transfer.notify.channel"),
           deps.translate(sending ? "transfer.notify.sending" : "transfer.notify.receiving"),
           deps.translate("transfer.notify.progress", { percent: pct }),
-          pct,
-          100,
+          kib(running.bytes),
+          kib(running.total),
+          sending !== null,
         )
         .catch(() => undefined);
     };

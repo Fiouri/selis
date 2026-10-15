@@ -7,9 +7,11 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- QR code scanning in the Receive tab (asked for when the user scans). -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- A running transfer continues when the app goes to the background. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- A running transfer continues when the app goes to the background (ADR 0027):
+         Android 14+ a user-initiated data transfer job, Android 8-13 an untyped
+         foreground service. -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" android:maxSdkVersion="33" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Scanning is optional: paste the link instead. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -73,9 +75,12 @@
         </activity>
 
         <service
-            android:name=".TransferForegroundService"
+            android:name=".TransferJobService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
+            android:name=".TransferForegroundService"
+            android:exported="false" />
 
         <provider
           android:name="androidx.core.content.FileProvider"

@@ -14,7 +14,7 @@ const RESUME_DELAY_MS = 250;
  * App-wide side of Transfer:
  * - `selis://transfer/…` links (a QR code scanned with the camera app) open the
  *   Receive tab and start receiving once the endpoint is open;
- * - Android's foreground-service timeout pauses running receives;
+ * - Android stopping the background transfer job pauses running receives;
  * - received documents refresh the library listings.
  */
 export function TransferBridge() {
