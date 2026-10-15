@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Signs unsigned release artifacts with the Selis release key (ADR 0021,
+# Signs unsigned release artifacts with the Selis app signing key (ADRs 0021, 0025,
 # scripts/android-keystore.md). The key never leaves CI secrets: the workflow decodes the
 # keystore into the runner's temp dir and deletes it after this script; passwords are read
 # from the environment (apksigner `env:`, jarsigner `:env`), never passed on a command line.
@@ -7,8 +7,10 @@
 #   APK: apksigner, APK Signature Scheme v2 + v3 (no v1: minSdk 26 ≥ 24). The APK is not
 #        rewritten otherwise, so an F-Droid build of the same commit can take this signature
 #        with apksigcopier (docs/store/fdroid/README.md).
-#   AAB: jarsigner (Play verifies the upload signature of a bundle with the JAR scheme), with
-#        the separate upload key when ANDROID_UPLOAD_* is set, else with the release key.
+#   AAB: jarsigner (Play verifies the upload signature of a bundle with the JAR scheme) with the
+#        separate Play upload key only (ADR 0025): the app signing key reaches Play once,
+#        encrypted with PEPK, never inside a bundle. Without ANDROID_UPLOAD_* the AAB stays
+#        unsigned.
 #
 # Usage: android-sign.sh <out-dir> <unsigned.apk|unsigned.aab>...
 # Env:   ANDROID_KEYSTORE_FILE, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS,
@@ -44,16 +46,14 @@ for f in "$@"; do
     rm -f "$signed.idsig"
     ;;
   *.aab)
-    cp "$f" "$signed"
-    if [ -n "${ANDROID_UPLOAD_KEYSTORE_FILE:-}" ]; then
-      jarsigner -keystore "$ANDROID_UPLOAD_KEYSTORE_FILE" \
-        -storepass:env ANDROID_UPLOAD_KEYSTORE_PASSWORD -keypass:env ANDROID_UPLOAD_KEY_PASSWORD \
-        -sigalg SHA256withRSA -digestalg SHA-256 "$signed" "$ANDROID_UPLOAD_KEY_ALIAS" > /dev/null
-    else
-      jarsigner -keystore "$ANDROID_KEYSTORE_FILE" \
-        -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEY_PASSWORD \
-        -sigalg SHA256withRSA -digestalg SHA-256 "$signed" "$ANDROID_KEY_ALIAS" > /dev/null
+    if [ -z "${ANDROID_UPLOAD_KEYSTORE_FILE:-}" ]; then
+      echo "no upload key (ANDROID_UPLOAD_*): $name stays unsigned" >&2
+      continue
     fi
+    cp "$f" "$signed"
+    jarsigner -keystore "$ANDROID_UPLOAD_KEYSTORE_FILE" \
+      -storepass:env ANDROID_UPLOAD_KEYSTORE_PASSWORD -keypass:env ANDROID_UPLOAD_KEY_PASSWORD \
+      -sigalg SHA256withRSA -digestalg SHA-256 "$signed" "$ANDROID_UPLOAD_KEY_ALIAS" > /dev/null
     ;;
   *) echo "not an .apk or .aab: $name" >&2; exit 2 ;;
   esac

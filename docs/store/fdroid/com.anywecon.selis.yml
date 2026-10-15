@@ -1,6 +1,7 @@
 # DRAFT fdroiddata metadata for Selis (docs/store/fdroid/README.md). Not submitted.
-# Goes to fdroiddata as metadata/com.anywecon.selis.yml after the owner's decisions in the README
-# (anti-features, signing key) and a first tagged release. Field reference:
+# For the main F-Droid repository, after the WebAssembly-from-source spike (README) and a first
+# tagged release. The launch channel is IzzyOnDroid (docs/store/izzyondroid.md, ADR 0025).
+# Field reference:
 # https://f-droid.org/docs/Build_Metadata_Reference/
 
 Categories:
@@ -12,13 +13,13 @@ AuthorName: Any WeCon
 SourceCode: https://github.com/Fiouri/selis
 IssueTracker: https://github.com/Fiouri/selis/issues
 Changelog: https://github.com/Fiouri/selis/blob/main/CHANGELOG.md
-# WebSite: the GitHub Pages site once deployed (website/, P5a).
+WebSite: https://fiouri.github.io/selis/
 
 AutoName: Selis
 # Title, summary, description and screenshots come from fastlane/metadata/android/ in the repo.
 
-# Decision 2 (README): no anti-feature (recommended), or NonFreeNet if the reviewers count n0's
-# default relay as one. Only uncomment after the decision:
+# Owner decision (ADR 0025): no self-declared anti-feature; the description explains the relay.
+# Only if F-Droid's reviewers ask for NonFreeNet:
 # AntiFeatures:
 #   NonFreeNet:
 #     en-US: Transfers that cannot connect directly go through a public relay run by n0 by default; it can be turned off (Local network only) or replaced by your own relay.
@@ -27,7 +28,7 @@ RepoType: git
 Repo: https://github.com/Fiouri/selis.git
 # Reproducible builds with our signature (ADR 0021): F-Droid builds, compares with our APK (each
 # build's `binary:`, the per-ABI APKs of the GitHub release) and publishes ours.
-# Decision 1 (README): the SHA-256 of the release certificate (scripts/android-keystore.md step 1).
+# The SHA-256 of the app signing certificate (ADR 0025, scripts/android-keystore.md step 3).
 AllowedAPKSigningKeys: 0000000000000000000000000000000000000000000000000000000000000000
 
 Builds:
@@ -40,7 +41,7 @@ Builds:
       - apt-get update
       - apt-get install -y libclang-dev npm
       - npm install -g n
-      - n 22.20.0
+      - n 22.23.1
     output: build/outputs/apk/arm64/release/app-arm64-release-unsigned.apk
     srclibs:
       - rustup@1.28.2
@@ -70,7 +71,7 @@ Builds:
       - apt-get update
       - apt-get install -y libclang-dev npm
       - npm install -g n
-      - n 22.20.0
+      - n 22.23.1
     output: build/outputs/apk/arm/release/app-arm-release-unsigned.apk
     srclibs:
       - rustup@1.28.2
@@ -100,7 +101,7 @@ Builds:
       - apt-get update
       - apt-get install -y libclang-dev npm
       - npm install -g n
-      - n 22.20.0
+      - n 22.23.1
     output: build/outputs/apk/x86_64/release/app-x86_64-release-unsigned.apk
     srclibs:
       - rustup@1.28.2

@@ -1,6 +1,16 @@
 # Name check — "Selis" (2026-10-14)
 
-A screening, not legal clearance. Report only: no rename proposed.
+**Decision (owner, 2026-10-15; ADR 0025): keep "Selis".** Recorded findings:
+
+- US **SELIS**, serial **86463675** (registered) — Lam Research Corp., class 7 (semiconductor manufacturing
+  machinery): different goods and customers, **no conflict**.
+- US **SELIS**, serial **76171221** (class 9 goods on Justia) — **status unverified** (TSDR not
+  readable from here); owner check below.
+- **"SELISE Signature"** (Secure Link Services Limited) — a similar name in the e-signature space
+  on the App Store: **low-to-medium risk** of a complaint; nothing found suggesting an EU/Swiss
+  class 9/42 mark.
+
+A screening, not legal clearance.
 
 | Where | How | Result |
 | --- | --- | --- |

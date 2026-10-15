@@ -12,10 +12,12 @@
 #   4. versionCode and versionName as tools/release/version.ts derives them (ADR 0020).
 #   5. scripts/check-release-apk.sh: not debuggable, no WebView debugging, no measure build,
 #      no debug.selis.* properties.
-#   6. With --signed: apksigner verify, APK Signature Scheme v2 and v3 both present.
+#   6. With --signed: apksigner verify, APK Signature Scheme v2 and v3 both present and, when
+#      APK_CERT_SHA256 is set, the app signing certificate (ADR 0025).
 #
 # For an AAB: bundletool asks for 16 KB alignment (PAGE_ALIGNMENT_16K), its manifest has the
-# same SDK levels and versionCode, and with --signed jarsigner verifies it.
+# same SDK levels and versionCode, and with --signed jarsigner verifies it (and, with
+# APK_CERT_SHA256, that it carries the upload key, not the app signing key).
 #
 # Usage: check-android-release.sh [--signed] <artifact.apk|artifact.aab>...
 # Needs ANDROID_HOME (build-tools ≥ 35 for zipalign -P), NDK_HOME (llvm-objdump, llvm-readelf),
@@ -114,6 +116,11 @@ for artifact in "$@"; do
       grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' <<< "$out" || fail "$name: no v2 signature"
       grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' <<< "$out" || fail "$name: no v3 signature"
       grep -m1 'certificate SHA-256 digest' <<< "$out" | sed 's/^/  /'
+      cert="$(sed -n 's/.*certificate SHA-256 digest: *//p' <<< "$out" | head -1)"
+      # ADR 0025: one app signing key everywhere; its fingerprint is public (repo variable).
+      if [ -n "${APK_CERT_SHA256:-}" ] && [ "$cert" != "${APK_CERT_SHA256,,}" ]; then
+        fail "$name: signed with $cert, expected the app signing key ${APK_CERT_SHA256,,}"
+      fi
     fi
     ;;
   *.aab)
@@ -132,6 +139,15 @@ for artifact in "$@"; do
     [ -d "$dir/bundle/base/lib" ] && mv "$dir/bundle/base/lib" "$dir/lib" && check_elf "$name" "$dir"
     if [ "$signed" = 1 ]; then
       jarsigner -verify -strict "$artifact" > "$dir/jarsigner.txt" 2>&1 || fail "$name: jarsigner -verify failed: $(tail -3 "$dir/jarsigner.txt")"
+      # ADR 0025: the bundle carries the upload key, never the app signing key.
+      if [ -n "${APK_CERT_SHA256:-}" ]; then
+        unzip -q -o "$artifact" 'META-INF/*' -d "$dir/meta" 2>/dev/null || true
+        block="$(find "$dir/meta/META-INF" -maxdepth 1 \( -name '*.RSA' -o -name '*.EC' -o -name '*.DSA' \) | head -1)"
+        [ -n "$block" ] || fail "$name: no signature block"
+        upload="$(keytool -printcert -file "$block" 2>/dev/null | sed -n 's/.*SHA256: *//p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')"
+        [ "$upload" != "${APK_CERT_SHA256,,}" ] || fail "$name: signed with the app signing key; the AAB must carry the upload key"
+        echo "  upload certificate SHA-256 digest: $upload"
+      fi
     fi
     ;;
   *) fail "$name: not an .apk or .aab" ;;

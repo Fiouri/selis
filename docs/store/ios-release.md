@@ -37,8 +37,9 @@ Keep the `.p8` in your password manager; revoke it in App Store Connect if it le
 
 ## 4. Export compliance
 
-Decide A or B in `docs/store/ios-export-compliance.md` first; until then each build waits for
-the encryption questions in App Store Connect.
+Decided (ADR 0025): `ITSAppUsesNonExemptEncryption` = YES, no France at launch. Before the
+first build: exclude France in Pricing and Availability, then answer the encryption questions as
+`docs/store/ios-export-compliance.md` lists (standard algorithms, not in France: no document).
 
 ## 5. TestFlight on your iPhone
 
