@@ -53,26 +53,37 @@ xcrun simctl ui "$udid" appearance light
 xcrun simctl status_bar "$udid" override --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 \
   --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
 
-# Samples into Files › On My iPhone/iPad (the Files app's local storage group).
-(cd "$root" && npm run --silent samples -w @selis/fixtures > /dev/null)
-xcrun simctl launch "$udid" com.apple.DocumentsApp >/dev/null 2>&1 || true
-sleep 5
-xcrun simctl terminate "$udid" com.apple.DocumentsApp >/dev/null 2>&1 || true
-group=group.com.apple.FileProvider.LocalStorage
-root_dir="$(xcrun simctl get_app_container "$udid" com.apple.DocumentsApp groups 2>/dev/null | awk -v g="$group" '$1 == g { print $2 }' || true)"
-if [ -z "$root_dir" ]; then
-  # Fallback: the app group's container is the one whose metadata names the group.
-  for d in "$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Containers/Shared/AppGroup"/*/; do
-    if grep -qa "$group" "$d.com.apple.mobile_container_manager.metadata.plist" 2>/dev/null; then root_dir="${d%/}"; break; fi
-  done
-fi
-[ -n "$root_dir" ] || { echo "no Files local storage container ($group)" >&2; exit 1; }
-files="$root_dir/File Provider Storage"
-mkdir -p "$files"
-echo "samples → $files"
-cp "$root/packages/fixtures/out/samples/$lang/"*.pdf "$files/"
+# The scan sample photo into Photos.
 xcrun simctl addmedia "$udid" "$root/docs/store/scan-sample/$lang.jpg"
 xcrun simctl install "$udid" "$app"
+
+# The four samples, seeded into the app's library (crates/selis-core/examples/seed-library.rs, the
+# app's own import path: titles from the file names). The Files picker runs out of process and did
+# not take synthesized taps reliably on CI. A first launch creates the library; its root is where
+# selis.db appears in the app's data container.
+(cd "$root" && npm run --silent samples -w @selis/fixtures > /dev/null)
+seeder="${SEEDER:-$root/target/release/examples/seed-library}"
+[ -x "$seeder" ] || { echo "no seeder at $seeder (cargo build --release -p selis-core --example seed-library)" >&2; exit 1; }
+xcrun simctl launch "$udid" com.anywecon.selis > /dev/null
+data="$(xcrun simctl get_app_container "$udid" com.anywecon.selis data)"
+db=""
+for _ in $(seq 1 60); do
+  db="$(find "$data" -name selis.db -not -path '*/tmp/*' 2>/dev/null | head -1)"
+  [ -n "$db" ] && break
+  sleep 1
+done
+[ -n "$db" ] || { echo "the app made no library in $data" >&2; exit 1; }
+xcrun simctl terminate "$udid" com.anywecon.selis > /dev/null
+sleep 1
+# The order the library shows them in (newest first): lease, report, invoice, trip.
+order="$(cd "$root" && node --input-type=module -e '
+  const { samples } = await import("file://" + process.cwd() + "/packages/fixtures/src/samples.ts");
+  const [lease, trip, invoice, report] = samples(process.argv[1]);
+  for (const s of [trip, invoice, report, lease]) console.log(s.file);' "$lang")"
+pdfs=()
+while IFS= read -r name; do pdfs+=("$root/packages/fixtures/out/samples/$lang/$name"); done <<< "$order"
+"$seeder" "$(dirname "$db")" "${pdfs[@]}"
+
 
 node --input-type=module - "$root" "$lang" "$here/store-screenshots.yaml" > "$work/flow.yaml" <<'EOF'
 import { readFileSync } from "node:fs";
@@ -88,29 +99,15 @@ const t = tr(strings(lang));
 const en = tr(strings("en"));
 const { samples } = await import(`file://${join(root, "packages/fixtures/src/samples.ts")}`);
 const [lease, trip, invoice, report] = samples(lang);
-// A file in the Files grid is a cell whose id is "<name without extension>, pdf" (its label
-// below is not tappable).
-const file = (s) => `${s.file.replace(/\.pdf$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, pdf`;
 const open = (title) => `${t("library.openDocument", { title }).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},.*`;
-// The Files picker grid (3 per row) sorts names in the device language; a file is tapped on its
-// thumbnail, whose position per device comes from the workflow (GRID_X / GRID_Y).
-const gx = (process.env.GRID_X || "18%,50%,82%").split(",");
-const gy = (process.env.GRID_Y || "29%,52%").split(",");
-const cells = [0, 1, 2, 3].map((i) => `${gx[i % 3]}, ${gy[Math.floor(i / 3)]}`);
-const order = [lease, trip, invoice, report].map((s) => s.file.replace(/\.pdf$/, "")).sort((a, b) => a.localeCompare(b, lang));
-const at = (s) => cells[order.indexOf(s.file.replace(/\.pdf$/, ""))];
 const env = {
   LANG: lang,
-  E_EMPTY: en("library.emptyTitle"),
   E_SETTINGS: en("tabs.settings"),
   E_LANGUAGE: `${en("settings.language")}.*`,
-  S_LEASE: file(lease), S_TRIP: file(trip), S_INVOICE: file(invoice), S_REPORT: file(report),
-  P_LEASE: at(lease), P_TRIP: at(trip), P_INVOICE: at(invoice), P_REPORT: at(report),
-  T_IMPORT: t("library.import"),
   T_LIBRARY: t("tabs.library"),
   T_TRANSFER: t("tabs.transfer"),
   T_BACK: t("viewer.back"),
-  // Titles here come from the file names (the picker hands over a copy named like the file).
+  // Titles here come from the file names (the seeder imports like a picked file).
   T_OPEN_LEASE: open(lease.file.replace(/\.pdf$/, "")),
   T_OPEN_TRIP: open(trip.file.replace(/\.pdf$/, "")),
   T_OPEN_REPORT: open(report.file.replace(/\.pdf$/, "")),

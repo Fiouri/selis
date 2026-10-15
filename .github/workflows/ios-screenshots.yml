@@ -84,11 +84,9 @@ jobs:
         lang: [en, el]
         device:
           # photo: where PHPicker's first cell is (its content is out of process, not in the hierarchy).
-          # gx/gy: the Files picker grid's thumbnail columns and rows (a file is tapped on its
-          # thumbnail: XCUITest taps on a cell's centre, its name label, did not open it).
-          - { slug: iphone-6.9, type: "^iPhone 17 Pro Max$", size: "1320 2868", photo: "17%, 24%", gx: "17%,50%,82%", gy: "28%,48%" }
-          - { slug: iphone-6.3, type: "^iPhone 17 Pro$", size: "1206 2622", photo: "17%, 24%", gx: "18%,50%,82%", gy: "29%,52%" }
-          - { slug: ipad-13, type: "^iPad Pro 13-inch \\(M5\\)", size: "2064 2752", photo: "30%, 38%", gx: "51%,66%,80%", gy: "35%,50%" }
+          - { slug: iphone-6.9, type: "^iPhone 17 Pro Max$", size: "1320 2868", photo: "17%, 24%" }
+          - { slug: iphone-6.3, type: "^iPhone 17 Pro$", size: "1206 2622", photo: "17%, 24%" }
+          - { slug: ipad-13, type: "^iPad Pro 13-inch \\(M5\\)", size: "2064 2752", photo: "30%, 38%" }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -111,13 +109,17 @@ jobs:
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      # The library is seeded with the samples (the simulator's Files picker did not take
+      # synthesized taps reliably): crates/selis-core/examples/seed-library.rs.
+      - name: Library seeder
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          cargo build --release -p selis-core --example seed-library
       - name: Device types available
         run: xcrun simctl list devicetypes | grep -E "iPhone 17|iPad Pro" || true
       - name: Screenshots
         env:
           PHOTO_POINT: ${{ matrix.device.photo }}
-          GRID_X: ${{ matrix.device.gx }}
-          GRID_Y: ${{ matrix.device.gy }}
         run: bash apps/app/e2e/maestro/ios/store-screenshots.sh dist/Selis.app "${{ matrix.device.type }}" "${{ matrix.device.slug }}" "${{ matrix.lang }}"
       - name: Sizes
         run: |

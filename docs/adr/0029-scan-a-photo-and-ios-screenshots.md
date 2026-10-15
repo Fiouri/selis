@@ -25,11 +25,18 @@ screenshot, and a phone without a usable camera had no way into Scan either.
   outline (checked with the WebAssembly module and in Playwright).
 - **iOS screenshots:** `.github/workflows/ios-screenshots.yml` builds a release simulator app
   on `macos-26` and, per device (iPhone 17 Pro Max, iPhone 17 Pro, iPad Pro 13-inch (M5)) and
-  language (en, el), boots a fresh simulator (light, status bar 9:41 / full), puts the sample
-  PDFs into Files › On My iPhone/iPad and the photo into Photos, and drives
-  `apps/app/e2e/maestro/ios/store-screenshots.yaml` with Maestro: library, viewer, annotate,
-  sign, transfer, tools, scan review. Only accessible names are used (no coordinates), so the
-  same flow fits iPhone and iPad. Output: JPEG at native pixels (sizes checked in the job), in
+  language (en, el), boots a fresh simulator (light, status bar 9:41 / full), seeds the app's
+  library with the sample PDFs (`crates/selis-core/examples/seed-library.rs`: the app's own
+  `import_path`, titles from the file names, as a picked file gets), puts the photo into Photos,
+  and drives `apps/app/e2e/maestro/ios/store-screenshots.yaml` with Maestro: library, viewer,
+  annotate, sign, transfer, tools, scan review. Accessible names are used throughout, so the
+  same flow fits iPhone and iPad; the one exception is PHPicker's first photo, tapped by a
+  per-device position (its grid is out of process).
+- **Why seeded, not picked:** the Files document picker is out of process too. On iPhone its
+  cells are in the hierarchy, but synthesized taps opened a file only some of the time (a tap on
+  a cell's centre lands on its name label); on iPad it is a popover with nothing in the
+  hierarchy. Six CI iterations did not make it reliable; the import itself is covered by the
+  Android Maestro suite and the unit tests. Output: JPEG at native pixels (sizes checked in the job), in
   the artifact as `fastlane/screenshots/<locale>/<device>-<n>.jpg`, committed after review.
 - **Android** store screenshots gain the same scan review (`7-scan`) through "Scan a photo".
 
@@ -37,5 +44,5 @@ screenshot, and a phone without a usable camera had no way into Scan either.
 
 - Screenshots are reproducible from the repository; a UI change means re-running the workflow.
 - The macOS job is free on a public repository but slow (simulator build + six simulator runs).
-- PHPicker and the Files picker are system UI; a future iOS may rename "Browse" / "On My
-  iPhone" and break the flow (fix the labels in `ios/import-sample.yaml`).
+- PHPicker is system UI; a future iOS may move its first cell (fix `photo` per device in the
+  workflow's matrix).

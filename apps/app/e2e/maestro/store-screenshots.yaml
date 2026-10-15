@@ -134,8 +134,11 @@ name: Store screenshots
 # The name field (its accessible name is not exposed through DevTools here).
 - tapOn:
     point: 50%, 38%
+- eraseText
 - inputText: ${SIGNER}
 - hideKeyboard
+# inputText can land twice in the WebView field on a busy emulator.
+- assertVisible: ${SIGNER}
 - tapOn: ${T_SAVE}
 - extendedWaitUntil:
     visible: ${T_PLACE_HINT}
@@ -174,6 +177,9 @@ name: Store screenshots
     visible:
       id: "tool-protect"
     timeout: 10000
+# The tools sheet replaces the More sheet: wait for the swap to finish.
+- waitForAnimationToEnd:
+    timeout: 3000
 - takeScreenshot: 6-tools
 - back
 - back

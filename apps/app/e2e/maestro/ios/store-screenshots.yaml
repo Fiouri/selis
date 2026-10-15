@@ -1,15 +1,15 @@
 # App Store screenshots on the iOS simulator (P5b, ADR 0029), driven by store-screenshots.sh
-# (macOS CI: .github/workflows/ios-screenshots.yml). The script boots one device, puts the four
-# invented sample PDFs into Files › On My iPhone/iPad and the scan sample photo into Photos, and
-# passes the labels of the target language from apps/app/src/i18n in a wrapper flow's env.
-# No coordinates (iPhone and iPad layouts differ): everything is found by its accessible name.
+# (macOS CI: .github/workflows/ios-screenshots.yml). The script boots one device, seeds the app's
+# library with the four invented sample PDFs, puts the scan sample photo into Photos, and passes
+# the labels of the target language from apps/app/src/i18n in a wrapper flow's env.
+# Everything is found by its accessible name, except PHPicker's first photo (out of process).
 appId: com.anywecon.selis
 name: App Store screenshots (iOS)
 ---
-- launchApp:
-    clearState: true
+# No clearState: that would wipe the seeded library.
+- launchApp
 - extendedWaitUntil:
-    visible: ${E_EMPTY}
+    visible: ${E_SETTINGS}
     timeout: 90000
 
 # Language first (labels below are the target language's).
@@ -18,38 +18,27 @@ name: App Store screenshots (iOS)
       true: ${LANG == "el"}
     commands:
       - tapOn: ${E_SETTINGS}
+      - extendedWaitUntil:
+          visible: ${E_LANGUAGE}
+          timeout: 10000
       - tapOn: ${E_LANGUAGE}
+      - extendedWaitUntil:
+          visible: "Ελληνικά"
+          timeout: 10000
       - tapOn: "Ελληνικά"
+      - extendedWaitUntil:
+          visible: ${T_LIBRARY}
+          timeout: 10000
       - tapOn: ${T_LIBRARY}
 
-# The four samples through the document picker (Files › Browse › On My iPhone/iPad).
-- runFlow:
-    file: import-sample.yaml
-    env:
-      SAMPLE: ${S_TRIP}
-      POINT: ${P_TRIP}
-      PAGE: ${T_PAGE_1}
-- runFlow:
-    file: import-sample.yaml
-    env:
-      SAMPLE: ${S_INVOICE}
-      POINT: ${P_INVOICE}
-      PAGE: ${T_PAGE_1}
-- runFlow:
-    file: import-sample.yaml
-    env:
-      SAMPLE: ${S_REPORT}
-      POINT: ${P_REPORT}
-      PAGE: ${T_PAGE_1}
-- runFlow:
-    file: import-sample.yaml
-    env:
-      SAMPLE: ${S_LEASE}
-      POINT: ${P_LEASE}
-      PAGE: ${T_PAGE_1_OF_2}
 - extendedWaitUntil:
     visible: ${T_OPEN_LEASE}
-    timeout: 10000
+    timeout: 20000
+# Thumbnails render after the cards.
+- extendedWaitUntil:
+    visible: "never shown, lets the thumbnails render"
+    timeout: 3000
+    optional: true
 - takeScreenshot: 1-library
 
 # Reading.
