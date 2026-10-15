@@ -100,13 +100,14 @@ test("tags: create and assign from the menu, filter, rename, delete", async ({ p
   const sheet = page.getByTestId("tags-sheet");
   await expect(sheet.getByRole("button", { name: /^Εργασία/ })).toContainText("1");
   await sheet.getByRole("button", { name: /^Εργασία/ }).click();
+  await expect(sheet).toHaveCount(0);
   // The Tags chip names the active tag; no filter radio is checked meanwhile.
-  await expect(page.getByRole("button", { name: "Εργασία" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Εργασία", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
   await expect(cards(page)).toHaveCount(1);
   await expect(cards(page).first()).toHaveAccessibleName(/^Open Τιμολόγιο,/);
 
-  await page.getByRole("button", { name: "Εργασία" }).click();
+  await page.getByRole("button", { name: "Εργασία", exact: true }).click();
   await sheet.getByRole("button", { name: "Edit the tag “Εργασία”" }).click();
   await sheet.getByLabel("Tag name").fill("Δουλειά");
   await sheet.getByRole("button", { name: "Save" }).click();
