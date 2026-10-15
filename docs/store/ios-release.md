@@ -1,0 +1,52 @@
+# iOS release and TestFlight — what the owner sets up
+
+`.github/workflows/release-ios.yml` (ADR 0022) builds a signed App Store IPA on a `macos-26`
+runner and uploads it to TestFlight. Signing is automatic with an App Store Connect API key:
+Xcode makes and keeps the distribution certificate in Apple's cloud, so no `.p12` or
+provisioning profile exists anywhere. Without the secrets the workflow skips with a notice.
+
+## 1. Accounts (costs money — your call)
+
+- Apple Developer Program: 99 USD / year (individual or organisation "Any WeCon"; an
+  organisation needs a D-U-N-S number). <https://developer.apple.com/programs/enroll/>
+
+## 2. App record (App Store Connect, once)
+
+1. Certificates, Identifiers & Profiles › Identifiers: Xcode registers `com.anywecon.selis` on the
+   first signed build; or add it by hand (App ID, no extra capabilities).
+2. App Store Connect › Apps › + New App: platform iOS, name **Selis**, primary language English
+   (U.S.), bundle ID `com.anywecon.selis`, SKU `selis`.
+3. Note the app's **Apple ID** (App Information › General, a number) for the upload step.
+
+## 3. API key and secrets
+
+App Store Connect › Users and Access › Integrations › App Store Connect API › Team Keys › +:
+name "Selis CI", access **Admin** (needed for cloud-managed distribution certificates). Download
+the `.p8` once (it cannot be downloaded again). Note the **Key ID** and the **Issuer ID** (above
+the table) and your **Team ID** (Membership details).
+
+```powershell
+gh secret set APPLE_API_KEY_ID -R Fiouri/selis --body <KEY_ID>
+gh secret set APPLE_API_ISSUER -R Fiouri/selis --body <ISSUER_ID>
+gh secret set APPLE_DEVELOPMENT_TEAM -R Fiouri/selis --body <TEAM_ID>
+Get-Content -Raw AuthKey_<KEY_ID>.p8 | gh secret set APPLE_API_KEY_P8 -R Fiouri/selis
+gh variable set APPSTORE_APP_APPLE_ID -R Fiouri/selis --body <APP_APPLE_ID>
+```
+
+Keep the `.p8` in your password manager; revoke it in App Store Connect if it leaks.
+
+## 4. Export compliance
+
+Decide A or B in `docs/store/ios-export-compliance.md` first; until then each build waits for
+the encryption questions in App Store Connect.
+
+## 5. TestFlight on your iPhone
+
+1. Actions › iOS release › Run workflow (or a tag, after I ask). The job summary says
+   "TestFlight: uploaded 1.0.0 (1000001)".
+2. App Store Connect › Selis › TestFlight: the build is "Processing" for ~10–30 min, then answer
+   export compliance if asked.
+3. Internal Testing › + group "Owner", add yourself (your Apple ID must be a user of the team).
+4. On the iPhone: install **TestFlight** from the App Store, accept the invite, install Selis.
+
+Internal testers need no Beta App Review; external testers do.

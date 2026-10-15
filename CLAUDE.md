@@ -63,6 +63,17 @@ action (not in P0).
 - New architectural decisions get an ADR in `docs/adr/`.
 - UI follows the approved phone brief `docs/design/p1-ui-brief.md` (exact sizes, copy, states).
 
+## Releases
+
+- Version: one source, the root `package.json` `version` (`X.Y.Z` / `X.Y.Z-rc.N`); change it only
+  with `node tools/release/version.ts set <v>` (derives app/lock/Cargo/tauri.conf, Android
+  versionCode, iOS build; ADR 0020) and add its `CHANGELOG.md` section. CI runs `version.ts check`.
+- Android release artifacts: `.github/workflows/release-android.yml` (ADR 0021) — unsigned
+  builds, `scripts/check-android-release.sh` (16 KB LOAD + RELRO, zipalign -P 16, SDK levels,
+  versionCode, no debug code), signing from secrets only (`scripts/android-keystore.md`),
+  reproducible second build. No tags are pushed without the owner's go.
+- Store, F-Droid and name-check drafts: `docs/store/`.
+
 ## Git workflow
 
 Every change goes branch → PR → `gh pr merge --auto --squash`; never push to `main` directly.

@@ -11,6 +11,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
@@ -28,16 +29,20 @@ type WasmModuleApi = {
 const { Module: WasmModule } = (globalThis as unknown as { WebAssembly: { Module: WasmModuleApi } }).WebAssembly;
 
 const variants = [
-  { name: "simd", rustflags: "-C target-feature=+simd128" },
-  { name: "base", rustflags: "" },
+  { name: "simd", rustflags: ["-C", "target-feature=+simd128"] },
+  { name: "base", rustflags: [] },
 ];
+// Absolute paths of the Cargo home and the checkout would end up in the module's panic strings,
+// so the app built in another directory would differ (reproducible builds, ADR 0021).
+const remap = [`--remap-path-prefix=${process.env.CARGO_HOME ?? join(homedir(), ".cargo")}=/cargo`, `--remap-path-prefix=${root}=/selis`];
 
 mkdirSync(outDir, { recursive: true });
 for (const variant of variants) {
   const targetDir = join(root, "target", `scan-${variant.name}`);
-  const env: NodeJS.ProcessEnv = { ...process.env, RUSTFLAGS: variant.rustflags };
-  // Settings meant for the app's own (native) build must not leak into this one.
-  delete env.CARGO_ENCODED_RUSTFLAGS;
+  // Unit-separated, so paths with spaces stay whole. Settings meant for the app's own (native)
+  // build must not leak into this one.
+  const env: NodeJS.ProcessEnv = { ...process.env, CARGO_ENCODED_RUSTFLAGS: [...variant.rustflags, ...remap].join(String.fromCharCode(0x1f)) };
+  delete env.RUSTFLAGS;
   delete env.CARGO_BUILD_TARGET;
   const cargo = spawnSync(
     "cargo",

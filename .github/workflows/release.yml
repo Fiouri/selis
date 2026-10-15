@@ -1,0 +1,132 @@
+name: Release
+
+# On a version tag (vX.Y.Z or vX.Y.Z-rc.N, pushed by the owner only): Android artifacts, the
+# iOS TestFlight upload, CycloneDX SBOMs (Rust + npm), SHA256SUMS, and a DRAFT GitHub release
+# with the CHANGELOG.md section as notes (ADR 0023). Nothing is published until the owner
+# publishes the draft. Desktop releases come with P6.
+
+on:
+  push:
+    tags: ["v*"]
+  # A pull request that changes this file runs the version check and the SBOM job only.
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Tag matches the version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - id: v
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then node tools/release/version.ts check "${GITHUB_REF_NAME}"; else node tools/release/version.ts check; fi
+          node tools/release/version.ts show | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const j=JSON.parse(d);console.log(`version=${j.version}\nprerelease=${j.prerelease}`)})' >> "$GITHUB_OUTPUT"
+
+  android:
+    needs: verify
+    if: github.ref_type == 'tag'
+    uses: ./.github/workflows/release-android.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
+
+  ios:
+    needs: verify
+    if: github.ref_type == 'tag'
+    uses: ./.github/workflows/release-ios.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
+
+  sbom:
+    name: CycloneDX SBOMs
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - name: Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: npm (shipped packages only)
+        run: |
+          mkdir -p sbom
+          npm sbom --sbom-format cyclonedx --sbom-type application --omit dev --package-lock-only > "sbom/selis-${{ needs.verify.outputs.version }}-npm.cdx.json"
+      - name: Rust (the app crate and everything it links, Android and iOS targets)
+        run: |
+          cargo install cargo-cyclonedx --version 0.5.9 --locked
+          cargo cyclonedx --manifest-path apps/app/src-tauri/Cargo.toml --format json --spec-version 1.5 --target all --no-build-deps --override-filename selis-rust
+          mv apps/app/src-tauri/selis-rust.json "sbom/selis-${{ needs.verify.outputs.version }}-rust.cdx.json"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: selis-sbom
+          path: sbom
+          if-no-files-found: error
+
+  draft:
+    name: Draft GitHub release
+    needs: [verify, android, sbom]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v8
+        with:
+          name: selis-android-release
+          path: android
+      - uses: actions/download-artifact@v8
+        with:
+          name: selis-sbom
+          path: sbom
+      - name: Assets and SHA256SUMS
+        run: |
+          v="${{ needs.verify.outputs.version }}"
+          mkdir -p assets
+          if [ "${{ needs.android.outputs.signed }}" = "true" ]; then
+            cp android/signed/*.apk assets/
+          else
+            # Unsigned APKs install nowhere; attach them only so the draft shows what was built.
+            cp android/unsigned/*.apk assets/
+          fi
+          cp sbom/*.json assets/
+          (cd assets && sha256sum * > SHA256SUMS)
+          cat assets/SHA256SUMS
+      - name: Notes from CHANGELOG.md
+        run: |
+          {
+            node tools/release/version.ts notes
+            echo
+            echo "---"
+            echo
+            if [ "${{ needs.android.outputs.signed }}" = "true" ]; then
+              echo "Android: one APK per ABI (\`arm64-v8a\` for nearly every phone) and a universal APK; check them against \`SHA256SUMS\`."
+            else
+              echo "**Unsigned build** — the Android signing secrets were not set; do not publish this draft."
+            fi
+            echo "SBOMs: CycloneDX for the Rust crates and the npm packages in the app."
+          } > notes.md
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""
+          [ "${{ needs.verify.outputs.prerelease }}" = "true" ] && pre="--prerelease"
+          gh release create "${GITHUB_REF_NAME}" --draft $pre --verify-tag \
+            --title "Selis ${{ needs.verify.outputs.version }}" --notes-file notes.md assets/*
