@@ -30,17 +30,19 @@ pub enum PhotoPick {
     Cancelled,
 }
 
-/// Opens the photo picker (Android). Elsewhere: `unsupported` (the UI uses a file input).
+/// Opens the photo picker (Android) for at most `max` photos (1: a single-photo picker, as
+/// Scan uses). Elsewhere: `unsupported` (the UI uses a file input).
 #[tauri::command]
 #[specta::specta]
 pub async fn pick_photos<R: Runtime>(
     app: AppHandle<R>,
     results: State<'_, Arc<RequestResults>>,
     request_id: String,
+    max: u32,
 ) -> CommandResult<PhotoPick> {
     results
         .run_once(&request_id, "pick_photos", async move {
-            platform::pick(&app).await
+            platform::pick(&app, max.clamp(1, MAX_PHOTOS)).await
         })
         .await
 }
@@ -167,7 +169,7 @@ mod platform {
     use tauri::plugin::PluginHandle;
     use tauri::{AppHandle, Manager, Runtime};
 
-    use super::{CommandError, CommandResult, ErrorCode, MAX_PHOTOS, PhotoPick};
+    use super::{CommandError, CommandResult, ErrorCode, PhotoPick};
 
     pub struct PhotoHandle<R: Runtime>(pub PluginHandle<R>);
 
@@ -181,13 +183,13 @@ mod platform {
         uris: Vec<String>,
     }
 
-    pub async fn pick<R: Runtime>(app: &AppHandle<R>) -> CommandResult<PhotoPick> {
+    pub async fn pick<R: Runtime>(app: &AppHandle<R>, max: u32) -> CommandResult<PhotoPick> {
         let handle = app
             .try_state::<PhotoHandle<R>>()
             .ok_or_else(|| CommandError::new(ErrorCode::Unsupported, "photo picker not loaded"))?;
         let picked: Picked = handle
             .0
-            .run_mobile_plugin_async("pick", PickArgs { max: MAX_PHOTOS })
+            .run_mobile_plugin_async("pick", PickArgs { max })
             .await
             .map_err(|e| CommandError::new(ErrorCode::Io, format!("photo picker: {e}")))?;
         Ok(if picked.uris.is_empty() {
@@ -204,10 +206,9 @@ mod platform {
 mod platform {
     use tauri::{AppHandle, Runtime};
 
-    use super::{CommandError, CommandResult, ErrorCode, MAX_PHOTOS, PhotoPick};
+    use super::{CommandError, CommandResult, ErrorCode, PhotoPick};
 
-    pub async fn pick<R: Runtime>(_app: &AppHandle<R>) -> CommandResult<PhotoPick> {
-        let _ = MAX_PHOTOS;
+    pub async fn pick<R: Runtime>(_app: &AppHandle<R>, _max: u32) -> CommandResult<PhotoPick> {
         Err(CommandError::new(
             ErrorCode::Unsupported,
             "no native photo picker here: use a file input",

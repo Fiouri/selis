@@ -227,8 +227,11 @@ export const commands = {
 	 *  Runs once per `request_id`.
 	 */
 	runTool: (requestId: string, id: string, request: ToolRequest) => typedError<ToolOutcome, CommandError>(__TAURI_INVOKE("run_tool", { requestId, id, request })),
-	/**  Opens the photo picker (Android). Elsewhere: `unsupported` (the UI uses a file input). */
-	pickPhotos: (requestId: string) => typedError<PhotoPick, CommandError>(__TAURI_INVOKE("pick_photos", { requestId })),
+	/**
+	 *  Opens the photo picker (Android) for at most `max` photos (1: a single-photo picker, as
+	 *  Scan uses). Elsewhere: `unsupported` (the UI uses a file input).
+	 */
+	pickPhotos: (requestId: string, max: number) => typedError<PhotoPick, CommandError>(__TAURI_INVOKE("pick_photos", { requestId, max })),
 	/**
 	 *  Copies one picked photo (a path or content:// URI, opened read-only) into the stage and
 	 *  returns its path for the asset protocol. Runs once per `request_id`.

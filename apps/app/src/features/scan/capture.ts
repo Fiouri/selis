@@ -87,3 +87,30 @@ export async function takeStill(track: MediaStreamTrack, video: HTMLVideoElement
   canvas.height = 0;
   return { kind: "rgba", width: vw, height: vh, rgba: data.buffer };
 }
+
+/**
+ * A photo file for the Adjust step ("Scan a photo"). The worker decodes a Blob itself when it
+ * has OffscreenCanvas; otherwise (`rgbaOnly`, e.g. some WebKit builds) the photo is decoded
+ * here, EXIF orientation applied, and scaled to at most `maxPixels`.
+ */
+export async function photoStill(blob: Blob, maxPixels: number, rgbaOnly: boolean): Promise<PhotoSource> {
+  if (!rgbaOnly) return { kind: "blob", blob };
+  const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
+  try {
+    const scale = Math.min(1, Math.sqrt(maxPixels / (bitmap.width * bitmap.height)));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("no 2d context");
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    const data = ctx.getImageData(0, 0, width, height).data;
+    canvas.width = 0;
+    canvas.height = 0;
+    return { kind: "rgba", width, height, rgba: data.buffer };
+  } finally {
+    bitmap.close();
+  }
+}

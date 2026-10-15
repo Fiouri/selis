@@ -112,11 +112,19 @@ name: Store screenshots
 - extendedWaitUntil:
     visible: ${T_PAGE_2_OF_2}
     timeout: 10000
-# Scrolling down hides the document tools; a short scroll back up shows them again.
-- swipe:
-    start: 50%, 50%
-    end: 50%, 56%
-    duration: 400
+# Scrolling down hides the document tools. A tap on the page toggles the bars and brings the
+# tools back (a short scroll back up did too, but the end of the scroll could hide them again).
+- waitForAnimationToEnd:
+    timeout: 2000
+- repeat:
+    while:
+      notVisible: ${T_SIGN}
+    times: 4
+    commands:
+      - tapOn:
+          point: 50%, 75%
+      - waitForAnimationToEnd:
+          timeout: 1500
 - extendedWaitUntil:
     visible: ${T_SIGN}
     timeout: 5000
@@ -126,8 +134,11 @@ name: Store screenshots
 # The name field (its accessible name is not exposed through DevTools here).
 - tapOn:
     point: 50%, 38%
+- eraseText
 - inputText: ${SIGNER}
 - hideKeyboard
+# inputText can land twice in the WebView field on a busy emulator.
+- assertVisible: ${SIGNER}
 - tapOn: ${T_SAVE}
 - extendedWaitUntil:
     visible: ${T_PLACE_HINT}
@@ -155,7 +166,6 @@ name: Store screenshots
 - tapOn: ${T_LIBRARY}
 
 # Tools: protect, compress, repair, text recognition, page as image.
-# (A scan screenshot needs a real page in front of a real camera; the AVD's scene has none.)
 - tapOn: ${T_OPEN_REPORT}
 - extendedWaitUntil:
     visible: ${T_PAGE_1}
@@ -167,4 +177,32 @@ name: Store screenshots
     visible:
       id: "tool-protect"
     timeout: 10000
+# The tools sheet replaces the More sheet: wait for the swap to finish.
+- waitForAnimationToEnd:
+    timeout: 3000
 - takeScreenshot: 6-tools
+- back
+- back
+
+# Scan: a photo of a delivery note on a desk (docs/store/scan-sample, pushed by the script)
+# through "Scan a photo": the Adjust step with the page found and its corners.
+- tapOn: ${T_LIBRARY}
+- tapOn: ${T_SCAN}
+- tapOn:
+    text: "While using the app"
+    optional: true
+- tapOn: ${T_FROM_PHOTO}
+- extendedWaitUntil:
+    visible: "Photo taken on.*"
+    timeout: 20000
+- tapOn:
+    text: "Photo taken on.*"
+    index: 0
+- extendedWaitUntil:
+    visible: ${T_ADJUST}
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "never shown, lets the photo render"
+    timeout: 2000
+    optional: true
+- takeScreenshot: 7-scan

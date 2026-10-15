@@ -1,0 +1,194 @@
+# App Store screenshots on the iOS simulator (P5b, ADR 0029), driven by store-screenshots.sh
+# (macOS CI: .github/workflows/ios-screenshots.yml). The script boots one device, seeds the app's
+# library with the four invented sample PDFs, puts the scan sample photo into Photos, and passes
+# the labels of the target language from apps/app/src/i18n in a wrapper flow's env.
+# Everything is found by its accessible name, except PHPicker's first photo (out of process).
+appId: com.anywecon.selis
+name: App Store screenshots (iOS)
+---
+# No clearState: that would wipe the seeded library.
+- launchApp
+- extendedWaitUntil:
+    visible: ${E_SETTINGS}
+    timeout: 90000
+
+# Language first (labels below are the target language's).
+- runFlow:
+    when:
+      true: ${LANG == "el"}
+    commands:
+      - tapOn: ${E_SETTINGS}
+      - repeat:
+          while:
+            notVisible: ${E_LANGUAGE}
+          times: 3
+          commands:
+            - extendedWaitUntil:
+                visible: ${E_LANGUAGE}
+                timeout: 5000
+                optional: true
+            - runFlow:
+                when:
+                  notVisible: ${E_LANGUAGE}
+                commands:
+                  - tapOn: ${E_SETTINGS}
+      - tapOn: ${E_LANGUAGE}
+      - extendedWaitUntil:
+          visible: "Ελληνικά"
+          timeout: 10000
+      - tapOn: "Ελληνικά"
+      - extendedWaitUntil:
+          visible: ${T_LIBRARY}
+          timeout: 10000
+      - tapOn: ${T_LIBRARY}
+
+- extendedWaitUntil:
+    visible: ${T_OPEN_LEASE}
+    timeout: 20000
+# Thumbnails render after the cards.
+- extendedWaitUntil:
+    visible: "never shown, lets the thumbnails render"
+    timeout: 3000
+    optional: true
+- takeScreenshot: 1-library
+
+# Reading.
+- runFlow:
+    file: open-document.yaml
+    env:
+      DOC: ${T_OPEN_TRIP}
+      PAGE: ${T_PAGE_1}
+- extendedWaitUntil:
+    visible: "never shown, lets the page render"
+    timeout: 2500
+    optional: true
+- takeScreenshot: 2-viewer
+- tapOn: ${T_BACK}
+
+# Annotate: the tool sheet over the report.
+- runFlow:
+    file: open-document.yaml
+    env:
+      DOC: ${T_OPEN_REPORT}
+      PAGE: ${T_PAGE_1}
+- tapOn: ${T_ANNOTATE}
+- extendedWaitUntil:
+    visible: ${T_DONE}
+    timeout: 10000
+- takeScreenshot: 3-annotate
+- tapOn: ${T_DONE}
+- tapOn: ${T_BACK}
+
+# Sign: a typed signature being made for the lease.
+- runFlow:
+    file: open-document.yaml
+    env:
+      DOC: ${T_OPEN_LEASE}
+      PAGE: ${T_PAGE_1_OF_2}
+- tapOn: ${T_SIGN}
+- tapOn: ${T_NEW}
+- extendedWaitUntil:
+    visible: ${T_MODE_TYPE}
+    timeout: 10000
+- tapOn: ${T_MODE_TYPE}
+- tapOn: ${T_NAME_LABEL}
+- inputText: ${SIGNER}
+# iPhone: hideKeyboard. iPad: it dismissed the sheet there, so the keyboard's own hide key.
+- runFlow:
+    when:
+      true: ${KEYBOARD_HIDE == ""}
+    commands:
+      - hideKeyboard
+- runFlow:
+    when:
+      true: ${KEYBOARD_HIDE != ""}
+    commands:
+      - tapOn:
+          point: ${KEYBOARD_HIDE}
+- extendedWaitUntil:
+    visible: ${T_CANCEL}
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "never shown, lets the fonts render"
+    timeout: 1500
+    optional: true
+- takeScreenshot: 4-sign
+- tapOn: ${T_CANCEL}
+- tapOn: ${T_CLOSE_SIGNING}
+- tapOn: ${T_BACK}
+
+# Transfer: the code for sending all four documents.
+- tapOn: ${T_TRANSFER}
+- tapOn:
+    text: "Allow"
+    optional: true
+- tapOn: ${T_TAB_SEND}
+- tapOn: ${T_SELECT_ALL}
+- tapOn: ${T_SEND_ALL}
+- extendedWaitUntil:
+    visible: ${T_EXPIRES}
+    timeout: 60000
+- takeScreenshot: 5-transfer
+- tapOn: ${T_LIBRARY}
+
+# Tools over the report.
+- runFlow:
+    file: open-document.yaml
+    env:
+      DOC: ${T_OPEN_REPORT}
+      PAGE: ${T_PAGE_1}
+- tapOn: ${T_MORE}
+- tapOn: ${T_TOOLS}
+- extendedWaitUntil:
+    visible: ${T_PROTECT}
+    timeout: 10000
+- takeScreenshot: 6-tools
+# The sheet's backdrop closes it.
+- tapOn:
+    point: 50%, 12%
+- tapOn: ${T_BACK}
+
+# Scan: no camera on the simulator, so "Scan a photo" with the sample photo → Adjust.
+- tapOn: ${T_SCAN}
+- tapOn:
+    text: "Allow|OK"
+    optional: true
+- tapOn:
+    text: ${T_FROM_PHOTO}
+    index: 0
+# WebKit's file input menu (system language: the simulator's, English).
+- extendedWaitUntil:
+    visible: "Photo Library"
+    timeout: 10000
+- tapOn: "Photo Library"
+# PHPicker runs out of process (not in the hierarchy): the newest photo, the sample, is the
+# first cell; its position comes from the script per device.
+- waitForAnimationToEnd:
+    timeout: 5000
+- extendedWaitUntil:
+    visible: "never shown, lets the photos load"
+    timeout: 3000
+    optional: true
+- takeScreenshot: photo-picker
+- tapOn:
+    point: ${PHOTO_POINT}
+- extendedWaitUntil:
+    visible: ${T_ADJUST}
+    timeout: 8000
+    optional: true
+# A slow tap opens the photo's preview instead; its ✓ (top right) chooses it.
+- runFlow:
+    when:
+      notVisible: ${T_ADJUST}
+    commands:
+      - takeScreenshot: photo-preview
+      - tapOn:
+          point: ${PHOTO_CONFIRM}
+- extendedWaitUntil:
+    visible: ${T_ADJUST}
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "never shown, lets the photo render"
+    timeout: 2000
+    optional: true
+- takeScreenshot: 7-scan

@@ -11,7 +11,7 @@
 # - Labels of the target language come from apps/app/src/i18n/<lang>.json, so the flow taps the
 #   same strings the user sees.
 # - Output: light → fastlane/metadata/android/<locale>/images/phoneScreenshots/ (what Play and
-#   F-Droid show), dark → docs/store/screenshots/<lang>/dark/; {1-library,…,6-tools}.png.
+#   F-Droid show), dark → docs/store/screenshots/<lang>/dark/; {1-library,…,6-tools,7-scan}.png.
 # Prerequisite: a release build with the `measure` feature installed (WebView readable through
 # DevTools for Maestro, none of the debug-only UI of a debug build in the pictures):
 #   npm run tauri -- android build --apk --target x86_64 --features measure, debug-signed.
@@ -82,6 +82,9 @@ const env = {
   T_SEND_ALL: t("transfer.send.startWith", { summary: ".*" }),
   T_EXPIRES: t("transfer.send.expiresIn", { time: ".*" }),
   T_MORE: t("viewer.more"),
+  T_SCAN: t("scan.open"),
+  T_FROM_PHOTO: t("scan.fromPhoto"),
+  T_ADJUST: t("scan.adjustTitle"),
   // adb input types ASCII only; a signature in Latin letters is usual in Greece too.
   SIGNER: lang === "el" ? "D. Rigas" : "Daniel Reyes",
 };
@@ -96,6 +99,8 @@ EOF
 restore() {
   adb -s "$serial" shell wm size reset || true
   adb -s "$serial" shell am broadcast -a com.android.systemui.demo -e command exit > /dev/null || true
+  adb -s "$serial" shell rm -f /sdcard/Pictures/selis-scan-sample-$lang.jpg > /dev/null || true
+  adb -s "$serial" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/selis-scan-sample-$lang.jpg > /dev/null || true
   # The samples must not stay in the picker's Recent list: the other flows pick fixtures by name.
   for f in "$samples"/*.pdf; do
     name="$(basename "$f")"
@@ -104,6 +109,9 @@ restore() {
   done
 }
 trap restore EXIT
+# The photo for "Scan a photo" (tools/store/scan-sample.ts), the newest in the photo picker.
+adb -s "$serial" push "$(win "$root/docs/store/scan-sample/$lang.jpg")" /sdcard/Pictures/selis-scan-sample-$lang.jpg > /dev/null
+adb -s "$serial" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/selis-scan-sample-$lang.jpg > /dev/null
 adb -s "$serial" shell wm size 1080x1920
 adb -s "$serial" shell settings put global sysui_demo_allowed 1
 demo() { adb -s "$serial" shell am broadcast -a com.android.systemui.demo -e command "$@" > /dev/null; }
@@ -118,7 +126,7 @@ demo notifications -e visible false
 # folder per run; take this run's.
 latest="$(ls -td "$root"/.tmp/maestro/.maestro/tests/*/ | head -1)"
 find "$latest" -path '*takeScreenshot/*.png' -exec cp {} "$work/" \;
-[ "$(ls "$work"/*.png | wc -l)" -eq 6 ] || { echo "expected 6 screenshots in $latest" >&2; exit 1; }
+[ "$(ls "$work"/*.png | wc -l)" -eq 7 ] || { echo "expected 7 screenshots in $latest" >&2; exit 1; }
 
 if [ "$theme" = light ]; then
   shots="$root/fastlane/metadata/android/$locale/images/phoneScreenshots"
