@@ -73,10 +73,17 @@ name: App Store screenshots (iOS)
     timeout: 30000
 - tapOn: ${T_SIGN}
 - tapOn: ${T_NEW}
+- extendedWaitUntil:
+    visible: ${T_MODE_TYPE}
+    timeout: 10000
 - tapOn: ${T_MODE_TYPE}
 - tapOn: ${T_NAME_LABEL}
 - inputText: ${SIGNER}
-- hideKeyboard
+# Not hideKeyboard: on iPad it dismissed the sheet. A tap on the sheet's title ends the editing.
+- tapOn: ${T_NEW_TITLE}
+- extendedWaitUntil:
+    visible: ${T_CANCEL}
+    timeout: 10000
 - extendedWaitUntil:
     visible: "never shown, lets the fonts render"
     timeout: 1500

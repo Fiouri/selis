@@ -118,6 +118,7 @@ const env = {
   T_DONE: t("annotate.done"),
   T_SIGN: t("viewer.dockSign"),
   T_NEW: t("sign.new"),
+  T_NEW_TITLE: t("sign.newTitle"),
   T_MODE_TYPE: t("sign.modeType"),
   T_NAME_LABEL: t("sign.nameLabel"),
   T_CANCEL: t("sign.cancel"),
