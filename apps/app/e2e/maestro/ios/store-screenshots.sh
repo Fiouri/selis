@@ -107,6 +107,7 @@ const env = {
   T_LIBRARY: t("tabs.library"),
   T_TRANSFER: t("tabs.transfer"),
   T_BACK: t("viewer.back"),
+  T_RENAME: t("library.rename"),
   // Titles here come from the file names (the seeder imports like a picked file).
   T_OPEN_LEASE: open(lease.file.replace(/\.pdf$/, "")),
   T_OPEN_TRIP: open(trip.file.replace(/\.pdf$/, "")),

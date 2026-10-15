@@ -1,0 +1,27 @@
+# Opens DOC from the library and waits for PAGE (store-screenshots.yaml). A slow simulator can
+# turn the tap into a long press, which opens the document's action sheet instead: close it
+# (tap above the sheet) and tap again.
+appId: com.anywecon.selis
+---
+- tapOn: ${DOC}
+- repeat:
+    while:
+      notVisible: ${PAGE}
+    times: 3
+    commands:
+      - runFlow:
+          when:
+            visible: ${T_RENAME}
+          commands:
+            - tapOn:
+                point: 50%, 10%
+            - waitForAnimationToEnd:
+                timeout: 3000
+            - tapOn: ${DOC}
+      - extendedWaitUntil:
+          visible: ${PAGE}
+          timeout: 10000
+          optional: true
+- extendedWaitUntil:
+    visible: ${PAGE}
+    timeout: 30000

@@ -42,10 +42,11 @@ name: App Store screenshots (iOS)
 - takeScreenshot: 1-library
 
 # Reading.
-- tapOn: ${T_OPEN_TRIP}
-- extendedWaitUntil:
-    visible: ${T_PAGE_1}
-    timeout: 30000
+- runFlow:
+    file: open-document.yaml
+    env:
+      DOC: ${T_OPEN_TRIP}
+      PAGE: ${T_PAGE_1}
 - extendedWaitUntil:
     visible: "never shown, lets the page render"
     timeout: 2500
@@ -54,10 +55,11 @@ name: App Store screenshots (iOS)
 - tapOn: ${T_BACK}
 
 # Annotate: the tool sheet over the report.
-- tapOn: ${T_OPEN_REPORT}
-- extendedWaitUntil:
-    visible: ${T_PAGE_1}
-    timeout: 30000
+- runFlow:
+    file: open-document.yaml
+    env:
+      DOC: ${T_OPEN_REPORT}
+      PAGE: ${T_PAGE_1}
 - tapOn: ${T_ANNOTATE}
 - extendedWaitUntil:
     visible: ${T_DONE}
@@ -67,10 +69,11 @@ name: App Store screenshots (iOS)
 - tapOn: ${T_BACK}
 
 # Sign: a typed signature being made for the lease.
-- tapOn: ${T_OPEN_LEASE}
-- extendedWaitUntil:
-    visible: ${T_PAGE_1_OF_2}
-    timeout: 30000
+- runFlow:
+    file: open-document.yaml
+    env:
+      DOC: ${T_OPEN_LEASE}
+      PAGE: ${T_PAGE_1_OF_2}
 - tapOn: ${T_SIGN}
 - tapOn: ${T_NEW}
 - extendedWaitUntil:
@@ -108,10 +111,11 @@ name: App Store screenshots (iOS)
 - tapOn: ${T_LIBRARY}
 
 # Tools over the report.
-- tapOn: ${T_OPEN_REPORT}
-- extendedWaitUntil:
-    visible: ${T_PAGE_1}
-    timeout: 30000
+- runFlow:
+    file: open-document.yaml
+    env:
+      DOC: ${T_OPEN_REPORT}
+      PAGE: ${T_PAGE_1}
 - tapOn: ${T_MORE}
 - tapOn: ${T_TOOLS}
 - extendedWaitUntil:
