@@ -34,6 +34,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   MAESTRO_VERSION: 2.11.0
+  # The iPad simulator on a shared runner can take minutes to start the XCTest driver.
+  MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
 
 jobs:
   build:

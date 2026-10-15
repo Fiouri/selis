@@ -53,15 +53,17 @@ appId: com.anywecon.selis
     id: ${SAMPLE}
 - waitForAnimationToEnd:
     timeout: 3000
-# Still in the picker (the first tap fell into a transition): once more.
-- runFlow:
-    when:
+# Still in the picker (a tap that did not take): again, a few times.
+- repeat:
+    while:
       visible: "On My iPhone"
+    times: 4
     commands:
-      - waitForAnimationToEnd:
-          timeout: 3000
       - tapOn:
           id: ${SAMPLE}
+          retryTapIfNoChange: true
+      - waitForAnimationToEnd:
+          timeout: 3000
 - extendedWaitUntil:
     visible: ${PAGE}
     timeout: 30000
