@@ -10,6 +10,11 @@ import { setDarkSystemBars } from "../lib/platform";
 import { type AppLocale, changeLocale, resolveLocale } from "../i18n";
 
 const BOOT_KEY = "selis.boot-settings";
+/**
+ * Version of the boot mirror. A mirror without it predates English first (#31, ADR 0030): its
+ * "system" locale is read as "en", like the database's migration 0007 does once.
+ */
+const BOOT_VERSION = 2;
 
 type SettingsState = Settings & {
   loaded: boolean;
@@ -63,13 +68,14 @@ function snapshot(s: Settings): Settings {
   };
 }
 
-function readBootSettings(): Settings {
+/** The boot mirror as stored; anything unreadable falls back to the defaults. */
+export function parseBootSettings(raw: string | null): Settings {
+  if (!raw) return DEFAULTS;
   try {
-    const raw = localStorage.getItem(BOOT_KEY);
-    if (!raw) return DEFAULTS;
-    const parsed = JSON.parse(raw) as Partial<Settings>;
+    const parsed = JSON.parse(raw) as Partial<Settings> & { v?: unknown };
+    const locale = pick(parsed.locale, ["system", "el", "en"], DEFAULTS.locale);
     return {
-      locale: pick(parsed.locale, ["system", "el", "en"], DEFAULTS.locale),
+      locale: locale === "system" && parsed.v !== BOOT_VERSION ? "en" : locale,
       theme: pick(parsed.theme, ["system", "light", "dark", "sepia"], DEFAULTS.theme),
       librarySort: pick(parsed.librarySort, SORTS, DEFAULTS.librarySort),
       libraryView: pick(parsed.libraryView, ["grid", "list"], DEFAULTS.libraryView),
@@ -86,9 +92,17 @@ function readBootSettings(): Settings {
   }
 }
 
+function readBootSettings(): Settings {
+  try {
+    return parseBootSettings(localStorage.getItem(BOOT_KEY));
+  } catch {
+    return DEFAULTS;
+  }
+}
+
 function writeBootSettings(settings: Settings): void {
   try {
-    localStorage.setItem(BOOT_KEY, JSON.stringify(snapshot(settings)));
+    localStorage.setItem(BOOT_KEY, JSON.stringify({ v: BOOT_VERSION, ...snapshot(settings) }));
   } catch {
     // Private mode / quota: the DB copy is authoritative anyway.
   }

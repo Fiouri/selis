@@ -10,6 +10,13 @@ URL: `https://fiouri.github.io/selis/privacy/` (website/, generated from docs/PR
 `/el/privacy/`). Play requires a public, non-PDF, non-geofenced page
 (<https://support.google.com/googleplay/android-developer/answer/10144311>).
 
+## Store listing languages
+
+Default language: **English (United States) – en-US** (chosen when the app is created: Play
+Console › Create app › Default language). Greek (el-GR) is added afterwards as a translation (Grow
+users › Store presence › Main store listing › Manage translations › Add your own translations).
+Texts and graphics: `fastlane/metadata/android/en-US/` (default) and `el-GR/` (ADR 0030).
+
 ## App signing (before the first release of any kind)
 
 Our own app signing key, not Google's default (ADR 0025): Protected with Play › Play Store

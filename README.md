@@ -14,17 +14,36 @@
   Official artwork lives in docs/badges/. Do not add placeholder links.
 -->
 
-> **Status:** early development (P0 — foundation). Not yet released anywhere.
+> **Status:** release candidate 1.0 — not yet in the stores.
 
 ## Features
 
-Available now (P0):
+- **Library** on the device: imports are copies, the original file is never modified; search,
+  favorites, tags, versions you can go back to.
+- **Viewer** for large documents (1000+ pages), search in the text, night mode.
+- **Annotate**: highlight, underline, strike, pen, shapes, text and notes.
+- **Sign and fill forms**: draw, type or pick a picture of your signature; fill AcroForm fields.
+- **Pages**: reorder, rotate, delete, insert, extract.
+- **Redact** for real: the text under a box is removed from the file, not just covered.
+- **Tools**: password protection, make the file smaller, optimise, repair, save a page as an image.
+- **Scan** paper with the camera (or from a photo), photos to PDF, and **OCR** that makes scans
+  searchable — all on the device.
+- **Transfer** to your other device without an account, or as a `.selispack` file (below).
+- English and Greek, light / dark / sepia themes.
 
-- Import PDFs into an on-device library — the original file is never modified.
-- Fast viewer for large documents (1000+ pages): virtualized scrolling and pinch-zoom.
-- English and Greek (English by default; Greek in Settings → Language), light / dark / sepia themes.
+## Screenshots
 
-Planned (see [docs/SPEC.md](docs/SPEC.md)): OCR, scanning and `.selispack` export.
+<p>
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1-library.png" width="200" alt="Library: documents as cards with thumbnails">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2-viewer.png" width="200" alt="Viewer: a document page with the tools at the bottom">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3-annotate.png" width="200" alt="Annotate: highlight and pen tools over a report">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4-sign.png" width="200" alt="Sign: a typed signature placed on a lease">
+</p>
+<p>
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5-transfer.png" width="200" alt="Transfer: a QR code to send four documents">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6-tools.png" width="200" alt="Tools: protect, compress, optimise, repair, save as image, OCR">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7-scan.png" width="200" alt="Scan: adjusting the corners of a photographed delivery note">
+</p>
 
 ## Transfer (device to device, no account)
 

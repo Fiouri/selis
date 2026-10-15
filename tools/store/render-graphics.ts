@@ -7,6 +7,8 @@
  *   fastlane/metadata/android/<locale>/images/featureGraphic.png (tagline per language)
  * - Website: social preview website/assets/og.png (1200 × 630) and the screenshots as WebP,
  *   540 × 960, website/assets/screens/<lang>/ (from the light Play screenshots).
+ * - GitHub social preview, 1280 × 640 PNG (English): docs/store/github-social-preview.png. It is
+ *   uploaded by hand (repository Settings › Social preview); GitHub has no API for it.
  *
  * Sources: apps/app/assets/icon.svg, packages/ui/src/tokens.css (accent and neutral colours),
  * Inter from @fontsource-variable/inter (self-hosted, embedded as data URLs).
@@ -72,17 +74,22 @@ async function main(): Promise<void> {
     }
 
     const en = TAGLINES["en-US"];
-    await page.setViewportSize({ width: 1200, height: 630 });
-    await page.setContent(`<!doctype html><meta charset="utf-8"><style>${fonts}
-      html,body{margin:0;width:1200px;height:630px;overflow:hidden}
-      body{background:linear-gradient(180deg,#2b4ea6,${accent});font-family:Inter,sans-serif;color:${paper};display:flex;align-items:center;gap:64px;padding:0 110px;box-sizing:border-box}
-      svg{width:280px;height:280px;flex:none;filter:drop-shadow(0 12px 32px rgb(0 0 0 / .28))}
-      h1{margin:0 0 20px;font-size:110px;font-weight:700;letter-spacing:-.02em;line-height:1}
-      p{margin:0;font-size:40px;font-weight:500;line-height:1.25;color:#dfe6f7}
-    </style>${svg}<div><h1>${en?.title ?? "Selis"}</h1><p>${en?.line ?? ""}</p></div>`);
-    await page.evaluate("document.fonts.ready.then(() => true)");
-    await page.screenshot({ path: join(ROOT, "website", "assets", "og.png") });
-    console.log("website: og.png 1200×630");
+    for (const [width, height, out] of [
+      [1200, 630, join(ROOT, "website", "assets", "og.png")],
+      [1280, 640, join(ROOT, "docs", "store", "github-social-preview.png")],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await page.setContent(`<!doctype html><meta charset="utf-8"><style>${fonts}
+        html,body{margin:0;width:${String(width)}px;height:${String(height)}px;overflow:hidden}
+        body{background:linear-gradient(180deg,#2b4ea6,${accent});font-family:Inter,sans-serif;color:${paper};display:flex;align-items:center;gap:64px;padding:0 110px;box-sizing:border-box}
+        svg{width:280px;height:280px;flex:none;filter:drop-shadow(0 12px 32px rgb(0 0 0 / .28))}
+        h1{margin:0 0 20px;font-size:110px;font-weight:700;letter-spacing:-.02em;line-height:1}
+        p{margin:0;font-size:40px;font-weight:500;line-height:1.25;color:#dfe6f7}
+      </style>${svg}<div><h1>${en?.title ?? "Selis"}</h1><p>${en?.line ?? ""}</p></div>`);
+      await page.evaluate("document.fonts.ready.then(() => true)");
+      await page.screenshot({ path: out });
+      console.log(`${out.slice(ROOT.length + 1)} ${String(width)}×${String(height)}`);
+    }
 
     // Store screenshots → WebP for the website (canvas encoder of Chromium, quality 0.85).
     for (const [lang, locale] of [["en", "en-US"], ["el", "el-GR"]] as const) {

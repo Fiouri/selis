@@ -17,6 +17,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0004_signatures.sql"),
     include_str!("../migrations/0005_transfers.sql"),
     include_str!("../migrations/0006_trusted_devices.sql"),
+    include_str!("../migrations/0007_english_first.sql"),
 ];
 
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -177,6 +178,58 @@ mod tests {
         assert_eq!(user_version(&snap)?, 1);
         let rows: i64 = snap.query_row("SELECT COUNT(*) FROM documents", [], |r| r.get(0))?;
         assert_eq!(rows, 1);
+        Ok(())
+    }
+
+    /// A v6 database with the language set to "system" before English became the
+    /// default: the upgrade turns it into "en" once; "el" and "en" are kept.
+    #[test]
+    fn upgrade_to_v7_makes_a_stored_system_locale_english() -> Result<()> {
+        for (stored, expected) in [("system", "en"), ("el", "el"), ("en", "en")] {
+            let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+            let path = dir.path().join("selis.db");
+            {
+                let conn = Connection::open(&path)?;
+                configure(&conn)?;
+                for sql in &MIGRATIONS[..6] {
+                    conn.execute_batch(sql)?;
+                }
+                conn.pragma_update(None, "user_version", 6)?;
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('locale', ?1), ('theme', '\"dark\"')",
+                    [format!("\"{stored}\"")],
+                )?;
+            }
+            let conn = open(&path)?;
+            let locale: String =
+                conn.query_row("SELECT value FROM settings WHERE key = 'locale'", [], |r| {
+                    r.get(0)
+                })?;
+            assert_eq!(locale, format!("\"{expected}\""), "stored {stored}");
+            let theme: String =
+                conn.query_row("SELECT value FROM settings WHERE key = 'theme'", [], |r| {
+                    r.get(0)
+                })?;
+            assert_eq!(theme, "\"dark\"");
+        }
+        Ok(())
+    }
+
+    /// Only once: a "system" chosen after the upgrade is not touched again.
+    #[test]
+    fn a_system_locale_chosen_after_v7_is_kept() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let path = dir.path().join("selis.db");
+        open(&path)?.execute(
+            "INSERT INTO settings (key, value) VALUES ('locale', '\"system\"')",
+            [],
+        )?;
+        let conn = open(&path)?;
+        let locale: String =
+            conn.query_row("SELECT value FROM settings WHERE key = 'locale'", [], |r| {
+                r.get(0)
+            })?;
+        assert_eq!(locale, "\"system\"");
         Ok(())
     }
 

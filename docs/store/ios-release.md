@@ -15,7 +15,9 @@ provisioning profile exists anywhere. Without the secrets the workflow skips wit
 1. Certificates, Identifiers & Profiles › Identifiers: Xcode registers `com.anywecon.selis` on the
    first signed build; or add it by hand (App ID, no extra capabilities).
 2. App Store Connect › Apps › + New App: platform iOS, name **Selis**, primary language English
-   (U.S.), bundle ID `com.anywecon.selis`, SKU `selis`.
+   (U.S.), bundle ID `com.anywecon.selis`, SKU `selis`. Greek is added as a further localization
+   (App Information › Localizable Information › language menu › Greek); texts in
+   `fastlane/metadata/ios/en-US/` (primary) and `el/`, screenshots in `fastlane/screenshots/`.
 3. Note the app's **Apple ID** (App Information › General, a number) for the upload step.
 
 ## 3. API key and secrets
