@@ -20,10 +20,12 @@
 #                                         the app, paces receives to 1 MiB/s (debug.selis.receive_kbps),
 #                                         starts the dev peer sending a 100 MB file, opens its link and
 #                                         samples (every 5 s) which app is on top, the transfer store
-#                                         progress (MB sent) and whether the user-initiated job runs
-#   transfer.sh post-background <serial>  (POST_RUN) ≥ 55 s in the background with the job running
-#                                         (Android 14+) and ≥ 30 MB sent meanwhile; the file is
-#                                         in the library intact; no job, notification or socket left
+#                                         progress (MB sent) and whether the user-initiated job
+#                                         (Android 14+) or the foreground service (below) runs
+#   transfer.sh post-background <serial>  (POST_RUN) ≥ 55 s in the background with the job or the
+#                                         service running and ≥ 30 MB sent meanwhile; the file is
+#                                         in the library intact; no job, service, notification or
+#                                         socket left
 #
 # /proc/net/{udp,udp6,tcp,tcp6} list sockets with their owner UID (column 8); the
 # app's UID comes from `pm list packages -U`.
@@ -36,6 +38,18 @@ root="$(cd "$(dirname "$0")/../../../.." && pwd)"
 state="$root/.tmp/maestro-transfer/$serial"
 fixture="$root/packages/fixtures/out/greek.pdf"
 adb_() { MSYS_NO_PATHCONV=1 adb -s "$serial" "$@"; }
+
+# What keeps a transfer alive in the background (ADR 0027): from Android 14 the user-initiated
+# data transfer job, below it the foreground service. Prints 1 if it is running, else 0.
+keepalive_running() {
+  if [ "$(adb_ shell getprop ro.build.version.sdk | tr -d '\r')" -ge 34 ]; then
+    adb_ shell dumpsys jobscheduler "$pkg" 2>/dev/null | tr -d '\r' |
+      awk '/^Active jobs:/ { a = 1; next } a && /^[^ ]/ { a = 0 } a && /TransferJobService/ { n++ } END { print (n > 0) ? 1 : 0 }'
+  else
+    adb_ shell dumpsys activity services "$pkg/.TransferForegroundService" 2>/dev/null | tr -d '\r' |
+      awk '/ServiceRecord/ { s = 1 } s && /isForeground=true/ { n++ } END { print (n > 0) ? 1 : 0 }'
+  fi
+}
 
 uid_of() {
   adb_ shell pm list packages --user 0 -U "$pkg" | tr -d '\r' | sed -n "s/^package:$pkg uid:\([0-9]*\).*/\1/p"
@@ -173,7 +187,7 @@ case "$cmd" in
     link="$(sed -n 's/^LINK //p' "$state/peer-background.log" | tr -d '\r')"
     [ -n "$link" ] || { echo "FAIL: the peer printed no link" >&2; kill "$(cat "$state/peer.pid")" 2>/dev/null; exit 1; }
     # Samples: <epoch s> <selis on top 1|0> <MB the sender has sent (its progress lines)>
-    # <transfer job running 1|0>. The sender's count, not the receiver's store: f2fs (the S23)
+    # <transfer job or foreground service running 1|0>. The sender's count, not the receiver's store: f2fs (the S23)
     # allocates written blocks late, so `du` there lags by tens of seconds.
     (
       set +e
@@ -181,7 +195,7 @@ case "$cmd" in
         top="$(adb_ shell dumpsys activity activities 2>/dev/null | tr -d '\r' | grep -m1 -E 'topResumedActivity|mResumedActivity' || true)"
         case "$top" in *"$pkg/"*) on_top=1 ;; *) on_top=0 ;; esac
         mib="$(grep -E '^[0-9]+ / [0-9]+ MB' "$state/peer-background.log" 2>/dev/null | tail -1 | cut -d' ' -f1)"
-        job="$(adb_ shell dumpsys jobscheduler "$pkg" 2>/dev/null | tr -d '\r' | awk '/^Active jobs:/ { a = 1; next } a && /^[^ ]/ { a = 0 } a && /TransferJobService/ { n++ } END { print (n > 0) ? 1 : 0 }')"
+        job="$(keepalive_running)"
         echo "$(date +%s) $on_top ${mib:-0} $job" >> "$state/background-samples.txt"
         sleep 5
       done
@@ -201,18 +215,18 @@ case "$cmd" in
       $2 == 1 && run { if (t1 - t0 > best) { best = t1 - t0; g = k1 - k0; bj = j; bn = n } run = 0 }
       END { if (run && t1 - t0 > best) { best = t1 - t0; g = k1 - k0; bj = j; bn = n } print best + 0, g + 0, bj + 0, bn + 0 }
     ' "$samples")
-    echo "background: ${away} s, ${grew} MB sent meanwhile, job running in ${jobs}/${total} samples"
+    sdk="$(adb_ shell getprop ro.build.version.sdk | tr -d '\r')"
+    what="transfer job"; [ "$sdk" -ge 34 ] || what="foreground service"
+    echo "background (API $sdk): ${away} s, ${grew} MB sent meanwhile, $what running in ${jobs}/${total} samples"
     [ "$away" -ge 55 ] || { echo "FAIL: Selis was in the background only ${away} s" >&2; status=1; }
     [ "$grew" -ge 30 ] || { echo "FAIL: only ${grew} MB arrived while in the background" >&2; status=1; }
-    sdk="$(adb_ shell getprop ro.build.version.sdk | tr -d '\r')"
-    if [ "$sdk" -ge 34 ] && [ "$jobs" -lt $((total * 3 / 4)) ]; then
-      echo "FAIL: the user-initiated transfer job ran in only ${jobs}/${total} background samples" >&2; status=1
+    if [ "$jobs" -lt $((total * 3 / 4)) ]; then
+      echo "FAIL: the $what ran in only ${jobs}/${total} background samples" >&2; status=1
     fi
     "$0" check "$serial" "$(cat "$state/background.sha256")" || status=1
     sleep 2
     "$0" sockets "$serial" || status=1
-    left_job="$(adb_ shell dumpsys jobscheduler "$pkg" 2>/dev/null | tr -d '\r' | awk '/^Active jobs:/ { a = 1; next } a && /^[^ ]/ { a = 0 } a && /TransferJobService/ { n++ } END { print n + 0 }')"
-    [ "$left_job" -eq 0 ] || { echo "FAIL: the transfer job still runs" >&2; status=1; }
+    [ "$(keepalive_running)" -eq 0 ] || { echo "FAIL: the $what still runs" >&2; status=1; }
     adb_ shell dumpsys notification --noredact 2>/dev/null | tr -d '\r' | grep -q "pkg=$pkg .*id=7301" && { echo "FAIL: the transfer notification is still shown" >&2; status=1; }
     # The library file above is what counts. A connection the sender saw drop (iroh rebinding
     # its sockets, e.g. when the app returns) is resumed by the receiver; say so, don't fail.
