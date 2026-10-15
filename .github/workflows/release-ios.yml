@@ -56,7 +56,7 @@ jobs:
         if: steps.secrets.outputs.present == 'true'
         with:
           ref: ${{ inputs.tag || github.ref }}
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         if: steps.secrets.outputs.present == 'true'
         with:
           node-version-file: .nvmrc
