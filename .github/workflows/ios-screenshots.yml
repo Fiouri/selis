@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -90,7 +90,7 @@ jobs:
           - { slug: ipad-13, type: "^iPad Pro 13-inch \\(M5\\)", size: "2064 2752", photo: "45%, 35%", confirm: "75%, 29%", keyboard: "97%, 96%" }
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
