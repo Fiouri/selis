@@ -72,7 +72,12 @@ action (not in P0).
   builds, `scripts/check-android-release.sh` (16 KB LOAD + RELRO, zipalign -P 16, SDK levels,
   versionCode, no debug code), signing from secrets only (`scripts/android-keystore.md`),
   reproducible second build. No tags are pushed without the owner's go.
-- Store, F-Droid and name-check drafts: `docs/store/`.
+- Store, F-Droid and name-check drafts: `docs/store/`. Listings in `fastlane/metadata/`; store
+  screenshots with `apps/app/e2e/maestro/store-screenshots.sh <serial> en|el light|dark` on the AVD
+  (release `measure` build); graphics with `node tools/store/render-graphics.ts`; website in
+  `website/` (`node website/build.ts`, Lighthouse ≥ 95 in `pages.yml`; ADR 0024).
+- RC QA on release builds: `apps/app/e2e/maestro/release-suite.sh <serial>` (run-as checks are
+  debug-only); results in `docs/release/`.
 
 ## Git workflow
 
