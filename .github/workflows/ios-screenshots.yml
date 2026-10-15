@@ -81,9 +81,10 @@ jobs:
       matrix:
         lang: [en, el]
         device:
-          - { slug: iphone-6.9, type: "^iPhone 17 Pro Max$", size: "1320 2868" }
-          - { slug: iphone-6.3, type: "^iPhone 17 Pro$", size: "1206 2622" }
-          - { slug: ipad-13, type: "^iPad Pro 13-inch \\(M5\\)", size: "2064 2752" }
+          # photo: where PHPicker's first cell is (its content is out of process, not in the hierarchy).
+          - { slug: iphone-6.9, type: "^iPhone 17 Pro Max$", size: "1320 2868", photo: "17%, 24%" }
+          - { slug: iphone-6.3, type: "^iPhone 17 Pro$", size: "1206 2622", photo: "17%, 24%" }
+          - { slug: ipad-13, type: "^iPad Pro 13-inch \\(M5\\)", size: "2064 2752", photo: "30%, 38%" }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -109,6 +110,8 @@ jobs:
       - name: Device types available
         run: xcrun simctl list devicetypes | grep -E "iPhone 17|iPad Pro" || true
       - name: Screenshots
+        env:
+          PHOTO_POINT: ${{ matrix.device.photo }}
         run: bash apps/app/e2e/maestro/ios/store-screenshots.sh dist/Selis.app "${{ matrix.device.type }}" "${{ matrix.device.slug }}" "${{ matrix.lang }}"
       - name: Sizes
         run: |
