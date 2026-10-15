@@ -4,8 +4,10 @@ export type SwitchProps = {
   checked: boolean;
   onChange: (checked: boolean) => void;
   /**
-   * The visible label's text, as the accessible name. Not aria-labelledby: Chrome on Android
-   * does not hand a labelledby name to TalkBack ("Off, Switch"; P5b walkthrough).
+   * The visible label's text, the accessible name, as visually hidden content of the button.
+   * Not aria-labelledby: Chrome on Android does not hand a labelledby name to TalkBack ("Off,
+   * Switch"; P5b walkthrough). Not aria-label either: Maestro would take it as the element's id
+   * instead of data-testid.
    */
   label: string;
   describedBy?: string | undefined;
@@ -23,13 +25,13 @@ export function Switch({ checked, onChange, label, describedBy, disabled = false
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-label={label}
       aria-describedby={describedBy}
       disabled={disabled}
       data-testid={testId}
       onClick={() => onChange(!checked)}
       className="selis-focus inline-flex h-11 w-13 shrink-0 items-center justify-center rounded-full disabled:cursor-not-allowed disabled:opacity-45"
     >
+      <span className="sr-only">{label}</span>
       <span
         aria-hidden="true"
         className={cx(

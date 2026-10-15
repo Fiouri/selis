@@ -20,8 +20,11 @@ export function FullScreenLayer({ label, className, testId, children }: { label:
     };
   }, []);
   return createPortal(
-    <div ref={ref} role="dialog" aria-label={label} tabIndex={-1} className={`fixed inset-0 z-30 flex flex-col outline-none ${className}`} data-selis-sheet="" data-testid={testId}>
-      {children}
+    <div ref={ref} role="dialog" aria-label={label} tabIndex={-1} className={`fixed inset-0 z-30 flex flex-col outline-none ${className}`} data-selis-sheet="">
+      {/* The test id on a wrapper without aria-label: Maestro takes an aria-label as the id. */}
+      <div className="flex min-h-0 flex-1 flex-col" data-testid={testId}>
+        {children}
+      </div>
     </div>,
     document.body,
   );

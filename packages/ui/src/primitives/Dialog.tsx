@@ -80,32 +80,34 @@ export function ConfirmDialog({
         // aria-label: a labelledby name does not reach TalkBack (see BottomSheet).
         aria-label={title}
         aria-describedby={messageId}
-        data-testid={testId}
         className="selis-fade-in relative w-full max-w-sm rounded-card border border-neutral-5 bg-surface-raised p-5 shadow-3"
       >
-        <h2 className="text-md font-semibold text-neutral-12">
-          {title}
-        </h2>
-        <div id={messageId}>
-          <p className="mt-2 text-sm text-neutral-11">{message}</p>
-          {details && details.length > 0 ? (
-            <ul
-              className="mt-3 flex max-h-48 list-disc flex-col gap-1 overflow-y-auto pl-5 text-sm text-neutral-12"
-              data-testid={testId && `${testId}-details`}
-            >
-              {details.map((d, i) => (
-                <li key={i}>{d}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button ref={cancelRef} variant="secondary" onClick={onCancel} data-testid={testId && `${testId}-cancel`}>
-            {cancelLabel}
-          </Button>
-          <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} data-testid={testId && `${testId}-confirm`}>
-            {confirmLabel}
-          </Button>
+        {/* The test id on a wrapper without aria-label: Maestro takes an aria-label as the id. */}
+        <div data-testid={testId}>
+          <h2 className="text-md font-semibold text-neutral-12">
+            {title}
+          </h2>
+          <div id={messageId}>
+            <p className="mt-2 text-sm text-neutral-11">{message}</p>
+            {details && details.length > 0 ? (
+              <ul
+                className="mt-3 flex max-h-48 list-disc flex-col gap-1 overflow-y-auto pl-5 text-sm text-neutral-12"
+                data-testid={testId && `${testId}-details`}
+              >
+                {details.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <Button ref={cancelRef} variant="secondary" onClick={onCancel} data-testid={testId && `${testId}-cancel`}>
+              {cancelLabel}
+            </Button>
+            <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} data-testid={testId && `${testId}-confirm`}>
+              {confirmLabel}
+            </Button>
+          </div>
         </div>
       </div>
     </div>,

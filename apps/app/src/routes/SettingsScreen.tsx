@@ -65,41 +65,38 @@ function ThemeTiles() {
       <span className="text-md font-medium text-neutral-12" aria-hidden="true">
         {t("settings.theme")}
       </span>
-      <div
-        role="radiogroup"
-        aria-label={t("settings.theme")}
-        onKeyDown={onKeyDown}
-        className="grid grid-cols-2 gap-2"
-        data-testid={`theme-choice-${theme}`}
-      >
-        {THEMES.map((option) => {
-          const selected = option.value === theme;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              tabIndex={selected ? 0 : -1}
-              data-value={option.value}
-              onClick={() => void setTheme(option.value)}
-              className={`selis-focus flex h-13 items-center gap-3 rounded-card px-3 text-left text-sm transition-colors duration-150 ease-standard ${
-                selected
-                  ? "bg-accent-3 font-semibold text-accent-selected shadow-[inset_0_0_0_2px_var(--accent-9)]"
-                  : "border border-control-line font-medium text-neutral-12 active:bg-neutral-3"
-              }`}
-            >
-              <span
-                aria-hidden="true"
-                className="relative h-[22px] w-[30px] shrink-0 rounded-[6px] border border-neutral-6"
-                style={{ background: option.swatch }}
+      {/* The current value as a test id, on a wrapper: Maestro takes the aria-label as the id. */}
+      <div data-testid={`theme-choice-${theme}`}>
+        <div role="radiogroup" aria-label={t("settings.theme")} onKeyDown={onKeyDown} className="grid grid-cols-2 gap-2">
+          {THEMES.map((option) => {
+            const selected = option.value === theme;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                tabIndex={selected ? 0 : -1}
+                data-value={option.value}
+                onClick={() => void setTheme(option.value)}
+                className={`selis-focus flex h-13 items-center gap-3 rounded-card px-3 text-left text-sm transition-colors duration-150 ease-standard ${
+                  selected
+                    ? "bg-accent-3 font-semibold text-accent-selected shadow-[inset_0_0_0_2px_var(--accent-9)]"
+                    : "border border-control-line font-medium text-neutral-12 active:bg-neutral-3"
+                }`}
               >
-                <span className="absolute right-[3px] bottom-[3px] size-2 rounded-full" style={{ background: option.accent }} />
-              </span>
-              <span className="min-w-0 truncate">{t(option.key)}</span>
-            </button>
-          );
-        })}
+                <span
+                  aria-hidden="true"
+                  className="relative h-[22px] w-[30px] shrink-0 rounded-[6px] border border-neutral-6"
+                  style={{ background: option.swatch }}
+                >
+                  <span className="absolute right-[3px] bottom-[3px] size-2 rounded-full" style={{ background: option.accent }} />
+                </span>
+                <span className="min-w-0 truncate">{t(option.key)}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
