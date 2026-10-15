@@ -91,8 +91,9 @@ start. The store directory is wiped when nothing is left to resume.
 
 ### Android background
 
-A `dataSync` foreground service (`TransferPlugin.kt`) runs while bytes move. On Android 15+,
-`onTimeout` (6 h per 24 h) stops the service at once and the UI pauses receives (resumable).
+While bytes move, Android 14+ runs a user-initiated data transfer job and Android 8–13 an
+untyped foreground service (`TransferPlugin.kt`, ADR 0027, which replaced the `dataSync`
+service). When the system stops the job, the UI pauses receives (resumable).
 `targetSdk` is 36: the local-network permission (`ACCESS_LOCAL_NETWORK`) is enforced from
 targetSdk 37; CI fails the build when targetSdk reaches 37 without it.
 

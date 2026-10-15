@@ -181,7 +181,7 @@ selis/
 | Ιδιωτικό κλειδί συσκευής | OS secure storage (Keychain, Android Keystore, Windows Credential Manager) |
 | Ορατότητα | Endpoint ανοίγει μόνο στην οθόνη Μεταφοράς και κλείνει όταν βγει ο χρήστης |
 | Μέγεθος | Χωρίς όριο, streaming από δίσκο, ποτέ ολόκληρο αρχείο στη RAM |
-| Background (mobile) | iOS: foreground μόνο στο v1. Android: foreground service κατά τη μεταφορά |
+| Background (mobile) | iOS: foreground μόνο στο v1. Android 14+: user-initiated data transfer job κατά τη μεταφορά, Android 8–13: foreground service (ADR 0027) |
 
 ## Roadmap ανά phase
 
@@ -284,7 +284,7 @@ Mobile-first. Κάθε phase κλείνει μόνο όταν περάσει τ�
 | Android | INTERNET, ACCESS_NETWORK_STATE | Μόνο για μεταφορά |
 | Android | CHANGE_WIFI_MULTICAST_STATE | mDNS σε ίδιο Wi-Fi |
 | Android | CAMERA (runtime) | QR και scan |
-| Android | FOREGROUND_SERVICE_DATA_SYNC | Μεταφορά που δεν κόβεται |
+| Android | RUN_USER_INITIATED_JOBS (14+), FOREGROUND_SERVICE (μόνο ≤ 13) | Μεταφορά που δεν κόβεται (ADR 0027) |
 | Android | Καμία storage permission | Χρήση SAF / photo picker |
 | iOS | NSLocalNetworkUsageDescription + NSBonjourServices | mDNS |
 | iOS | NSCameraUsageDescription | QR και scan |

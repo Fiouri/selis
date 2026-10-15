@@ -146,7 +146,7 @@ export const commands = {
 	/**
 	 *  Closes the endpoint when the Transfer screen closes or the app goes to the
 	 *  background. With something running and no `force`, it stays open until
-	 *  that ends (the foreground service keeps it going) and `false` is returned.
+	 *  that ends (the background job or service keeps it going) and `false` is returned.
 	 */
 	transferClose: (force: boolean) => typedError<boolean, CommandError>(__TAURI_INVOKE("transfer_close", { force })),
 	/**  Offers documents: returns the QR code and link (valid 10 minutes, once). */
@@ -166,13 +166,15 @@ export const commands = {
 	transferResumable: () => typedError<ResumableView[], CommandError>(__TAURI_INVOKE("transfer_resumable")),
 	/**  Continues a receive that stopped (see `transfer_resumable`). */
 	transferResume: (id: string) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_resume", { id })),
-	/**  Pauses every receive (Android's daily foreground-service limit, `timeout` event). */
+	/**  Pauses every receive (Android stopped the background job, `timeout` event). */
 	transferPause: () => typedError<null, CommandError>(__TAURI_INVOKE("transfer_pause")),
 	/**
-	 *  Shows or updates the transfer notification (Android foreground service;
-	 *  a no-op elsewhere). Texts come translated from the UI.
+	 *  Shows or updates the transfer notification and keeps the transfer alive in
+	 *  the background (Android: a user-initiated data transfer job on 14+, a
+	 *  foreground service below, ADR 0027; a no-op elsewhere). Texts come
+	 *  translated from the UI; `progress` / `max` are KiB, `upload` is a send.
 	 */
-	transferForeground: (channel: string, title: string, text: string, progress: number, max: number) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_foreground", { channel, title, text, progress, max })),
+	transferForeground: (channel: string, title: string, text: string, progress: number, max: number, upload: boolean) => typedError<null, CommandError>(__TAURI_INVOKE("transfer_foreground", { channel, title, text, progress, max, upload })),
 	transferForegroundStop: () => typedError<null, CommandError>(__TAURI_INVOKE("transfer_foreground_stop")),
 	/**
 	 *  Asks for the notification permission (Android 13+) before the first

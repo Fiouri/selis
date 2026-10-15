@@ -45,13 +45,15 @@ each release that changes networking, permissions or SDKs. Other App content ans
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Device-to-device transfer, only while the Transfer screen is open |
 | `CHANGE_WIFI_MULTICAST_STATE` | Discover the user's other device on the same Wi‑Fi (mDNS) |
 | `CAMERA` (feature not required) | Scan the transfer QR code; photograph document pages (scan) |
-| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC` | A transfer the user started continues when the app is in the background |
+| `RUN_USER_INITIATED_JOBS` | Android 14+: a transfer the user started continues when the app is in the background (user-initiated data transfer job, shown in the notification and the system Task Manager) |
+| `FOREGROUND_SERVICE` (`maxSdkVersion` 33) | The same on Android 8–13 (a foreground service without a type) |
 | `POST_NOTIFICATIONS` | Progress notification of that transfer |
 
-**Foreground service declaration (Play Console › App content › Foreground service permissions):**
-type `dataSync`; task: "Transferring documents between the user's own devices, started by the
-user, with a visible progress notification; stops when the transfer ends or is cancelled."
-Video of the flow required by Play: record Send → QR → code → progress notification.
+**Foreground service declaration:** not needed (ADR 0027). The manifest declares no foreground
+service type and no `FOREGROUND_SERVICE_*` type permission; on Android 14+ transfers run as a
+user-initiated data transfer job, which Play recommends for user-started network transfers
+(<https://support.google.com/googleplay/android-developer/answer/13392821>). If Play Console
+still shows the form, answer "No foreground service types".
 
 ## Open points before submission
 

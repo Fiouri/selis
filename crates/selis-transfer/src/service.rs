@@ -96,6 +96,9 @@ pub struct ServiceConfig {
     pub force_relay: bool,
     /// How long a new ticket stays usable (at most [`TICKET_LIFETIME_SECS`]).
     pub ticket_lifetime: Duration,
+    /// Testing aid: receive at most this many bytes per second (a long transfer for
+    /// background tests). Dev builds only.
+    pub receive_rate: Option<u64>,
     /// Blobs the receiving app already has (its library file), never fetched again.
     pub have: Option<Have>,
 }
@@ -121,6 +124,7 @@ impl ServiceConfig {
             network,
             force_relay: false,
             ticket_lifetime: Duration::from_secs(TICKET_LIFETIME_SECS),
+            receive_rate: None,
             have: None,
         }
     }
@@ -494,6 +498,7 @@ struct Inner {
     receives: Mutex<HashMap<SessionId, ReceiveSession>>,
     network: Network,
     ticket_lifetime: u64,
+    receive_rate: Option<u64>,
     have: Option<Have>,
     trusted: Mutex<HashSet<EndpointId>>,
     /// The Receive screen is open: trusted devices may push.
@@ -563,6 +568,7 @@ impl TransferService {
             receives: Mutex::new(HashMap::new()),
             network: config.network,
             ticket_lifetime: config.ticket_lifetime.as_secs().min(TICKET_LIFETIME_SECS),
+            receive_rate: config.receive_rate.filter(|r| *r > 0),
             have: config.have,
             trusted: Mutex::new(HashSet::new()),
             accepting: std::sync::atomic::AtomicBool::new(false),
@@ -1156,6 +1162,7 @@ async fn receive_task(
         ))?
         .map_err(stop(TransferError::Unreachable, "receive: blobs connect"))?;
         let mut last = tokio::time::Instant::now() - PROGRESS_EVERY;
+        let paced_from = (tokio::time::Instant::now(), done);
         for (hash, size) in missing {
             let content = HashAndFormat::raw(hash);
             let partial = inner
@@ -1183,6 +1190,13 @@ async fn receive_task(
                         if last.elapsed() >= PROGRESS_EVERY {
                             last = tokio::time::Instant::now();
                             let _ = wire::send(&mut tx, &ToSender::Progress { bytes }).await;
+                        }
+                        if let Some(rate) = inner.receive_rate {
+                            // Testing aid: holding the progress stream back holds the fetch.
+                            let due = Duration::from_secs_f64(
+                                bytes.saturating_sub(paced_from.1) as f64 / rate as f64,
+                            );
+                            tokio::time::sleep_until(paced_from.0 + due).await;
                         }
                     }
                     GetProgressItem::Done(_) => break,

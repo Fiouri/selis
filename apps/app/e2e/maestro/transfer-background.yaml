@@ -1,0 +1,39 @@
+# A transfer survives the app in the background for 60 s (ADR 0027: Android 14+ keeps it
+# alive with a user-initiated data transfer job). Debug build: run with
+# PRE_RUN="…/transfer.sh pre-background" and POST_RUN="…/transfer.sh post-background" (run.sh).
+# PRE_RUN paces receives to 1 MiB/s (debug.selis.receive_kbps), starts the dev peer sending a
+# 100 MB file and opens its link, and samples every 5 s which app is on top, the bytes in the
+# transfer store and whether the job runs. This flow waits for bytes to move, goes Home for
+# 60 s, comes back and follows the receive into the library. POST_RUN checks the samples:
+# Selis was in the background ≥ 55 s, the job ran and the store grew meanwhile; the file
+# arrived intact; no job, notification or socket is left.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Transfer keeps going in the background
+---
+- extendedWaitUntil:
+    visible:
+      id: "transfer-screen"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "transfer-receive-progress"
+    timeout: 120000
+- pressKey: Home
+# Maestro has no plain sleep: wait 60 s for something that never appears on the launcher.
+- extendedWaitUntil:
+    visible: "selis-background-never-shown"
+    timeout: 60000
+    optional: true
+- launchApp:
+    appId: com.anywecon.selis
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "transfer-receive-done"
+    timeout: 180000
+- assertVisible: "1 document was added to your library."
+# Leaving the Transfer screen closes the endpoint (checked by POST_RUN).
+- tapOn: "Settings"
+- assertVisible:
+    id: "settings-screen"

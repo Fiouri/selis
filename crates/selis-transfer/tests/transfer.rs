@@ -557,3 +557,38 @@ async fn a_receiver_without_its_store_fails_with_storage() -> Result {
     receiver.close(true).await;
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_receive_rate_paces_the_download() -> Result {
+    // Testing aid for Android background tests (debug.selis.receive_kbps): 1 MB at
+    // 256 KiB/s takes about 4 s instead of a few milliseconds.
+    let dir = tempfile::tempdir()?;
+    let sender = service(dir.path(), "a", key(), LIFETIME).await?;
+    let mut cfg = ServiceConfig::new(key(), dir.path().join("b"), Network::LocalOnly);
+    cfg.receive_rate = Some(256 * 1024);
+    let receiver = TransferService::start(cfg).await?;
+    let f = write(dir.path(), "slow.pdf", 1_000_000, 4)?;
+    let (sid, ticket) = sender
+        .offer(vec![OfferItem {
+            title: "slow".into(),
+            name: "slow.pdf".into(),
+            path: f,
+            history: vec![],
+            ..Default::default()
+        }])
+        .await?;
+    let rid = receiver.receive(ticket, dir.path().join("in"))?;
+    send_code(&sender, &sid).await?;
+    receive_code(&receiver, &rid).await?;
+    let started = std::time::Instant::now();
+    sender.decide(&sid, true)?;
+    assert!(matches!(
+        receive_end(&receiver, &rid).await?,
+        ReceiveState::Done { .. }
+    ));
+    let took = started.elapsed();
+    assert!(took >= Duration::from_millis(3_000), "took {took:?}");
+    sender.close(true).await;
+    receiver.close(true).await;
+    Ok(())
+}
