@@ -19,9 +19,11 @@ accessibility tree said:
 
 ## Decision
 
-- Name controls with `aria-label` (the visible text, from `t()`), never `aria-labelledby`.
-  `Switch` takes `label`; `BottomSheet`, `Dialog`, radio groups and the note editor use their
-  title as `aria-label`.
+- Never `aria-labelledby`. Switches get their name from visually hidden content (`Switch`
+  takes `label`); `BottomSheet`, `Dialog`, full-screen layers, radio groups and the note editor
+  use their title as `aria-label`. Maestro's WebView hierarchy takes an `aria-label` as the
+  element's id before `data-testid`, so where both are needed the test id sits on an inner
+  wrapper (sheets, dialogs, layers, the theme choice).
 - One name per control that carries what was a description: document cards and rows are
   "Open <title>, <pages or size · date>, Favorite, Received"; settings switches are
   "<label>, <helper>". Maestro flows match these names with `"Open <title>,.*"`.
