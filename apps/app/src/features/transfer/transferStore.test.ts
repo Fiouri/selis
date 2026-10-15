@@ -158,7 +158,7 @@ describe("transfer store", () => {
   it("polls a send through the code to done and stops the notification", async () => {
     const views: SendView[] = [
       { kind: "confirm", code: "482913" },
-      { kind: "sending", bytes: 5, total: 10, route: "lan" },
+      { kind: "sending", bytes: 5 * 1024 * 1024, total: 10 * 1024 * 1024, route: "lan" },
       { kind: "done", peer: PEER, trusted: false },
     ];
     const api = fakeApi({
@@ -179,7 +179,15 @@ describe("transfer store", () => {
     expect(await store.getState().saveDevice(PEER, "Laptop")).toBe(true);
     expect(api.transferTrust).toHaveBeenCalledWith(PEER, "Laptop");
     expect(store.getState().send).toEqual({ kind: "done", peer: PEER, trusted: true });
-    expect(api.transferForeground).toHaveBeenCalled();
+    // Progress in KiB, marked as an upload (Android's transfer job reports the bytes, ADR 0027).
+    expect(api.transferForeground).toHaveBeenCalledWith(
+      "transfer.notify.channel",
+      "transfer.notify.sending",
+      "transfer.notify.progress",
+      5 * 1024,
+      10 * 1024,
+      true,
+    );
     expect(api.transferForegroundStop).toHaveBeenCalled();
     // Finished: no more polling.
     expect(timers).toHaveLength(0);

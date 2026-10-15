@@ -2,7 +2,7 @@
 //! `transfer_open` (the screen opens) and `transfer_close` (it closes, or the
 //! app goes to the background with nothing running): Selis opens no socket at
 //! start or anywhere else. A running transfer keeps the endpoint alive (on
-//! Android under a dataSync foreground service, `TransferPlugin.kt`).
+//! Android under a user-initiated data transfer job, `TransferPlugin.kt`, ADR 0027).
 //!
 //! Sending: `transfer_offer` → ticket (QR + link); the receiver connects, both
 //! screens show the code, `transfer_decide` lets it fetch.
@@ -411,7 +411,7 @@ pub async fn transfer_open<R: Runtime>(
 
 /// Closes the endpoint when the Transfer screen closes or the app goes to the
 /// background. With something running and no `force`, it stays open until
-/// that ends (the foreground service keeps it going) and `false` is returned.
+/// that ends (the background job or service keeps it going) and `false` is returned.
 #[tauri::command]
 #[specta::specta]
 pub async fn transfer_close<R: Runtime>(
@@ -489,6 +489,13 @@ impl TransferState {
             .and_then(|v| v.parse::<u64>().ok())
         {
             config.ticket_lifetime = Duration::from_secs(secs);
+        }
+        // Testing aid (Maestro: a receive long enough to background the app for 60 s).
+        #[cfg(debug_assertions)]
+        if let Some(kbps) = crate::debug_log::property("debug.selis.receive_kbps")
+            .and_then(|v| v.parse::<u64>().ok())
+        {
+            config.receive_rate = Some(kbps * 1024);
         }
         opened.await;
         let service = TransferService::start(config)
@@ -606,7 +613,7 @@ fn pause_row(library: &Library, state: &TransferState, id: &str) {
     let _ = library.transfer_update(id, &update);
 }
 
-/// Pauses every receive (Android's daily foreground-service limit, `timeout` event).
+/// Pauses every receive (Android stopped the background job, `timeout` event).
 #[tauri::command]
 #[specta::specta]
 pub async fn transfer_pause(
@@ -1398,8 +1405,10 @@ async fn maybe_close<R: Runtime>(app: &AppHandle<R>, state: &TransferState, libr
     }
 }
 
-/// Shows or updates the transfer notification (Android foreground service;
-/// a no-op elsewhere). Texts come translated from the UI.
+/// Shows or updates the transfer notification and keeps the transfer alive in
+/// the background (Android: a user-initiated data transfer job on 14+, a
+/// foreground service below, ADR 0027; a no-op elsewhere). Texts come
+/// translated from the UI; `progress` / `max` are KiB, `upload` is a send.
 #[tauri::command]
 #[specta::specta]
 pub async fn transfer_foreground<R: Runtime>(
@@ -1409,16 +1418,17 @@ pub async fn transfer_foreground<R: Runtime>(
     text: String,
     progress: u32,
     max: u32,
+    upload: bool,
 ) -> CommandResult<()> {
     #[cfg(target_os = "android")]
     android_call(
         &app,
         "foreground",
-        serde_json::json!({ "channel": channel, "title": title, "text": text, "progress": progress, "max": max }),
+        serde_json::json!({ "channel": channel, "title": title, "text": text, "progress": progress, "max": max, "upload": upload }),
     )
     .await;
     #[cfg(not(target_os = "android"))]
-    let _ = (app, channel, title, text, progress, max);
+    let _ = (app, channel, title, text, progress, max, upload);
     Ok(())
 }
 

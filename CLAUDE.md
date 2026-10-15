@@ -128,6 +128,11 @@ Tier 2 — end of every feature:
   `POST_RUN="…/transfer.sh post-recover"` (debug build: the peer drops out mid-transfer; the paused
   card gives the reason, counts failed resumes, then "Get a new code"; an offered code expires after
   60 s via `debug.selis.ticket_lifetime` and "New code" replaces it; nothing left, no socket).
+  And `transfer-background.yaml` with `PRE_RUN="…/transfer.sh pre-background"` and
+  `POST_RUN="…/transfer.sh post-background"` (debug build, ADR 0027: a receive paced to 1 MiB/s by
+  `debug.selis.receive_kbps`; the app goes Home for 60 s; ≥ 55 s away with the user-initiated
+  transfer job running and ≥ 30 MB sent meanwhile; the file lands intact; no job, notification
+  or socket left).
   And `pack.yaml` with `PRE_RUN="…/pack.sh pre"` and `POST_RUN="…/pack.sh check"` (.selispack: plain
   pack by "Open with" from Files, protected pack by the picker after a wrong passphrase, tampered
   pack refused; library holds exactly the three fixtures, no leftovers, packs untouched; a plain
