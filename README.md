@@ -50,7 +50,9 @@ Developed with AI assistance (Claude Code); every change is reviewed and tested 
 ## Install
 
 Selis 1.0 is distributed through **Google Play** and **GitHub Releases** (signed APKs); the App
-Store follows. Not yet in F-Droid (see [docs/store/fdroid/README.md](docs/store/fdroid/README.md)).
+Store follows. Android needs version 8.0 or newer with **Android System WebView 111** or newer
+(updated through Google Play); on an older WebView Selis shows an "Update Android System WebView"
+screen ([ADR 0031](docs/adr/0031-webview-minimum-and-fgs-below-android-14.md)). Not yet in F-Droid (see [docs/store/fdroid/README.md](docs/store/fdroid/README.md)).
 
 **GitHub Releases:** every release has one signed APK per ABI and a universal APK, named
 `selis-<version>-<abi>.apk` (`arm64-v8a` for nearly every phone; also `armeabi-v7a`, `x86`,
