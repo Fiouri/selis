@@ -45,7 +45,7 @@ export function NewTagField({ onCreated }: { onCreated: (tagId: string) => void 
         maxLength={48}
         enterKeyHint="done"
         autoComplete="off"
-        className="selis-focus h-11 min-w-0 flex-1 rounded-full border border-neutral-6 bg-surface-app px-4 text-md text-neutral-12 placeholder:text-neutral-9"
+        className="selis-focus h-11 min-w-0 flex-1 rounded-full border border-control-line bg-surface-app px-4 text-md text-neutral-12 placeholder:text-neutral-9"
       />
       <Button type="submit" variant="secondary" disabled={!name.trim() || busy} icon={<Plus size={20} strokeWidth={1.75} />} className="rounded-full">
         {t("tags.add")}
@@ -99,7 +99,7 @@ export function TagPicker({ doc, onDone }: { doc: Document; onDone: () => void }
                 >
                   <span
                     className={`flex size-6 shrink-0 items-center justify-center rounded-[6px] border-2 transition-colors duration-150 ease-standard ${
-                      on ? "border-accent-9 bg-accent-9 text-accent-contrast" : "border-neutral-7"
+                      on ? "border-accent-9 bg-accent-9 text-accent-contrast" : "border-control-line"
                     }`}
                     aria-hidden="true"
                   >

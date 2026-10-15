@@ -118,7 +118,7 @@ function ImagesFab({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       aria-label={t("images.open")}
       data-testid="images-fab"
-      className="selis-focus fixed z-10 inline-flex size-12 items-center justify-center rounded-[16px] border border-neutral-5 bg-surface-raised text-neutral-12 shadow-2 active:bg-neutral-3"
+      className="selis-focus fixed z-10 inline-flex size-12 items-center justify-center rounded-[16px] border border-control-line bg-surface-raised text-neutral-12 shadow-2 active:bg-neutral-3"
       style={{ right: "calc(var(--safe-right) + 24px)", bottom: "calc(var(--fab-bottom, calc(var(--safe-bottom) + 20px)) + 68px)" }}
     >
       <ImagePlus size={22} strokeWidth={1.75} aria-hidden="true" />
@@ -135,7 +135,7 @@ function ScanFab({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       aria-label={t("scan.open")}
       data-testid="scan-fab"
-      className="selis-focus fixed z-10 inline-flex size-12 items-center justify-center rounded-[16px] border border-neutral-5 bg-surface-raised text-neutral-12 shadow-2 active:bg-neutral-3"
+      className="selis-focus fixed z-10 inline-flex size-12 items-center justify-center rounded-[16px] border border-control-line bg-surface-raised text-neutral-12 shadow-2 active:bg-neutral-3"
       style={{ right: "calc(var(--safe-right) + 24px)", bottom: "calc(var(--fab-bottom, calc(var(--safe-bottom) + 20px)) + 128px)" }}
     >
       <ScanLine size={22} strokeWidth={1.75} aria-hidden="true" />

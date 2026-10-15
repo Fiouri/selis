@@ -39,7 +39,7 @@ function ScanOrPaste({ problem }: { problem: TransferProblem | null }) {
       <Viewfinder onCode={(text) => void receiveLink(text)} />
       <Button
         variant="secondary"
-        className="h-12 border-neutral-7 bg-transparent"
+        className="h-12 bg-transparent"
         icon={<ClipboardPaste size={20} strokeWidth={1.75} aria-hidden="true" />}
         onClick={() => setPasting(true)}
         data-testid="transfer-paste"
@@ -191,7 +191,7 @@ function PasteSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          className="selis-focus min-h-24 w-full resize-none rounded-control border border-neutral-6 bg-surface-app p-3 font-mono text-[13px] break-all text-neutral-12"
+          className="selis-focus min-h-24 w-full resize-none rounded-control border border-control-line bg-surface-app p-3 font-mono text-[13px] break-all text-neutral-12"
           data-testid="transfer-paste-input"
         />
         <Button type="submit" disabled={value.trim().length === 0} data-testid="transfer-paste-submit">

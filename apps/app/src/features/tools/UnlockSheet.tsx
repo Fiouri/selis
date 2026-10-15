@@ -44,7 +44,7 @@ export function UnlockSheet({
           value={pass}
           onChange={(e) => setPass(e.target.value)}
           aria-describedby={wrong ? alertId : undefined}
-          className="selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12"
+          className="selis-focus h-12 w-full rounded-control border border-control-line bg-surface-app px-3 text-md text-neutral-12"
           data-testid="unlock-password"
         />
         {wrong ? (

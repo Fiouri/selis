@@ -185,7 +185,7 @@ function DocumentRow({
       >
         <span
           className={`flex size-6 shrink-0 items-center justify-center rounded-[7px] border-2 ${
-            checked ? "border-accent-9 bg-accent-9 text-accent-contrast" : "border-neutral-7"
+            checked ? "border-accent-9 bg-accent-9 text-accent-contrast" : "border-control-line"
           }`}
           aria-hidden="true"
         >

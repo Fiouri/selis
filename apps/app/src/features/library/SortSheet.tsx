@@ -65,7 +65,7 @@ export function SortSheet({ open, onClose }: { open: boolean; onClose: () => voi
               className={`selis-focus flex h-13 items-center justify-center gap-2 rounded-card text-sm transition-colors duration-150 ease-standard ${
                 selected
                   ? "bg-accent-3 font-semibold text-accent-selected shadow-[inset_0_0_0_2px_var(--accent-9)]"
-                  : "border border-neutral-6 font-medium text-neutral-11 active:bg-neutral-3"
+                  : "border border-control-line font-medium text-neutral-11 active:bg-neutral-3"
               }`}
             >
               <Icon size={20} strokeWidth={1.75} aria-hidden="true" />

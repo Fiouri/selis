@@ -71,7 +71,7 @@ function EditTagRow({ tag, onDone }: { tag: Tag; onDone: () => void }) {
           autoFocus
           enterKeyHint="done"
           autoComplete="off"
-          className="selis-focus h-11 min-w-0 flex-1 rounded-full border border-neutral-6 bg-surface-app px-4 text-md text-neutral-12"
+          className="selis-focus h-11 min-w-0 flex-1 rounded-full border border-control-line bg-surface-app px-4 text-md text-neutral-12"
         />
         <IconButton type="submit" label={t("tags.save")} icon={<Check size={22} strokeWidth={1.75} />} className="text-accent-selected" />
         <IconButton label={t("tags.cancel")} icon={<X size={22} strokeWidth={1.75} />} onClick={onDone} />

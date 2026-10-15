@@ -154,7 +154,7 @@ export function SaveDevice({ peer }: { peer: string }) {
             maxLength={60}
             placeholder={t("transfer.trust.defaultName")}
             onChange={(event) => setName(event.target.value)}
-            className="selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12"
+            className="selis-focus h-12 w-full rounded-control border border-control-line bg-surface-app px-3 text-md text-neutral-12"
             data-testid="save-device-name"
           />
           <Button type="submit" data-testid="save-device-confirm">

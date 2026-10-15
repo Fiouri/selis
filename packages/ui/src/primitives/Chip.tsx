@@ -17,7 +17,7 @@ export function Chip({ pressed, icon, className, children, type = "button", ...r
         "transition-colors duration-150 ease-standard",
         pressed
           ? "bg-neutral-12 font-semibold text-neutral-1"
-          : "border border-neutral-6 font-medium text-neutral-11 hover:bg-neutral-3 active:bg-neutral-4",
+          : "border border-control-line font-medium text-neutral-11 hover:bg-neutral-3 active:bg-neutral-4",
         className,
       )}
       {...rest}

@@ -68,7 +68,7 @@ export function BottomSheet({ open, onClose, title, hideTitle = false, children,
         style={{ paddingBottom: "calc(var(--safe-bottom) + 12px)", paddingLeft: "var(--safe-left)", paddingRight: "var(--safe-right)" }}
       >
         <div className="flex justify-center pt-2 pb-1" aria-hidden="true">
-          <span className="h-1 w-9 rounded-full bg-neutral-6" />
+          <span className="h-1 w-9 rounded-full bg-control-line" />
         </div>
         <h2 id={titleId} className={hideTitle ? "sr-only" : "px-5 pt-2 pb-3 text-md font-semibold text-neutral-12"}>
           {title}

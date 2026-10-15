@@ -11,7 +11,7 @@ export type SwitchProps = {
 };
 
 /**
- * On/off switch: 48×28 track (on = accent, off = neutral-6), 22 px white knob,
+ * On/off switch: 48×28 track (on = accent, off = control-line), 22 px white knob,
  * 200 ms, inside a 52×44 button with role="switch".
  */
 export function Switch({ checked, onChange, labelledBy, describedBy, disabled = false, testId }: SwitchProps) {
@@ -31,7 +31,7 @@ export function Switch({ checked, onChange, labelledBy, describedBy, disabled = 
         aria-hidden="true"
         className={cx(
           "relative h-7 w-12 rounded-full transition-colors duration-200 ease-standard",
-          checked ? "bg-accent-9" : "bg-neutral-6",
+          checked ? "bg-accent-9" : "bg-control-line",
         )}
       >
         <span

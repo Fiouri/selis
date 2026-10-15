@@ -33,7 +33,7 @@ function PassphraseFields({
         autoComplete="new-password"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12"
+        className="selis-focus h-12 w-full rounded-control border border-control-line bg-surface-app px-3 text-md text-neutral-12"
         data-testid="pack-passphrase"
       />
       <label htmlFor={second} className="text-[13px] font-medium text-neutral-11">
@@ -45,7 +45,7 @@ function PassphraseFields({
         autoComplete="new-password"
         value={confirm}
         onChange={(e) => onConfirm(e.target.value)}
-        className="selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12"
+        className="selis-focus h-12 w-full rounded-control border border-control-line bg-surface-app px-3 text-md text-neutral-12"
         data-testid="pack-passphrase-again"
       />
       <p className="text-[13px] text-warning-11">{t("transfer.pack.noRecovery")}</p>
@@ -210,7 +210,7 @@ export function ImportPack() {
             autoComplete="current-password"
             value={pass}
             onChange={(e) => setPass(e.target.value)}
-            className="selis-focus h-12 w-full rounded-control border border-neutral-6 bg-surface-app px-3 text-md text-neutral-12"
+            className="selis-focus h-12 w-full rounded-control border border-control-line bg-surface-app px-3 text-md text-neutral-12"
             data-testid="pack-unlock-passphrase"
           />
           {importState.phase === "passphrase" && importState.wrong ? (

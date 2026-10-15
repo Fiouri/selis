@@ -9,7 +9,7 @@ export type ButtonProps = ComponentProps<"button"> & {
 
 const VARIANTS: Record<NonNullable<ButtonProps["variant"]>, string> = {
   primary: "bg-accent-9 text-accent-contrast hover:bg-accent-10 active:bg-accent-10 shadow-1",
-  secondary: "bg-neutral-3 text-neutral-12 hover:bg-neutral-4 active:bg-neutral-5 border border-neutral-6",
+  secondary: "bg-neutral-3 text-neutral-12 hover:bg-neutral-4 active:bg-neutral-5 border border-control-line",
   ghost: "bg-transparent text-accent-11 hover:bg-neutral-3 active:bg-neutral-4",
   danger: "bg-danger-3 text-danger-11 font-semibold hover:opacity-90 active:opacity-80",
 };
