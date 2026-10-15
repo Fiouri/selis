@@ -99,7 +99,7 @@ jobs:
       - name: Device types available
         run: xcrun simctl list devicetypes | grep -E "iPhone 17|iPad Pro" || true
       - name: Screenshots
-        run: apps/app/e2e/maestro/ios/store-screenshots.sh dist/Selis.app "${{ matrix.device.type }}" "${{ matrix.device.slug }}" "${{ matrix.lang }}"
+        run: bash apps/app/e2e/maestro/ios/store-screenshots.sh dist/Selis.app "${{ matrix.device.type }}" "${{ matrix.device.slug }}" "${{ matrix.lang }}"
       - name: Sizes
         run: |
           locale="${{ matrix.lang == 'el' && 'el' || 'en-US' }}"
