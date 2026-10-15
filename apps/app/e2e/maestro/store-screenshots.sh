@@ -99,8 +99,8 @@ EOF
 restore() {
   adb -s "$serial" shell wm size reset || true
   adb -s "$serial" shell am broadcast -a com.android.systemui.demo -e command exit > /dev/null || true
-  adb -s "$serial" shell rm -f /sdcard/Pictures/selis-scan-sample.jpg > /dev/null || true
-  adb -s "$serial" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/selis-scan-sample.jpg > /dev/null || true
+  adb -s "$serial" shell rm -f /sdcard/Pictures/selis-scan-sample-$lang.jpg > /dev/null || true
+  adb -s "$serial" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/selis-scan-sample-$lang.jpg > /dev/null || true
   # The samples must not stay in the picker's Recent list: the other flows pick fixtures by name.
   for f in "$samples"/*.pdf; do
     name="$(basename "$f")"
@@ -110,8 +110,8 @@ restore() {
 }
 trap restore EXIT
 # The photo for "Scan a photo" (tools/store/scan-sample.ts), the newest in the photo picker.
-adb -s "$serial" push "$(win "$root/docs/store/scan-sample/$lang.jpg")" /sdcard/Pictures/selis-scan-sample.jpg > /dev/null
-adb -s "$serial" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/selis-scan-sample.jpg > /dev/null
+adb -s "$serial" push "$(win "$root/docs/store/scan-sample/$lang.jpg")" /sdcard/Pictures/selis-scan-sample-$lang.jpg > /dev/null
+adb -s "$serial" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/selis-scan-sample-$lang.jpg > /dev/null
 adb -s "$serial" shell wm size 1080x1920
 adb -s "$serial" shell settings put global sysui_demo_allowed 1
 demo() { adb -s "$serial" shell am broadcast -a com.android.systemui.demo -e command "$@" > /dev/null; }

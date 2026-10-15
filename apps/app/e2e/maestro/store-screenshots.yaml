@@ -112,11 +112,19 @@ name: Store screenshots
 - extendedWaitUntil:
     visible: ${T_PAGE_2_OF_2}
     timeout: 10000
-# Scrolling down hides the document tools; a short scroll back up shows them again.
-- swipe:
-    start: 50%, 50%
-    end: 50%, 56%
-    duration: 400
+# Scrolling down hides the document tools. A tap on the page toggles the bars and brings the
+# tools back (a short scroll back up did too, but the end of the scroll could hide them again).
+- waitForAnimationToEnd:
+    timeout: 2000
+- repeat:
+    while:
+      notVisible: ${T_SIGN}
+    times: 4
+    commands:
+      - tapOn:
+          point: 50%, 75%
+      - waitForAnimationToEnd:
+          timeout: 1500
 - extendedWaitUntil:
     visible: ${T_SIGN}
     timeout: 5000
