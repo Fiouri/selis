@@ -18,9 +18,20 @@ name: App Store screenshots (iOS)
       true: ${LANG == "el"}
     commands:
       - tapOn: ${E_SETTINGS}
-      - extendedWaitUntil:
-          visible: ${E_LANGUAGE}
-          timeout: 10000
+      - repeat:
+          while:
+            notVisible: ${E_LANGUAGE}
+          times: 3
+          commands:
+            - extendedWaitUntil:
+                visible: ${E_LANGUAGE}
+                timeout: 5000
+                optional: true
+            - runFlow:
+                when:
+                  notVisible: ${E_LANGUAGE}
+                commands:
+                  - tapOn: ${E_SETTINGS}
       - tapOn: ${E_LANGUAGE}
       - extendedWaitUntil:
           visible: "Ελληνικά"

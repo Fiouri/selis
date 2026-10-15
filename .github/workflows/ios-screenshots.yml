@@ -123,7 +123,15 @@ jobs:
           PHOTO_POINT: ${{ matrix.device.photo }}
           PHOTO_CONFIRM: ${{ matrix.device.confirm }}
           KEYBOARD_HIDE: ${{ matrix.device.keyboard }}
-        run: bash apps/app/e2e/maestro/ios/store-screenshots.sh dist/Selis.app "${{ matrix.device.type }}" "${{ matrix.device.slug }}" "${{ matrix.lang }}"
+        # A second attempt on a fresh simulator: shared macOS runners are slow enough that a tap
+        # sometimes lands before the WebView is ready.
+        run: |
+          for attempt in 1 2; do
+            if bash apps/app/e2e/maestro/ios/store-screenshots.sh dist/Selis.app "${{ matrix.device.type }}" "${{ matrix.device.slug }}" "${{ matrix.lang }}"; then exit 0; fi
+            echo "::warning::attempt $attempt failed"
+            [ "$attempt" = 1 ] && mv ".tmp/ios-shots/${{ matrix.device.slug }}-${{ matrix.lang }}" ".tmp/ios-shots/${{ matrix.device.slug }}-${{ matrix.lang }}-attempt1"
+          done
+          exit 1
       - name: Sizes
         run: |
           locale="${{ matrix.lang == 'el' && 'el' || 'en-US' }}"
