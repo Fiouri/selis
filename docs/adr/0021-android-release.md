@@ -58,7 +58,9 @@ Measured on the existing builds: the Rust library's LOAD segments were 16 KB ali
   `scripts/reproducible-env.sh` (sourced before every release build, also in the F-Droid
   recipe) remaps `$CARGO_HOME`, the checkout and the NDK (`--remap-path-prefix` through a
   cfg-target rustflags entry in `$CARGO_HOME/config.toml`, which Cargo joins with the
-  project's per-triple 16 KB flags; `-ffile-prefix-map` for C/C++).
+  project's per-triple 16 KB flags; `-ffile-prefix-map` for C/C++). The scan WebAssembly module
+  is built with the same remapping (`scripts/build-scan-wasm.ts`). Since then the two builds
+  are byte-identical (run 38651844267).
 - **Sizes** per artifact and Play's per-ABI download size (`bundletool get-size total`) go to
   the job summary and `sizes.md` in the artifact, with SHA-256 sums.
 
