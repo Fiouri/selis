@@ -34,7 +34,17 @@ runtime="$(xcrun simctl list runtimes -j | node -e '
   rs.sort((a, b) => a.version.localeCompare(b.version, undefined, { numeric: true }));
   console.log(rs.at(-1).identifier);')"
 udid="$(xcrun simctl create "selis-$slug-$lang" "$type_id" "$runtime")"
-cleanup() { xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true; xcrun simctl delete "$udid" >/dev/null 2>&1 || true; }
+cleanup() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    # What the screen showed when it failed, and Maestro's own logs, for the artifact.
+    xcrun simctl io "$udid" screenshot "$work/failed.png" >/dev/null 2>&1 || true
+    cp -R "$HOME/.maestro/tests" "$work/maestro-tests" 2>/dev/null || true
+  fi
+  xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
+  xcrun simctl delete "$udid" >/dev/null 2>&1 || true
+  exit "$status"
+}
 trap cleanup EXIT
 xcrun simctl boot "$udid"
 xcrun simctl bootstatus "$udid" -b >/dev/null
@@ -93,8 +103,9 @@ const env = {
   T_OPEN_LEASE: open(lease.title),
   T_OPEN_TRIP: open(trip.title),
   T_OPEN_REPORT: open(report.title),
-  T_PAGE_1: t("viewer.pageIndicator", { page: "1", total: "1" }),
-  T_PAGE_1_OF_2: t("viewer.pageIndicator", { page: "1", total: "2" }),
+  // VoiceOver joins the header's lines ("Page 1 of 2 · saved"): match inside.
+  T_PAGE_1: `.*${t("viewer.pageIndicator", { page: "1", total: "1" })}.*`,
+  T_PAGE_1_OF_2: `.*${t("viewer.pageIndicator", { page: "1", total: "2" })}.*`,
   T_ANNOTATE: t("viewer.dockAnnotate"),
   T_DONE: t("annotate.done"),
   T_SIGN: t("viewer.dockSign"),
