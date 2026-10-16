@@ -40,6 +40,13 @@ updates:
       # 0.2.189 until netdev or libc fixes it (PR #34).
       - dependency-name: "libc"
         versions: [">= 0.2.190, < 0.3"]
+      # Dependabot's lock for serde_json 1.0.154 + uuid 1.28.0 (PR #59) moved bindgen to syn 2
+      # while prettyplease 0.3 needs syn 3: bindgen (qpdf-sys) no longer compiled. Taken by hand
+      # with `cargo update` after v1.0.
+      - dependency-name: "serde_json"
+        versions: [">= 1.0.152, < 2"]
+      - dependency-name: "uuid"
+        versions: [">= 1.28.0, < 2"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -61,3 +68,6 @@ updates:
         versions: [">= 1.8.0"]
       - dependency-name: "com.google.android.material:material"
         versions: [">= 1.14.0"]
+      # Toolchain frozen for reproducible signed builds until v1.0 ships (PR #57: 8.14.3 → 8.14.6
+      # deferred). Remove after the v1.0.0 release.
+      - dependency-name: "gradle-wrapper"

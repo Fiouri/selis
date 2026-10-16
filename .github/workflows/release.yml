@@ -100,10 +100,11 @@ jobs:
           v="${{ needs.verify.outputs.version }}"
           mkdir -p assets
           if [ "${{ needs.android.outputs.signed }}" = "true" ]; then
-            cp android/signed/*.apk assets/
+            # The AAB is signed with the Play upload key (ADR 0025), the APKs with the app key.
+            cp android/signed/*.apk android/signed/*.aab assets/
           else
             # Unsigned APKs install nowhere; attach them only so the draft shows what was built.
-            cp android/unsigned/*.apk assets/
+            cp android/unsigned/*.apk android/unsigned/*.aab assets/
           fi
           cp sbom/*.json assets/
           # Obtainium users filter assets by these names (README › Install): keep them stable.
@@ -111,6 +112,10 @@ jobs:
             n="$(basename "$f")"
             [[ "$n" =~ ^selis-${v//./\\.}-(arm64-v8a|armeabi-v7a|x86|x86_64|universal)(-unsigned)?\.apk$ ]] \
               || { echo "::error::unexpected APK asset name: $n"; exit 1; }
+          done
+          for f in assets/*.aab; do
+            n="$(basename "$f")"
+            [[ "$n" =~ ^selis-${v//./\\.}(-unsigned)?\.aab$ ]] || { echo "::error::unexpected AAB asset name: $n"; exit 1; }
           done
           (cd assets && sha256sum * > SHA256SUMS)
           cat assets/SHA256SUMS
@@ -123,6 +128,7 @@ jobs:
             echo
             if [ "${{ needs.android.outputs.signed }}" = "true" ]; then
               echo "Android: one APK per ABI (\`arm64-v8a\` for nearly every phone) and a universal APK; check them against \`SHA256SUMS\`."
+              echo "The \`.aab\` is the Google Play bundle (signed with the upload key); it does not install on a phone."
             else
               echo "**Unsigned build** — the Android signing secrets were not set; do not publish this draft."
             fi

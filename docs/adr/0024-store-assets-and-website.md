@@ -1,6 +1,6 @@
 # ADR 0024 — Store listings, screenshots and website from the repository
 
-- Status: accepted
+- Status: accepted; amended 2026-10-16 (store images English-only)
 - Date: 2026-10-14
 
 ## Context
@@ -51,3 +51,16 @@ phone screenshots with sides at most 2:1. App Store: name and subtitle ≤ 30, p
   CI task before the first App Store submission (`docs/store/app-store-privacy.md`).
 - Play's per-ABI versionCodes (ADR 0020) need a changelog file per code on F-Droid; the release
   checklist covers it.
+
+## Amendment (2026-10-16): store images English-only
+
+Owner decision before v1.0.0-rc.1. Store images (Play icon, feature graphic, phone screenshots;
+App Store screenshots) exist in English only: `fastlane/metadata/android/en-US/images/` and
+`fastlane/screenshots/en-US/`. The Greek listings keep their own texts and changelogs and fall
+back to the en-US images (Play, F-Droid and App Store Connect all use the default/primary
+language's graphics when a translation has none). The screenshot scripts and
+`ios-screenshots.yml` make English sets only, `render-graphics.ts` renders the en-US graphics
+only, and the dark Greek set (`docs/store/screenshots/el/`) is gone. Greek UI pictures remain for
+tests only (the Playwright `visual-390` snapshots). CI guard: `scripts/check-store-images.sh`.
+Reason: one set to keep current per UI change, one review, and no mismatch between the two sets.
+The website's Greek pages keep their committed `website/assets/screens/el/`.

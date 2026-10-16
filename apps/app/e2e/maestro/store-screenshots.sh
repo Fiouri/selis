@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Store screenshots on the AVD (P5a, ADR 0024): six key screens with the
-# realistic sample documents, in one language and theme per call.
+# realistic sample documents, in one theme per call.
 #
-#   apps/app/e2e/maestro/store-screenshots.sh <serial> en|el light|dark
+#   apps/app/e2e/maestro/store-screenshots.sh <serial> en light|dark
+#
+# Store images are English-only (docs/store/play-console.md): Play and F-Droid show the en-US set
+# for every listing language, so there are no Greek store screenshots (Greek UI pictures exist for
+# tests only: the Playwright visual snapshots). CI fails on any other locale's images
+# (scripts/check-store-images.sh).
 #
 # - Generates and pushes the samples (packages/fixtures/src/samples.ts; invented content only).
 # - Screen 1080×1920 (9:16; Play allows at most 2:1, the AVD's 1080×2340 is 2.17:1) and a clean
@@ -10,16 +15,16 @@
 #   restored on exit.
 # - Labels of the target language come from apps/app/src/i18n/<lang>.json, so the flow taps the
 #   same strings the user sees.
-# - Output: light → fastlane/metadata/android/<locale>/images/phoneScreenshots/ (what Play and
-#   F-Droid show), dark → docs/store/screenshots/<lang>/dark/; {1-library,…,6-tools,7-scan}.png.
+# - Output: light → fastlane/metadata/android/en-US/images/phoneScreenshots/ (what Play and
+#   F-Droid show), dark → docs/store/screenshots/en/dark/; {1-library,…,6-tools,7-scan}.png.
 # Prerequisite: a release build with the `measure` feature installed (WebView readable through
 # DevTools for Maestro, none of the debug-only UI of a debug build in the pictures):
 #   npm run tauri -- android build --apk --target x86_64 --features measure, debug-signed.
 set -euo pipefail
-serial="${1:?usage: store-screenshots.sh <serial> en|el light|dark}"
-lang="${2:?usage: store-screenshots.sh <serial> en|el light|dark}"
-theme="${3:?usage: store-screenshots.sh <serial> en|el light|dark}"
-case "$lang" in en) locale=en-US ;; el) locale=el-GR ;; *) echo "lang must be en or el" >&2; exit 2 ;; esac
+serial="${1:?usage: store-screenshots.sh <serial> en light|dark}"
+lang="${2:?usage: store-screenshots.sh <serial> en light|dark}"
+theme="${3:?usage: store-screenshots.sh <serial> en light|dark}"
+case "$lang" in en) locale=en-US ;; *) echo "store screenshots are English-only: lang must be en" >&2; exit 2 ;; esac
 case "$theme" in light | dark) ;; *) echo "theme must be light or dark" >&2; exit 2 ;; esac
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -85,8 +90,7 @@ const env = {
   T_SCAN: t("scan.open"),
   T_FROM_PHOTO: t("scan.fromPhoto"),
   T_ADJUST: t("scan.adjustTitle"),
-  // adb input types ASCII only; a signature in Latin letters is usual in Greece too.
-  SIGNER: lang === "el" ? "D. Rigas" : "Daniel Reyes",
+  SIGNER: "Daniel Reyes",
 };
 console.log("appId: com.anywecon.selis");
 console.log("androidWebViewHierarchy: devtools");
