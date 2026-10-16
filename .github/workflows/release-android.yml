@@ -260,6 +260,10 @@ jobs:
         run: |
           v="${{ needs.build.outputs.version }}"
           pipx install apksigcopier==1.1.1
+          # apksigcopier calls apksigner from PATH; the signing build-tools, as F-Droid uses (34).
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;${SIGN_BUILD_TOOLS}" > /dev/null
+          export PATH="$ANDROID_HOME/build-tools/$SIGN_BUILD_TOOLS:$PATH"
+          apksigner --version
           apksigcopier compare "${{ github.workspace }}/first/signed/selis-$v-arm64-v8a.apk" --unsigned "$OUT/apk/arm64/release/app-arm64-release-unsigned.apk"
           echo "apksigcopier: our signature verifies on the independently built APK" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
