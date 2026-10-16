@@ -41,7 +41,9 @@ compile in CI but get no UI polish until P6.
 ## Runtime requirements
 
 - Android System WebView **≥ 111** (ES2022, CSP `'wasm-unsafe-eval'`, Tailwind v4 CSS).
-  `MainActivity.kt` shows a native "update WebView" dialog below that.
+  `MainActivity.kt` shows a native "update WebView" dialog below that (ADR 0031). Below Android 14
+  (foreground-service transfers) test on the AVD `selis-api33x5-play` after
+  `scripts/avd-webview-update.sh emulator-5554 <its serial>` (its image ships WebView 109).
 - Render quality/memory adapt to device RAM (`packages/engine/src/limits.ts`); keep the
   1000-page spike under budget on every tier when touching the viewer or engine.
 - Saving (ADR 0007): engine bytes → `upload_chunk` (base64) → working copy (autosave, 3 s) →

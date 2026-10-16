@@ -83,7 +83,8 @@ class MainActivity : TauriActivity() {
   }
 
   private fun warnIfWebViewOutdated() {
-    val version = WebView.getCurrentWebViewPackage()?.versionName ?: return
+    val provider = WebView.getCurrentWebViewPackage() ?: return
+    val version = provider.versionName ?: return
     val major = version.substringBefore('.').toIntOrNull() ?: return
     if (major >= MIN_WEBVIEW_MAJOR) return
     AlertDialog.Builder(this)
@@ -91,7 +92,9 @@ class MainActivity : TauriActivity() {
       .setMessage(getString(R.string.webview_outdated_message, MIN_WEBVIEW_MAJOR, version))
       .setCancelable(false)
       .setPositiveButton(R.string.webview_outdated_update) { _, _ ->
-        openStore("com.google.android.webview")
+        // The package that really provides WebView here (Google's, a beta channel, or another
+        // vendor's), so the store opens the page that updates it.
+        openStore(provider.packageName)
         finish()
       }
       .setNegativeButton(R.string.webview_outdated_close) { _, _ -> finish() }

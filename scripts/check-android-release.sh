@@ -16,7 +16,7 @@
 #      APK_CERT_SHA256 is set, the app signing certificate (ADR 0025).
 #
 # For an AAB: bundletool asks for 16 KB alignment (PAGE_ALIGNMENT_16K), its manifest has the
-# same SDK levels and versionCode, and with --signed jarsigner verifies it (and, with
+# same SDK levels and versionCode, and with --signed jarsigner verifies every entry (and, with
 # APK_CERT_SHA256, that it carries the upload key, not the app signing key).
 #
 # Usage: check-android-release.sh [--signed] <artifact.apk|artifact.aab>...
@@ -138,7 +138,13 @@ for artifact in "$@"; do
     mkdir -p "$dir/bundle" && unzip -q -o "$artifact" 'base/lib/*' -d "$dir/bundle" 2>/dev/null || true
     [ -d "$dir/bundle/base/lib" ] && mv "$dir/bundle/base/lib" "$dir/lib" && check_elf "$name" "$dir"
     if [ "$signed" = 1 ]; then
-      jarsigner -verify -strict "$artifact" > "$dir/jarsigner.txt" 2>&1 || fail "$name: jarsigner -verify failed: $(tail -3 "$dir/jarsigner.txt")"
+      # Not -strict: an Android upload key is self-signed and its signature has no timestamp, which
+      # -strict always reports as errors (Play and Android check neither). Required instead: the
+      # whole bundle verified, no unsigned or altered entry.
+      jarsigner -verify "$artifact" > "$dir/jarsigner.txt" 2>&1 || fail "$name: jarsigner -verify failed: $(tail -3 "$dir/jarsigner.txt")"
+      grep -q '^jar verified\.' "$dir/jarsigner.txt" || fail "$name: jarsigner did not verify it: $(head -3 "$dir/jarsigner.txt")"
+      ! grep -qiE 'unsigned entries|jar is unsigned|has been modified|digest .* does not match|not signed' "$dir/jarsigner.txt" ||
+        fail "$name: $(grep -iE 'unsigned entries|jar is unsigned|has been modified|does not match|not signed' "$dir/jarsigner.txt" | head -1)"
       # ADR 0025: the bundle carries the upload key, never the app signing key.
       if [ -n "${APK_CERT_SHA256:-}" ]; then
         unzip -q -o "$artifact" 'META-INF/*' -d "$dir/meta" 2>/dev/null || true
