@@ -8,7 +8,7 @@ short summaries of these sections.
 
 ## [Unreleased]
 
-## [1.0.0-rc.1] - 2026-10-14
+## [1.0.0-rc.1] - 2026-10-16
 
 First release candidate of the mobile 1.0 (Android, iOS). Desktop builds come with 1.0 of the
 desktop shell (P6).

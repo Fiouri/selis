@@ -2,7 +2,10 @@
 # App Store screenshots on one iOS simulator (P5b, ADR 0029). macOS only (CI:
 # .github/workflows/ios-screenshots.yml).
 #
-#   apps/app/e2e/maestro/ios/store-screenshots.sh <app-path> <device-type-regex> <slug> en|el
+#   apps/app/e2e/maestro/ios/store-screenshots.sh <app-path> <device-type-regex> <slug> en
+#
+# Store images are English-only (docs/store/ios-release.md): the Greek localization uses the
+# primary (en-US) screenshot set, so there are no Greek App Store screenshots.
 #
 # - Creates and boots a simulator of the newest runtime and the first device type matching the
 #   regex (e.g. "^iPhone 17 Pro Max$"), light appearance, a clean status bar (9:41, full battery).
@@ -12,11 +15,11 @@
 # - Output: fastlane/screenshots/<locale>/<slug>-{1-library,…,7-scan}.jpg, JPEG without alpha
 #   (App Store Connect rejects alpha), at the device's native resolution.
 set -euo pipefail
-app="${1:?usage: store-screenshots.sh <app> <device-type-regex> <slug> en|el}"
+app="${1:?usage: store-screenshots.sh <app> <device-type-regex> <slug> en}"
 type_re="${2:?device type regex}"
 slug="${3:?slug}"
-lang="${4:?en|el}"
-case "$lang" in en) locale=en-US ;; el) locale=el ;; *) echo "lang must be en or el" >&2; exit 2 ;; esac
+lang="${4:?en}"
+case "$lang" in en) locale=en-US ;; *) echo "store screenshots are English-only: lang must be en" >&2; exit 2 ;; esac
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../../../../.." && pwd)"
@@ -134,7 +137,7 @@ const env = {
   T_SCAN: t("scan.open"),
   T_FROM_PHOTO: t("scan.fromPhoto"),
   T_ADJUST: t("scan.adjustTitle"),
-  SIGNER: lang === "el" ? "Δανιήλ Ρήγας" : "Daniel Reyes",
+  SIGNER: "Daniel Reyes",
   // The first photo in PHPicker (iPhone: full-screen grid; iPad: the sheet's grid).
   PHOTO_POINT: process.env.PHOTO_POINT || "17%, 24%",
   // The ✓ of PHPicker's photo preview.

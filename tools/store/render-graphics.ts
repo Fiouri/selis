@@ -2,11 +2,14 @@
  * Store graphics from the app's own artwork and design tokens (no image editor, reproducible):
  *
  * - Google Play app icon, 512 × 512 PNG, full-bleed square (Play applies its own mask):
- *   fastlane/metadata/android/<locale>/images/icon.png
+ *   fastlane/metadata/android/en-US/images/icon.png
  * - Google Play feature graphic, 1024 × 500 PNG without alpha:
- *   fastlane/metadata/android/<locale>/images/featureGraphic.png (tagline per language)
+ *   fastlane/metadata/android/en-US/images/featureGraphic.png
+ *   Store images are English-only (docs/store/play-console.md): every other listing language
+ *   falls back to the en-US set; CI fails on another locale's images (scripts/check-store-images.sh).
  * - Website: social preview website/assets/og.png (1200 × 630) and the screenshots as WebP,
- *   540 × 960, website/assets/screens/<lang>/ (from the light Play screenshots).
+ *   540 × 960, website/assets/screens/en/ (from the light Play screenshots). The Greek pages keep
+ *   their committed website/assets/screens/el/ set.
  * - GitHub social preview, 1280 × 640 PNG (English): docs/store/github-social-preview.png. It is
  *   uploaded by hand (repository Settings › Social preview); GitHub has no API for it.
  *
@@ -16,17 +19,14 @@
  *
  * Usage: node tools/store/render-graphics.ts
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const META = join(ROOT, "fastlane", "metadata", "android");
 
-const TAGLINES: Record<string, { title: string; line: string }> = {
-  "en-US": { title: "Selis", line: "PDFs on your phone. No account, no cloud, no tracking." },
-  "el-GR": { title: "Selis", line: "Τα PDF σου στο κινητό. Χωρίς λογαριασμό, cloud ή παρακολούθηση." },
-};
+const TAGLINE = { title: "Selis", line: "PDFs on your phone. No account, no cloud, no tracking." };
 
 function token(css: string, name: string): string {
   const m = css.match(new RegExp(`--${name}:\\s*([^;]+);`));
@@ -51,8 +51,9 @@ async function main(): Promise<void> {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ deviceScaleFactor: 1 });
-    for (const [locale, text] of Object.entries(TAGLINES)) {
-      const dir = join(META, locale, "images");
+    {
+      const text = TAGLINE;
+      const dir = join(META, "en-US", "images");
       mkdirSync(dir, { recursive: true });
 
       await page.setViewportSize({ width: 512, height: 512 });
@@ -70,10 +71,9 @@ async function main(): Promise<void> {
       // Runs in the page (DOM types are not in this Node project's lib).
       await page.evaluate("document.fonts.ready.then(() => true)");
       await page.screenshot({ path: join(dir, "featureGraphic.png"), omitBackground: false });
-      console.log(`${locale}: icon.png 512×512, featureGraphic.png 1024×500`);
+      console.log("en-US: icon.png 512×512, featureGraphic.png 1024×500");
     }
 
-    const en = TAGLINES["en-US"];
     for (const [width, height, out] of [
       [1200, 630, join(ROOT, "website", "assets", "og.png")],
       [1280, 640, join(ROOT, "docs", "store", "github-social-preview.png")],
@@ -85,17 +85,16 @@ async function main(): Promise<void> {
         svg{width:280px;height:280px;flex:none;filter:drop-shadow(0 12px 32px rgb(0 0 0 / .28))}
         h1{margin:0 0 20px;font-size:110px;font-weight:700;letter-spacing:-.02em;line-height:1}
         p{margin:0;font-size:40px;font-weight:500;line-height:1.25;color:#dfe6f7}
-      </style>${svg}<div><h1>${en?.title ?? "Selis"}</h1><p>${en?.line ?? ""}</p></div>`);
+      </style>${svg}<div><h1>${TAGLINE.title}</h1><p>${TAGLINE.line}</p></div>`);
       await page.evaluate("document.fonts.ready.then(() => true)");
       await page.screenshot({ path: out });
       console.log(`${out.slice(ROOT.length + 1)} ${String(width)}×${String(height)}`);
     }
 
     // Store screenshots → WebP for the website (canvas encoder of Chromium, quality 0.85).
-    for (const [lang, locale] of [["en", "en-US"], ["el", "el-GR"]] as const) {
-      const from = join(META, locale, "images", "phoneScreenshots");
-      if (!existsSync(from)) continue;
-      const to = join(ROOT, "website", "assets", "screens", lang);
+    {
+      const from = join(META, "en-US", "images", "phoneScreenshots");
+      const to = join(ROOT, "website", "assets", "screens", "en");
       mkdirSync(to, { recursive: true });
       for (const file of readdirSync(from).filter((f) => f.endsWith(".png"))) {
         const png = readFileSync(join(from, file)).toString("base64");
@@ -113,7 +112,7 @@ async function main(): Promise<void> {
         })()`);
         writeFileSync(join(to, file.replace(/\.png$/, ".webp")), Buffer.from(dataUrl.split(",")[1] ?? "", "base64"));
       }
-      console.log(`website: screens/${lang} (${String(readdirSync(to).length)} WebP)`);
+      console.log(`website: screens/en (${String(readdirSync(to).length)} WebP)`);
     }
   } finally {
     await browser.close();

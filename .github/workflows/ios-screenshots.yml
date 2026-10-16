@@ -7,8 +7,9 @@ name: iOS screenshots
 #   iPhone 6.9" (Dynamic Island, large): 1320 × 2868 — iPhone 17 Pro Max
 #   iPhone 6.3" (Dynamic Island, medium; "At least one screenshot … (medium display)"): 1206 × 2622 — iPhone 17 Pro
 #   iPad 13" ("Required if app runs on iPad"): 2064 × 2752 — iPad Pro 13-inch (M5)
-# The JPEGs land in the artifact as fastlane/screenshots/<locale>/; they are reviewed and
-# committed by hand (no bot commits).
+# The JPEGs land in the artifact as fastlane/screenshots/en-US/; they are reviewed and
+# committed by hand (no bot commits). English only (docs/store/ios-release.md): the Greek
+# localization uses the primary language's screenshots.
 
 on:
   workflow_dispatch:
@@ -73,7 +74,7 @@ jobs:
           if-no-files-found: error
 
   shots:
-    name: Screenshots ${{ matrix.device.slug }} (${{ matrix.lang }})
+    name: Screenshots ${{ matrix.device.slug }}
     needs: build
     if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: macos-26
@@ -81,7 +82,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lang: [en, el]
         device:
           # photo: where PHPicker's first cell is (its content is out of process, not in the hierarchy);
           # confirm: its preview's ✓; keyboard: the iPad software keyboard's hide key.
@@ -127,16 +127,15 @@ jobs:
         # sometimes lands before the WebView is ready.
         run: |
           for attempt in 1 2; do
-            if bash apps/app/e2e/maestro/ios/store-screenshots.sh dist/Selis.app "${{ matrix.device.type }}" "${{ matrix.device.slug }}" "${{ matrix.lang }}"; then exit 0; fi
+            if bash apps/app/e2e/maestro/ios/store-screenshots.sh dist/Selis.app "${{ matrix.device.type }}" "${{ matrix.device.slug }}" en; then exit 0; fi
             echo "::warning::attempt $attempt failed"
-            [ "$attempt" = 1 ] && mv ".tmp/ios-shots/${{ matrix.device.slug }}-${{ matrix.lang }}" ".tmp/ios-shots/${{ matrix.device.slug }}-${{ matrix.lang }}-attempt1"
+            [ "$attempt" = 1 ] && mv ".tmp/ios-shots/${{ matrix.device.slug }}-en" ".tmp/ios-shots/${{ matrix.device.slug }}-en-attempt1"
           done
           exit 1
       - name: Sizes
         run: |
-          locale="${{ matrix.lang == 'el' && 'el' || 'en-US' }}"
           want="${{ matrix.device.size }}"
-          for f in fastlane/screenshots/$locale/${{ matrix.device.slug }}-*.jpg; do
+          for f in fastlane/screenshots/en-US/${{ matrix.device.slug }}-*.jpg; do
             got="$(sips -g pixelWidth -g pixelHeight "$f" | awk '/pixel/ { printf "%s ", $2 }' | sed 's/ $//')"
             [ "$got" = "$want" ] || { echo "::error::$f is $got, App Store wants $want"; exit 1; }
           done
@@ -144,7 +143,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: ios-screenshots-${{ matrix.device.slug }}-${{ matrix.lang }}
+          name: ios-screenshots-${{ matrix.device.slug }}
           path: |
             fastlane/screenshots
             .tmp/ios-shots

@@ -75,11 +75,11 @@ action (not in P0).
   versionCode, no debug code), signing from secrets only (`scripts/android-keystore.md`),
   reproducible second build. No tags are pushed without the owner's go.
 - Store, F-Droid and name-check drafts: `docs/store/`. Listings in `fastlane/metadata/`; store
-  screenshots with `apps/app/e2e/maestro/store-screenshots.sh <serial> en|el light|dark` on the AVD
+  screenshots (English only; other locales use en-US) with `apps/app/e2e/maestro/store-screenshots.sh <serial> en light|dark` on the AVD
   (release `measure` build; 7 screens, the last one Scan's Adjust step from the sample photo
   `docs/store/scan-sample/`, made by `node tools/store/scan-sample.ts`); App Store screenshots from
   the iOS simulator in CI (`ios-screenshots.yml`, Maestro flow `apps/app/e2e/maestro/ios/`, 6.9" +
-  6.3" iPhone and 13" iPad, en + el → `fastlane/screenshots/`; ADR 0029); graphics with
+  6.3" iPhone and 13" iPad, en → `fastlane/screenshots/en-US/`; ADR 0029; CI guard `scripts/check-store-images.sh`); graphics with
   `node tools/store/render-graphics.ts`; website in `website/` (`node website/build.ts`,
   Lighthouse ≥ 95 in `pages.yml`; ADR 0024).
 - RC QA on release builds: `apps/app/e2e/maestro/release-suite.sh <serial>` (run-as checks are

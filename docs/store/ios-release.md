@@ -17,7 +17,12 @@ provisioning profile exists anywhere. Without the secrets the workflow skips wit
 2. App Store Connect › Apps › + New App: platform iOS, name **Selis**, primary language English
    (U.S.), bundle ID `com.anywecon.selis`, SKU `selis`. Greek is added as a further localization
    (App Information › Localizable Information › language menu › Greek); texts in
-   `fastlane/metadata/ios/en-US/` (primary) and `el/`, screenshots in `fastlane/screenshots/`.
+   `fastlane/metadata/ios/en-US/` (primary) and `el/`, screenshots in `fastlane/screenshots/en-US/`.
+   **Store images are English-only** (owner decision, 2026-10-16; ADR 0024 amendment): the Greek
+   localization gets no screenshots of its own, so App Store Connect shows the primary language's
+   (en-US) set for it. `ios-screenshots.yml` makes the English set only; CI fails if
+   `fastlane/screenshots/<locale>` exists for any locale other than en-US
+   (`scripts/check-store-images.sh`).
 3. Note the app's **Apple ID** (App Information › General, a number) for the upload step.
 
 ## 3. API key and secrets

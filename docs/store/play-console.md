@@ -15,7 +15,16 @@ URL: `https://fiouri.github.io/selis/privacy/` (website/, generated from docs/PR
 Default language: **English (United States) – en-US** (chosen when the app is created: Play
 Console › Create app › Default language). Greek (el-GR) is added afterwards as a translation (Grow
 users › Store presence › Main store listing › Manage translations › Add your own translations).
-Texts and graphics: `fastlane/metadata/android/en-US/` (default) and `el-GR/` (ADR 0030).
+Texts: `fastlane/metadata/android/en-US/` (default) and `el-GR/` (ADR 0030).
+
+**Store images are English-only** (owner decision, 2026-10-16; ADR 0024 amendment): icon, feature
+graphic and phone screenshots exist only in `fastlane/metadata/android/en-US/images/`. The Greek
+listing has its own texts and changelogs but no graphics, so Play (and F-Droid) show the en-US
+images for it. No Greek store screenshots are made (`store-screenshots.sh` takes `en` only); Greek
+UI pictures exist for tests only (Playwright visual snapshots). CI fails if
+`fastlane/metadata/android/<locale>/images` exists for any locale other than en-US
+(`scripts/check-store-images.sh`). In the Console, the Greek translation carries no graphics of
+its own.
 
 ## App signing (before the first release of any kind)
 
