@@ -338,12 +338,15 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
           type="button"
           role="switch"
           aria-checked={auto}
-          title={t("scan.autoLabel")}
           onClick={onAuto}
           className={`selis-focus flex h-11 shrink-0 items-center rounded-full px-1 text-[13px] font-semibold`}
           data-testid={auto ? "scan-auto-on" : "scan-auto-off"}
         >
           <span className={`rounded-full px-2.5 py-1 ${auto ? "bg-accent-9 text-accent-contrast" : "border border-[#ffffff]/50 text-[#f4f4f6]"}`}>{t("scan.auto")}</span>
+          {/* Spoken with the label; not a title (device tests find the switch by its test id). */}
+          <span className="sr-only">
+            {t("scan.autoLabel")}
+          </span>
         </button>
         <span className="px-2 text-sm tabular-nums text-[#c9c9d1]" data-testid="scan-count">
           {t("scan.count", { count: pages.length })}
