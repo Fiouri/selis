@@ -1,24 +1,33 @@
-//! Document scan (P4c, ADR 0016): finds the page in a camera frame, straightens it and applies
-//! the scan filters. Pure Rust on imageproc; compiled to WebAssembly (`wasm32-unknown-unknown`)
-//! and run in a Web Worker of the WebView (see `wasm.rs` for the exported ABI). The host build
-//! only exists for tests.
+//! Document scan (P4c, ADR 0016; Scan 2.0, ADR 0032): finds the page in a camera frame, decides
+//! when a live frame is steady and sharp enough to capture by itself, straightens the page and
+//! applies the scan filters, touch-ups and rotation. Pure Rust on imageproc; compiled to
+//! WebAssembly (`wasm32-unknown-unknown`) and run in a Web Worker of the WebView (see `wasm.rs`
+//! for the exported ABI). The host build only exists for tests.
 
 use image::{GrayImage, Luma, Rgba, RgbaImage};
 use imageproc::contours::{BorderType, find_contours};
 use imageproc::contrast::{adaptive_threshold, otsu_level};
 use imageproc::edges::canny;
 use imageproc::filter::gaussian_blur_f32;
-use imageproc::geometric_transformations::{Border, Interpolation, Projection, warp_into};
+use imageproc::geometric_transformations::{
+    Border, Interpolation, Projection, rotate90, rotate180, rotate270, warp_into,
+};
 use imageproc::geometry::{approximate_polygon_dp, arc_length, contour_area, convex_hull};
 use imageproc::morphology::dilate;
 use imageproc::point::Point;
 
+mod enhance;
+pub mod live;
+pub mod touchup;
 #[cfg(target_arch = "wasm32")]
 mod wasm;
 
+pub use enhance::enhance;
+pub use touchup::Stroke;
+
 /// A page outline: top-left, top-right, bottom-right, bottom-left, in pixels of the image it
 /// was found in.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Quad(pub [(f32, f32); 4]);
 
 /// What a scanned page looks like after straightening.
@@ -30,6 +39,9 @@ pub enum Filter {
     Grey,
     /// Black and white by a local (adaptive) threshold: shadows and uneven light drop out.
     BlackWhite,
+    /// Colour, with the paper made evenly white (shadows and uneven light removed), levels
+    /// stretched and strokes lightly sharpened (`enhance.rs`). The default since Scan 2.0.
+    Enhance,
 }
 
 impl Filter {
@@ -39,6 +51,7 @@ impl Filter {
             0 => Some(Self::Original),
             1 => Some(Self::Grey),
             2 => Some(Self::BlackWhite),
+            3 => Some(Self::Enhance),
             _ => None,
         }
     }
@@ -504,6 +517,7 @@ pub fn straighten(
 pub fn apply(image: RgbaImage, filter: Filter) -> RgbaImage {
     match filter {
         Filter::Original => image,
+        Filter::Enhance => enhance(image),
         Filter::Grey => to_rgba(&stretch(&grey(&image))),
         Filter::BlackWhite => {
             let g = stretch(&grey(&image));
@@ -522,6 +536,59 @@ pub fn apply(image: RgbaImage, filter: Filter) -> RgbaImage {
             to_rgba(&bw)
         }
     }
+}
+
+/// Turns `image` clockwise by `quarter_turns` × 90°.
+#[must_use]
+pub fn rotate(image: RgbaImage, quarter_turns: u32) -> RgbaImage {
+    match quarter_turns % 4 {
+        1 => rotate90(&image),
+        2 => rotate180(&image),
+        3 => rotate270(&image),
+        _ => image,
+    }
+}
+
+/// A brush stroke of the touch-up eraser in page-relative units: points in 0–1 of the
+/// straightened page (before rotation), radius as a share of its long side.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RelativeStroke {
+    pub radius: f32,
+    pub points: Vec<(f32, f32)>,
+}
+
+/// How a page is made from its photo: the outline, the filter, touch-ups and rotation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Edits {
+    pub filter: Filter,
+    pub strokes: Vec<RelativeStroke>,
+    pub quarter_turns: u32,
+}
+
+/// The page `quad` of `photo`, straightened to at most `max_pixels`, then filtered, touched up
+/// and rotated (in that order: the eraser samples the filtered paper). `None` when the outline
+/// is degenerate.
+#[must_use]
+pub fn render(photo: &RgbaImage, quad: &Quad, max_pixels: u64, edits: &Edits) -> Option<RgbaImage> {
+    let (w, h) = output_size(quad, max_pixels);
+    let mut page = straighten(photo, quad, w, h, edits.filter)?;
+    if !edits.strokes.is_empty() {
+        let long = w.max(h) as f32;
+        let strokes: Vec<Stroke> = edits
+            .strokes
+            .iter()
+            .map(|s| Stroke {
+                radius: s.radius * long,
+                points: s
+                    .points
+                    .iter()
+                    .map(|(x, y)| (x * w as f32, y * h as f32))
+                    .collect(),
+            })
+            .collect();
+        touchup::erase(&mut page, &strokes);
+    }
+    Some(rotate(page, edits.quarter_turns))
 }
 
 /// Luma (BT.601) of an RGBA image.
@@ -582,3 +649,6 @@ mod tests;
 
 #[cfg(test)]
 mod samples;
+
+#[cfg(test)]
+mod tests_scan2;

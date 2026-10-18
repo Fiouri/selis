@@ -14,7 +14,7 @@ impl Noise {
 
 /// A flat page (white, with dark text lines every 1/12 of its height) seen through `quad` on
 /// a darker, textured desk. Returns the RGBA photo.
-fn photo(w: u32, h: u32, quad: [(f32, f32); 4], seed: u32) -> RgbaImage {
+pub(crate) fn photo(w: u32, h: u32, quad: [(f32, f32); 4], seed: u32) -> RgbaImage {
     let (pw, ph) = (850.0f32, 1100.0f32);
     // Maps photo pixels back onto the page.
     let to_page =
@@ -56,7 +56,7 @@ fn assert_close(found: &Quad, expected: [(f32, f32); 4], tolerance: f32) {
     }
 }
 
-const TILTED: [(f32, f32); 4] = [
+pub(crate) const TILTED: [(f32, f32); 4] = [
     (210.0, 120.0),
     (790.0, 170.0),
     (860.0, 1020.0),
@@ -128,7 +128,7 @@ fn output_size_follows_the_longer_sides_and_the_cap() {
 
 /// Rows of the straightened page where the text lines are, measured at its left and right
 /// ends: a straight page has each line at the same height on both sides.
-fn line_rows(page: &GrayImage, x: u32) -> Vec<u32> {
+pub(crate) fn line_rows(page: &GrayImage, x: u32) -> Vec<u32> {
     let mut rows = Vec::new();
     let mut inside = false;
     for y in 0..page.height() {
@@ -189,7 +189,8 @@ fn black_and_white_drops_the_shading() {
 fn filters_by_code() {
     assert_eq!(Filter::from_code(0), Some(Filter::Original));
     assert_eq!(Filter::from_code(2), Some(Filter::BlackWhite));
-    assert_eq!(Filter::from_code(3), None);
+    assert_eq!(Filter::from_code(3), Some(Filter::Enhance));
+    assert_eq!(Filter::from_code(4), None);
 }
 
 #[test]

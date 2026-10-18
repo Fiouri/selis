@@ -10,5 +10,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json"
+  },
+  "devDependencies": {
+    "@selis/fixtures": "0.1.0"
   }
 }

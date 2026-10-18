@@ -1,4 +1,4 @@
-import type { KeptPage, Picture, Quad, ScanFilter, Still } from "@selis/scan";
+import type { KeptPage, PageEdits, Picture, Quad, ScanFilter, Still } from "@selis/scan";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ScanModule from "@selis/scan";
 import type * as ApiModule from "../../lib/api";
@@ -16,7 +16,7 @@ const client = {
   init: vi.fn<() => Promise<void>>(),
   still: vi.fn<(photo: unknown, maxPixels: number, previewSide: number) => Promise<Still>>(),
   preview: vi.fn<(filter: ScanFilter) => Promise<Picture>>(),
-  keep: vi.fn<(quad: Quad, filter: ScanFilter, maxPixels: number, thumbSide: number) => Promise<KeptPage>>(),
+  keep: vi.fn<(edits: PageEdits, maxPixels: number, thumbSide: number) => Promise<KeptPage>>(),
   drop: vi.fn<() => Promise<void>>(),
   terminate: vi.fn<() => void>(),
 };
@@ -48,7 +48,7 @@ const QUAD: Quad = [
 const doc = { id: "d1", title: "Scan" } as Document;
 
 async function capture(found: Quad | null = QUAD): Promise<boolean> {
-  client.still.mockResolvedValueOnce({ width: 300, height: 400, quad: found, preview: picture("image/jpeg") });
+  client.still.mockResolvedValueOnce({ width: 300, height: 400, quad: found, preview: picture("image/jpeg"), source: null });
   return useScan.getState().capture(() => Promise.resolve({ kind: "blob", blob: blob("image/jpeg") }));
 }
 
@@ -87,7 +87,7 @@ describe("scan session", () => {
     await keepPage("image/png");
     // The adjusted outline and the filter go to the worker; the page is capped at A4 300 dpi
     // or the device's limit, whichever is smaller.
-    expect(client.keep).toHaveBeenCalledWith(moved, "bw", 6_000_000, 360);
+    expect(client.keep).toHaveBeenCalledWith({ quad: moved, filter: "bw", strokes: [], turns: 0 }, 6_000_000, 360);
     expect(useScan.getState().phase).toEqual({ step: "camera" });
     expect(useScan.getState().pages).toHaveLength(1);
     expect(useScan.getState().pages[0]?.mime).toBe("image/png");

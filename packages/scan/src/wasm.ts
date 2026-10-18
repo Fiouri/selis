@@ -8,10 +8,43 @@
  * for random numbers). They are bound to functions that throw, so a call could not go
  * unnoticed.
  */
-import type { Quad } from "./geometry";
+import type { Point, Quad } from "./geometry";
 
-export const FILTERS = ["original", "grey", "bw"] as const;
+/** Filter codes of the module, by index (`Filter::from_code`). */
+export const FILTERS = ["original", "grey", "bw", "enhance"] as const;
 export type ScanFilter = (typeof FILTERS)[number];
+
+/** A touch-up eraser stroke: points in 0–1 of the straight page (before rotation), radius as a share of its long side. */
+export type Stroke = { readonly radius: number; readonly points: readonly Point[] };
+
+/** How a page is made from its photo (Scan 2.0, ADR 0032). */
+export type PageEdits = {
+  readonly quad: Quad;
+  readonly filter: ScanFilter;
+  readonly strokes: readonly Stroke[];
+  /** Clockwise quarter turns, 0–3. */
+  readonly turns: number;
+};
+
+/** Hint codes of `live::Hint`. */
+export const HINTS = ["none", "findPage", "moreLight", "moveCloser", "holdSteady"] as const;
+export type LiveHint = (typeof HINTS)[number];
+
+/** What one live frame says: the outline and the automatic-capture verdict. */
+export type LiveFrame = {
+  readonly quad: Quad | null;
+  /** Variance of the Laplacian over the outline's box. */
+  readonly sharpness: number;
+  /** Mean luma, 0–255. */
+  readonly luma: number;
+  /** The outline's share of the frame. */
+  readonly areaShare: number;
+  /** Steady progress towards an automatic capture, 0–1. */
+  readonly progress: number;
+  /** Capture now. */
+  readonly fire: boolean;
+  readonly hint: LiveHint;
+};
 
 export type StraightPage = { readonly width: number; readonly height: number; readonly rgba: Uint8ClampedArray<ArrayBuffer> };
 
@@ -19,10 +52,22 @@ type Exports = {
   memory: WebAssembly.Memory;
   scan_alloc: (len: number) => number;
   scan_free: (ptr: number, len: number) => void;
-  scan_detect: (rgba: number, width: number, height: number, out: number) => number;
+  scan_live: (rgba: number, width: number, height: number, nowMs: number, out: number) => number;
+  scan_auto_reset: () => void;
   scan_find_page: (rgba: number, width: number, height: number, out: number) => number;
   scan_filter: (rgba: number, width: number, height: number, filter: number) => number;
-  scan_straighten: (rgba: number, width: number, height: number, quad: number, maxPixels: number, filter: number, outSize: number) => number;
+  scan_render: (
+    rgba: number,
+    width: number,
+    height: number,
+    quad: number,
+    maxPixels: number,
+    filter: number,
+    edits: number,
+    editsLen: number,
+    turns: number,
+    outSize: number,
+  ) => number;
 };
 
 const trap = (name: string) => () => {
@@ -50,16 +95,36 @@ export function simdSupported(): boolean {
   }
 }
 
+/** `f32`s `scan_live` writes (`LIVE_OUT`). */
+const LIVE_OUT = 14;
+
+/** The strokes as the module reads them: count, then per stroke radius, point count, points. */
+export function encodeStrokes(strokes: readonly Stroke[]): Float32Array {
+  const length = 1 + strokes.reduce((n, s) => n + 2 + s.points.length * 2, 0);
+  const out = new Float32Array(length);
+  out[0] = strokes.length;
+  let i = 1;
+  for (const stroke of strokes) {
+    out[i++] = stroke.radius;
+    out[i++] = stroke.points.length;
+    for (const [x, y] of stroke.points) {
+      out[i++] = x;
+      out[i++] = y;
+    }
+  }
+  return out;
+}
+
 export class ScanModule {
   private readonly x: Exports;
   /** A reused buffer for live frames (they all have the same size). */
   private frame = { ptr: 0, len: 0 };
-  /** 8 f32 (a quad) + 2 u32 (a size). */
+  /** `LIVE_OUT` f32 (a live frame: quad, measures, verdict) + 2 u32 (a size). */
   private readonly scratch: number;
 
   private constructor(exports: Exports) {
     this.x = exports;
-    this.scratch = this.x.scan_alloc(40);
+    this.scratch = this.x.scan_alloc((LIVE_OUT + 2) * 4);
     if (!this.scratch) throw new Error("selis-scan: out of memory");
   }
 
@@ -100,14 +165,33 @@ export class ScanModule {
     return ptr;
   }
 
-  /** The page in a small live frame (about 320 px on the long side), in frame pixels. */
-  detect(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number): Quad | null {
+  /**
+   * One live frame (about 320 px on the long side) taken at `nowMs`: the page outline in frame
+   * pixels and the automatic-capture verdict. The frame is copied into a buffer reused for
+   * every frame of that size.
+   */
+  live(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number, nowMs: number): LiveFrame {
     if (this.frame.len !== rgba.length) {
       if (this.frame.ptr) this.x.scan_free(this.frame.ptr, this.frame.len);
       this.frame = { ptr: this.alloc(rgba.length), len: rgba.length };
     }
     this.bytes(this.frame.ptr, rgba.length).set(rgba);
-    return this.x.scan_detect(this.frame.ptr, width, height, this.scratch) ? this.readQuad() : null;
+    const found = this.x.scan_live(this.frame.ptr, width, height, nowMs, this.scratch) === 1;
+    const f = new Float32Array(this.x.memory.buffer, this.scratch, LIVE_OUT);
+    return {
+      quad: found ? this.readQuad() : null,
+      sharpness: f[8] ?? 0,
+      luma: f[9] ?? 0,
+      areaShare: f[10] ?? 0,
+      progress: f[11] ?? 0,
+      fire: f[12] === 1,
+      hint: HINTS[f[13] ?? 0] ?? "none",
+    };
+  }
+
+  /** Forgets the automatic-capture state (camera reopened, Retake, Auto switched on). */
+  resetAuto(): void {
+    this.x.scan_auto_reset();
   }
 
   /** The page in a full-size photo, sharpened at full size; in photo pixels. */
@@ -136,24 +220,42 @@ export class ScanModule {
   }
 
   /**
-   * Straightens the page `quad` of a full-size photo into an image of at most `maxPixels`
-   * and applies `filter`.
+   * Makes a page from a full-size photo: straightens `edits.quad` into an image of at most
+   * `maxPixels`, then applies the filter, the touch-up strokes and the rotation.
    */
-  straighten(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number, quad: Quad, maxPixels: number, filter: ScanFilter): StraightPage {
+  render(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number, edits: PageEdits, maxPixels: number): StraightPage {
     const ptr = this.alloc(rgba.length);
     this.bytes(ptr, rgba.length).set(rgba);
-    this.writeQuad(quad);
-    // The module takes (and frees) the photo buffer.
-    const out = this.x.scan_straighten(ptr, width, height, this.scratch, Math.floor(maxPixels), FILTERS.indexOf(filter), this.scratch + 32);
-    if (!out) throw new Error("selis-scan: straightening failed");
-    const size = new Uint32Array(this.x.memory.buffer, this.scratch + 32, 2);
-    const w = size[0] ?? 0;
-    const h = size[1] ?? 0;
-    const len = w * h * 4;
-    const copy = new Uint8ClampedArray(len);
-    copy.set(this.bytes(out, len));
-    this.x.scan_free(out, len);
-    return { width: w, height: h, rgba: copy };
+    this.writeQuad(edits.quad);
+    const strokes = edits.strokes.length > 0 ? encodeStrokes(edits.strokes) : null;
+    const strokesPtr = strokes ? this.alloc(strokes.byteLength) : 0;
+    try {
+      if (strokes) new Float32Array(this.x.memory.buffer, strokesPtr, strokes.length).set(strokes);
+      // The module takes (and frees) the photo buffer.
+      const out = this.x.scan_render(
+        ptr,
+        width,
+        height,
+        this.scratch,
+        Math.floor(maxPixels),
+        FILTERS.indexOf(edits.filter),
+        strokesPtr,
+        strokes?.length ?? 0,
+        ((edits.turns % 4) + 4) % 4,
+        this.scratch + LIVE_OUT * 4,
+      );
+      if (!out) throw new Error("selis-scan: rendering the page failed");
+      const size = new Uint32Array(this.x.memory.buffer, this.scratch + LIVE_OUT * 4, 2);
+      const w = size[0] ?? 0;
+      const h = size[1] ?? 0;
+      const len = w * h * 4;
+      const copy = new Uint8ClampedArray(len);
+      copy.set(this.bytes(out, len));
+      this.x.scan_free(out, len);
+      return { width: w, height: h, rgba: copy };
+    } finally {
+      if (strokes) this.x.scan_free(strokesPtr, strokes.byteLength);
+    }
   }
 
   /** Bytes of linear memory (it grows to the largest photo and never shrinks). */

@@ -173,7 +173,7 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
         const frame: Frame | null = sampleFrame(el, canvas);
         if (frame) {
           try {
-            const { quad, ms } = await client.detect(frame.rgba, frame.width, frame.height);
+            const { quad, ms } = await client.live(frame.rgba, frame.width, frame.height, started);
             stats.detected(ms, quad !== null);
             if (stopped()) break;
             if (quad) {
