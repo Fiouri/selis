@@ -1,14 +1,17 @@
 /**
- * Scan (P4c, ADR 0016; docs/design/p4-ui-brief.md §7): full screen over the library. The
- * camera with the live page outline → "Adjust corners" (handles, filters) → the queue of
- * scanned pages → "Save as PDF" (a new document, opened in the viewer). Back steps out of
- * Adjust and the queue; leaving with scanned pages asks first. "Scan a photo" takes a photo already
- * on the device through the same Adjust step (no camera, e.g. the iOS simulator).
+ * Scan (P4c, ADR 0016; Scan 2.0, ADR 0032; docs/design/p4-ui-brief.md §7): full screen over the
+ * library. The camera with the live page outline (captured by itself when steady and sharp,
+ * "Auto") → "Adjust corners" (handles, filters) → back to the camera for the next page, with a
+ * strip of the pages so far → the review (reorder, open a page to edit it) → "Save as PDF" (a
+ * new document, opened in the viewer). An ID card session takes the front and the back and
+ * saves them on one A4 page. Back steps out of Adjust, a page and the review; leaving with
+ * scanned pages asks first. "Scan a photo" takes a photo already on the device through the
+ * same Adjust step (no camera, e.g. the iOS simulator).
  */
-import { placement, type Quad, scaleQuad, smoothQuad, svgPoints, toBox } from "@selis/scan";
-import { Button, IconButton } from "@selis/ui";
+import { type LiveHint, placement, type Quad, scaleQuad, smoothQuad, svgPoints, toBox } from "@selis/scan";
+import { Button, IconButton, Segmented } from "@selis/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { CameraOff, ImageUp, Images, Settings, X, Zap, ZapOff } from "lucide-react";
+import { CameraOff, ChevronLeft, ImageUp, Images, Settings, X, Zap, ZapOff } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -19,14 +22,16 @@ import { type Camera, CameraError, type CameraFailure, openBackCamera } from "..
 import { assetUrl } from "../../lib/files";
 import { platform } from "../../lib/platform";
 import { useNavigation, useOverlay, whenHistorySettled } from "../../state/navigation";
+import { useSettings } from "../../state/settings";
 import { nativePicker } from "../images/imagesStore";
 import { documentsKey } from "../library/queries";
 import { Busy } from "../transfer/parts";
 import { AdjustCorners } from "./AdjustCorners";
 import { type Frame, photoStill, sampleFrame, takeStill } from "./capture";
+import { ScanPageEditor } from "./ScanPageEditor";
 import { ScanQueue } from "./ScanQueue";
 import { scanStats } from "./scanStats";
-import { stillPixels, useScan } from "./scanStore";
+import { ID_SIDES, type ScanMode, stillPixels, useScan } from "./scanStore";
 
 /** Live detection rate cap: enough for a steady outline, light on the battery. */
 const DETECT_INTERVAL_MS = 66;
@@ -34,8 +39,19 @@ const DETECT_INTERVAL_MS = 66;
 const JUMP_SHARE = 0.08;
 /** Frames without a page before the outline is hidden. */
 const MISSES_TO_HIDE = 4;
+/** The steady-progress ring: radius and stroke (px). */
+const RING_R = 24;
+const RING_STROKE = 4;
+const RING_LENGTH = 2 * Math.PI * RING_R;
 
 type CameraStatus = "starting" | "live" | CameraFailure;
+
+const HINT_KEYS: Partial<Record<LiveHint, string>> = {
+  findPage: "scan.hint",
+  moreLight: "scan.hintMoreLight",
+  moveCloser: "scan.hintMoveCloser",
+  holdSteady: "scan.hintHoldSteady",
+};
 
 function today(locale: string): string {
   return new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -50,6 +66,11 @@ function useVisible(): boolean {
     return () => document.removeEventListener("visibilitychange", onChange);
   }, []);
   return visible;
+}
+
+/** A short tick when a page is captured (Android; nothing elsewhere). */
+function captureHaptic(): void {
+  if (platform === "android") void api.scanHaptic().catch(() => undefined);
 }
 
 /**
@@ -98,25 +119,39 @@ function usePickScanPhoto(onPhoto: (blob: Blob) => void, onFailed: () => void): 
   };
 }
 
-function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; onClose: () => void }) {
+const onDark = "text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!";
+
+function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () => void; onClose: () => void; onSave: () => void }) {
   const { t } = useTranslation();
   const phase = useScan((s) => s.phase);
   const pages = useScan((s) => s.pages);
   const client = useScan((s) => s.client);
   const capture = useScan((s) => s.capture);
   const showQueue = useScan((s) => s.showQueue);
+  const mode = useScan((s) => s.mode);
+  const setMode = useScan((s) => s.setMode);
+  const retaking = useScan((s) => s.retaking);
+  const cancelRetake = useScan((s) => s.cancelRetake);
+  const full = useScan((s) => s.full);
+  const auto = useSettings((s) => s.scanAuto);
+  const setPreference = useSettings((s) => s.setPreference);
   const visible = useVisible();
   const video = useRef<HTMLVideoElement>(null);
   const box = useRef<HTMLDivElement>(null);
+  const strip = useRef<HTMLUListElement>(null);
   const camera = useRef<Camera | null>(null);
   const [status, setStatus] = useState<CameraStatus>("starting");
   const [torch, setTorch] = useState<{ available: boolean; on: boolean }>({ available: false, on: false });
   const [outline, setOutline] = useState<{ quad: Quad; frame: { width: number; height: number } } | null>(null);
+  const [live, setLive] = useState<{ progress: number; hint: LiveHint }>({ progress: 0, hint: "none" });
+  const [announce, setAnnounce] = useState("");
   const [boxSize, setBoxSize] = useState({ width: 0, height: 0 });
   const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
   const [retry, setRetry] = useState(0);
+  const [fullDismissed, setFullDismissed] = useState(false);
   const capturing = phase.step === "capturing";
   const wanted = (phase.step === "camera" || capturing) && visible;
+  const blocked = full && !retaking;
 
   // The camera runs only while this view is up and the app is in the foreground.
   useEffect(() => {
@@ -144,6 +179,7 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
       camera.current?.stop();
       camera.current = null;
       setOutline(null);
+      setLive({ progress: 0, hint: "none" });
     };
   }, [wanted, retry]);
 
@@ -155,7 +191,36 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
     return () => observer.disconnect();
   }, []);
 
-  // Live page detection: one frame at a time in the scan worker, at most ~15 a second.
+  // The newest page in the strip is in view.
+  useEffect(() => {
+    const el = strip.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [pages.length]);
+
+  const onShutter = async (automatic = false) => {
+    const cam = camera.current;
+    const el = video.current;
+    const scan = useScan.getState();
+    if (!cam || !el || !client || scan.phase.step !== "camera") return;
+    captureHaptic();
+    if (automatic) {
+      setAnnounce(t("scan.captured"));
+      // Local only (logcat), read by the device checks (scan.sh).
+      console.info("[selis:perf] scan auto-capture");
+    }
+    const ok = await capture(() => takeStill(cam.track, el, stillPixels(), !client.canvasInWorker));
+    if (!ok && useScan.getState().phase.step === "camera") useToast.getState().show(t("scan.captureFailed"), "error");
+  };
+  // The detection loop reads the latest values without restarting.
+  const shutterRef = useRef(onShutter);
+  const autoRef = useRef(auto && !blocked);
+  useEffect(() => {
+    shutterRef.current = onShutter;
+    autoRef.current = auto && !blocked;
+  });
+
+  // Live page detection and the automatic-capture verdict: one frame at a time in the scan
+  // worker, at most ~15 a second. The canvas (and the worker's frame buffer) is reused.
   useEffect(() => {
     const el = video.current;
     if (status !== "live" || phase.step !== "camera" || !client || !el) return;
@@ -173,17 +238,20 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
         const frame: Frame | null = sampleFrame(el, canvas);
         if (frame) {
           try {
-            const { quad, ms } = await client.live(frame.rgba, frame.width, frame.height, started);
-            stats.detected(ms, quad !== null);
+            const result = await client.live(frame.rgba, frame.width, frame.height, started);
+            stats.detected(result.ms, result.quad !== null);
             if (stopped()) break;
-            if (quad) {
+            if (result.quad) {
               misses = 0;
-              previous = smoothQuad(previous, quad, Math.max(frame.width, frame.height) * JUMP_SHARE);
+              previous = smoothQuad(previous, result.quad, Math.max(frame.width, frame.height) * JUMP_SHARE);
               setOutline({ quad: previous, frame: { width: frame.width, height: frame.height } });
             } else if (++misses >= MISSES_TO_HIDE) {
               previous = null;
               setOutline(null);
             }
+            setLive({ progress: autoRef.current ? result.progress : 0, hint: result.hint });
+            // The tracker fires once per page; the capture moves the session on (and ends this loop).
+            if (result.fire && autoRef.current) void shutterRef.current(true);
           } catch {
             // A frame that could not be checked (the worker is still starting, or closing):
             // try the next one; a closed session stops the loop through `stopped`.
@@ -199,14 +267,6 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
       canvas.width = 0;
     };
   }, [status, phase.step, client]);
-
-  const onShutter = async () => {
-    const cam = camera.current;
-    const el = video.current;
-    if (!cam || !el || !client || phase.step !== "camera") return;
-    const ok = await capture(() => takeStill(cam.track, el, stillPixels(), !client.canvasInWorker));
-    if (!ok) useToast.getState().show(t("scan.captureFailed"), "error");
-  };
 
   const scanPhoto = usePickScanPhoto(
     (blob) => {
@@ -225,6 +285,12 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
     if (await cam.setTorch(next)) setTorch({ available: true, on: next });
   };
 
+  const onAuto = () => {
+    const next = !auto;
+    if (next) void client?.resetAuto().catch(() => undefined);
+    void setPreference("scanAuto", next);
+  };
+
   const shown =
     outline && videoSize.width > 0 && boxSize.width > 0
       ? toBox(
@@ -232,8 +298,18 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
           placement(videoSize, boxSize, "cover"),
         )
       : null;
+  const centre = shown ? shown.reduce<[number, number]>((c, p) => [c[0] + p[0] / 4, c[1] + p[1] / 4], [0, 0]) : null;
   const last = pages[pages.length - 1];
   const failed = status === "denied" || status === "unavailable";
+  const retakingIndex = retaking ? pages.findIndex((p) => p.id === retaking) : -1;
+  const idSide = mode === "idcard" ? (retaking ? retakingIndex : pages.length) : -1;
+  // "Hold steady" only matters when the camera is to capture by itself.
+  const hintKey = live.hint === "holdSteady" && !auto ? undefined : HINT_KEYS[live.hint];
+  const offerTorch = live.hint === "moreLight" && torch.available && !torch.on;
+  const modes: { value: ScanMode; label: string }[] = [
+    { value: "document", label: t("scan.modeDocument") },
+    { value: "idcard", label: t("scan.modeIdCard") },
+  ];
 
   return (
     <div className="flex h-full flex-col bg-[#0c0c0f] text-[#f4f4f6]" data-testid="scan-camera" data-camera={status}>
@@ -241,18 +317,38 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
         className="flex shrink-0 items-center gap-1 px-1"
         style={{ paddingTop: "var(--safe-top)", height: "calc(var(--safe-top) + 52px)" }}
       >
-        <IconButton label={t("scan.close")} icon={<X size={22} strokeWidth={1.75} />} onClick={onClose} className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!" />
-        <h1 className="min-w-0 flex-1 truncate text-[17px] font-semibold">{t("scan.title")}</h1>
+        {retaking ? (
+          <IconButton label={t("scan.cancelRetake")} icon={<ChevronLeft size={22} strokeWidth={1.75} />} onClick={cancelRetake} className={onDark} data-testid="scan-cancel-retake" />
+        ) : (
+          <IconButton label={t("scan.close")} icon={<X size={22} strokeWidth={1.75} />} onClick={onClose} className={onDark} />
+        )}
+        <h1 className="min-w-0 flex-1 truncate text-[17px] font-semibold">
+          {retaking ? t("scan.retaking", { number: retakingIndex + 1 }) : t("scan.title")}
+        </h1>
         {scanPhoto.input}
         <IconButton
           label={t("scan.fromPhoto")}
           icon={<ImageUp size={22} strokeWidth={1.75} />}
           onClick={scanPhoto.pick}
-          disabled={capturing || !client}
-          className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!"
+          disabled={capturing || !client || blocked}
+          className={onDark}
           data-testid="scan-from-photo"
         />
-        <span className="px-3 text-sm tabular-nums text-[#c9c9d1]" data-testid="scan-count">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={auto}
+          onClick={onAuto}
+          className={`selis-focus flex h-11 shrink-0 items-center rounded-full px-1 text-[13px] font-semibold`}
+          data-testid={auto ? "scan-auto-on" : "scan-auto-off"}
+        >
+          <span className={`rounded-full px-2.5 py-1 ${auto ? "bg-accent-9 text-accent-contrast" : "border border-[#ffffff]/50 text-[#f4f4f6]"}`}>{t("scan.auto")}</span>
+          {/* Spoken with the label; not a title (device tests find the switch by its test id). */}
+          <span className="sr-only">
+            {t("scan.autoLabel")}
+          </span>
+        </button>
+        <span className="px-2 text-sm tabular-nums text-[#c9c9d1]" data-testid="scan-count">
           {t("scan.count", { count: pages.length })}
         </span>
       </header>
@@ -270,12 +366,74 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
         {shown ? (
           <svg className="pointer-events-none absolute inset-0 size-full" aria-hidden="true" data-testid="scan-outline">
             <polygon points={svgPoints(shown)} fill="var(--accent-9)" fillOpacity={0.2} stroke="var(--accent-9)" strokeWidth={2} strokeLinejoin="round" />
+            {centre && live.progress > 0 && !capturing ? (
+              <g data-testid="scan-progress" data-progress={live.progress.toFixed(2)}>
+                <circle cx={centre[0]} cy={centre[1]} r={RING_R} fill="#000000" fillOpacity={0.35} stroke="#ffffff" strokeOpacity={0.35} strokeWidth={RING_STROKE} />
+                <circle
+                  cx={centre[0]}
+                  cy={centre[1]}
+                  r={RING_R}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={RING_STROKE}
+                  strokeLinecap="round"
+                  strokeDasharray={RING_LENGTH}
+                  strokeDashoffset={RING_LENGTH * (1 - live.progress)}
+                  transform={`rotate(-90 ${String(centre[0])} ${String(centre[1])})`}
+                  className="transition-[stroke-dashoffset] duration-[66ms] ease-linear motion-reduce:transition-none"
+                />
+              </g>
+            ) : null}
           </svg>
         ) : null}
-        {status === "live" && !shown && !capturing ? (
-          <p className="absolute inset-x-0 bottom-4 mx-auto w-fit rounded-full bg-[#000000]/60 px-3 py-1 text-[13px]" data-testid="scan-hint">
-            {t("scan.hint")}
+        {status === "live" && pages.length === 0 && !retaking && !capturing ? (
+          <div className="absolute inset-x-0 top-3 mx-auto w-[240px] rounded-[12px] bg-[#000000]/55" data-testid="scan-mode">
+            <Segmented options={modes} value={mode} onChange={setMode} label={t("scan.mode")} idPrefix="scan-mode" />
+          </div>
+        ) : null}
+        {status === "live" && idSide >= 0 && idSide < ID_SIDES && !capturing ? (
+          <p
+            className={`absolute inset-x-0 mx-auto w-fit rounded-full bg-[#000000]/60 px-3 py-1 text-[13px] font-semibold ${pages.length === 0 && !retaking ? "top-[64px]" : "top-3"}`}
+            data-testid="scan-id-side"
+          >
+            {t(idSide === 0 ? "scan.idFront" : "scan.idBack")}
           </p>
+        ) : null}
+        {status === "live" && !capturing && hintKey && !(live.hint === "findPage" && shown) ? (
+          offerTorch ? (
+            <button
+              type="button"
+              onClick={() => void onTorch()}
+              className="selis-focus absolute inset-x-0 bottom-[76px] mx-auto flex min-h-11 w-fit items-center gap-2 rounded-full bg-[#000000]/70 px-4 text-[13px]"
+              data-testid="scan-hint"
+              data-hint={live.hint}
+            >
+              <Zap size={18} strokeWidth={1.75} aria-hidden="true" />
+              {t(hintKey)} · {t("scan.flashOn")}
+            </button>
+          ) : (
+            <p className="absolute inset-x-0 bottom-[76px] mx-auto w-fit rounded-full bg-[#000000]/60 px-3 py-1 text-[13px]" data-testid="scan-hint" data-hint={live.hint}>
+              {t(hintKey)}
+            </p>
+          )
+        ) : null}
+        {pages.length > 0 ? (
+          <button
+            type="button"
+            className="selis-focus absolute inset-x-0 bottom-0 h-16 bg-[#000000]/45 px-3"
+            onClick={showQueue}
+            disabled={capturing}
+            data-testid="scan-strip"
+          >
+            <span className="sr-only">{t("scan.strip", { count: pages.length })}</span>
+            <ul ref={strip} className="flex h-full items-center gap-2 overflow-x-hidden" aria-hidden="true">
+              {pages.map((page) => (
+                <li key={page.id} className="size-12 shrink-0 overflow-hidden rounded-[6px] border border-[#ffffff]/40">
+                  <img src={page.thumb} alt="" className="size-full object-cover" />
+                </li>
+              ))}
+            </ul>
+          </button>
         ) : null}
         {capturing ? (
           <div className="absolute inset-0 flex items-center justify-center bg-[#000000]/50">
@@ -314,12 +472,15 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
               >
                 {t("scan.fromPhoto")}
               </Button>
-              <Button variant="ghost" className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!" icon={<Images size={20} strokeWidth={1.75} />} onClick={onChoosePhotos} data-testid="scan-choose-photos">
+              <Button variant="ghost" className={onDark} icon={<Images size={20} strokeWidth={1.75} />} onClick={onChoosePhotos} data-testid="scan-choose-photos">
                 {t("scan.choosePhotos")}
               </Button>
             </div>
           </div>
         ) : null}
+        <p className="sr-only" aria-live="polite">
+          {announce}
+        </p>
       </div>
       <footer className="flex shrink-0 items-center justify-between px-6" style={{ height: "calc(var(--safe-bottom) + 96px)", paddingBottom: "var(--safe-bottom)" }}>
         <div className="flex size-11 items-center justify-center">
@@ -342,7 +503,7 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
           type="button"
           className="selis-focus flex size-[72px] items-center justify-center rounded-full border-4 border-[#ffffff] disabled:opacity-40"
           onClick={() => void onShutter()}
-          disabled={status !== "live" || capturing || !client}
+          disabled={status !== "live" || capturing || !client || blocked}
           data-testid="scan-shutter"
         >
           {/* A visually hidden name, not aria-label: device tests find the button by its text. */}
@@ -356,12 +517,30 @@ function CameraView({ onChoosePhotos, onClose }: { onChoosePhotos: () => void; o
               icon={torch.on ? <Zap size={22} strokeWidth={1.75} /> : <ZapOff size={22} strokeWidth={1.75} />}
               onClick={() => void onTorch()}
               aria-pressed={torch.on}
-              className="text-[#f4f4f6]! hover:bg-[#ffffff]/10! active:bg-[#ffffff]/20!"
+              className={onDark}
               data-testid="scan-flash"
             />
           ) : null}
         </div>
       </footer>
+      <ConfirmDialog
+        open={blocked && !fullDismissed && phase.step === "camera"}
+        title={t("scan.fullTitle")}
+        message={t("scan.fullBody", { count: pages.length })}
+        confirmLabel={t("scan.saveNow")}
+        cancelLabel={t("scan.reviewPages")}
+        onConfirm={() => {
+          setFullDismissed(true);
+          showQueue();
+          onSave();
+        }}
+        onCancel={() => {
+          setFullDismissed(true);
+          showQueue();
+        }}
+        onDismiss={() => setFullDismissed(true)}
+        testId="scan-full"
+      />
     </div>
   );
 }
@@ -370,9 +549,12 @@ export function ScanScreen({ onChoosePhotos }: { onChoosePhotos: () => void }) {
   const { t, i18n } = useTranslation();
   const phase = useScan((s) => s.phase);
   const pageCount = useScan((s) => s.pages.length);
+  const mode = useScan((s) => s.mode);
   const close = useScan((s) => s.close);
   const retake = useScan((s) => s.retake);
   const backToCamera = useScan((s) => s.backToCamera);
+  const showQueue = useScan((s) => s.showQueue);
+  const closePage = useScan((s) => s.closePage);
   const save = useScan((s) => s.save);
   const openDocument = useNavigation((s) => s.openDocument);
   const showToast = useToast((s) => s.show);
@@ -386,15 +568,21 @@ export function ScanScreen({ onChoosePhotos }: { onChoosePhotos: () => void }) {
     else close();
   };
   // One history entry for the screen (released while the discard question is up), one each
-  // for Adjust and the queue: system back steps out of them first.
+  // for Adjust, the review and a page: system back steps out of them first.
   useOverlay(open && !confirming, requestClose);
   useOverlay(phase.step === "adjust", retake);
-  useOverlay(phase.step === "queue", backToCamera);
+  useOverlay(phase.step === "queue", () => {
+    if (mode === "idcard" && pageCount >= ID_SIDES) requestClose();
+    else backToCamera();
+  });
+  useOverlay(phase.step === "page", () => void closePage());
 
   if (!open) return null;
 
   const onSave = async () => {
-    const result = await save(t("scan.documentTitle", { date: today(i18n.language) }));
+    if (useScan.getState().phase.step !== "queue") showQueue();
+    const title = mode === "idcard" ? t("scan.idCardTitle", { date: today(i18n.language) }) : t("scan.documentTitle", { date: today(i18n.language) });
+    const result = await save(title);
     if (result.kind === "created") {
       void queryClient.invalidateQueries({ queryKey: documentsKey });
       showToast(t("scan.saved"));
@@ -407,11 +595,13 @@ export function ScanScreen({ onChoosePhotos }: { onChoosePhotos: () => void }) {
 
   let body;
   if (phase.step === "adjust" || phase.step === "keeping") body = <AdjustCorners />;
-  else if (phase.step === "queue" || phase.step === "saving") body = <ScanQueue onSave={() => void onSave()} />;
+  else if (phase.step === "page") body = <ScanPageEditor />;
+  else if (phase.step === "queue" || phase.step === "saving") body = <ScanQueue onSave={() => void onSave()} onClose={requestClose} />;
   else
     body = (
       <CameraView
         onClose={requestClose}
+        onSave={() => void onSave()}
         onChoosePhotos={() => {
           close();
           onChoosePhotos();

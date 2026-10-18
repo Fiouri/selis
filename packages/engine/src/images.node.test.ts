@@ -8,9 +8,9 @@ import { createRequire } from "node:module";
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { makePhoto, PHOTO_QUADRANTS, PHOTO_SECRETS } from "@selis/fixtures";
-import { checkSample, findInFile, pdfjsPageCount, pdfjsRender, type Raster } from "@selis/fixtures/oracle";
+import { checkSample, findInFile, pdfjsImagePlacements, pdfjsPageCount, pdfjsRender, type Raster } from "@selis/fixtures/oracle";
 import { beforeAll, describe, expect, it } from "vitest";
-import { ImageFormatError, ImagePdfBuilder, imageMatrix, inspectJpeg, orientedSize, pageLayout } from "./images";
+import { A4_EXACT, idCardSheet, ImageFormatError, ImagePdfBuilder, imageMatrix, inspectJpeg, orientedSize, pageLayout } from "./images";
 
 const require = createRequire(import.meta.url);
 let pdf: WrappedPdfiumModule;
@@ -185,5 +185,72 @@ describe("images → PDF", () => {
     expect(builder.pageCount).toBe(1);
     const bytes = new Uint8Array(await builder.finish());
     expect(await pdfjsPageCount(bytes)).toBe(1);
+  });
+
+  it("an ID card sheet: A4 with both sides at 85.6 × 54 mm, centred one above the other", async () => {
+    const front = await makePhoto({ width: 856, height: 540, orientation: 1 });
+    const back = await makePhoto({ width: 856, height: 540, orientation: 6 });
+    const sheet = idCardSheet([
+      { width: 856, height: 540 },
+      { width: 856, height: 540 },
+    ]);
+    const builder = await ImagePdfBuilder.create(engine, pdf);
+    builder.addSheet(sheet.width, sheet.height, [
+      { input: { kind: "jpeg", bytes: ab(front) }, box: sheet.boxes[0]! },
+      { input: { kind: "jpeg", bytes: ab(back) }, box: sheet.boxes[1]! },
+    ]);
+    const bytes = new Uint8Array(await builder.finish());
+    await checkSample("idcard.pdf", bytes);
+    expect(await pdfjsPageCount(bytes)).toBe(1);
+    // As pdf.js reads the drawing: exactly the ID-1 boxes.
+    const placed = await pdfjsImagePlacements(bytes, 0);
+    expect(placed.images).toHaveLength(2);
+    placed.images.forEach((box, i) => {
+      expect(box.width).toBeCloseTo(sheet.boxes[i]!.width, 2);
+      expect(box.height).toBeCloseTo(sheet.boxes[i]!.height, 2);
+      expect(box.y).toBeCloseTo(sheet.boxes[i]!.y, 2);
+    });
+    const img = await pdfjsRender(bytes, 0, 2);
+    const mm = (pt: number) => (pt * 25.4) / 72;
+    expect(mm(img.width / img.scale)).toBeCloseTo(210, 0);
+    expect(mm(img.height / img.scale)).toBeCloseTo(297, 0);
+    // The non-white extent of each half of the page is one side.
+    const extent = (fromY: number, toY: number) => {
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -1, -1];
+      for (let y = Math.round(fromY * img.height); y < Math.round(toY * img.height); y++) {
+        for (let x = 0; x < img.width; x++) {
+          const o = (y * img.width + x) * 4;
+          if ((img.data[o] ?? 255) < 235 || (img.data[o + 1] ?? 255) < 235 || (img.data[o + 2] ?? 255) < 235) {
+            x0 = Math.min(x0, x);
+            x1 = Math.max(x1, x);
+            y0 = Math.min(y0, y);
+            y1 = Math.max(y1, y);
+          }
+        }
+      }
+      return { x: mm(x0 / img.scale), y: mm(y0 / img.scale), w: mm((x1 + 1 - x0) / img.scale), h: mm((y1 + 1 - y0) / img.scale) };
+    };
+    const top = extent(0, 0.5);
+    const bottom = extent(0.5, 1);
+    for (const side of [top, bottom]) {
+      expect(Math.abs(side.w - 85.6)).toBeLessThanOrEqual(1);
+      expect(Math.abs(side.h - 54)).toBeLessThanOrEqual(1);
+      // Centred across the page.
+      expect(Math.abs(side.x + side.w / 2 - 105)).toBeLessThanOrEqual(1);
+    }
+    // Centred as a pair, 10 mm apart.
+    expect(Math.abs(bottom.y - (top.y + top.h) - 10)).toBeLessThanOrEqual(1);
+    expect(Math.abs((top.y + bottom.y + bottom.h) / 2 - 148.5)).toBeLessThanOrEqual(1);
+  });
+
+  it("an ID card side taller than wide gets an upright ID-1 box", () => {
+    const sheet = idCardSheet([
+      { width: 540, height: 856 },
+      { width: 856, height: 540 },
+    ]);
+    expect(sheet.width).toBeCloseTo(A4_EXACT.width, 3);
+    expect(sheet.boxes[0]!.width).toBeCloseTo((54 * 72) / 25.4, 3);
+    expect(sheet.boxes[0]!.height).toBeCloseTo((85.6 * 72) / 25.4, 3);
+    expect(sheet.boxes[0]!.y).toBeGreaterThan(sheet.boxes[1]!.y);
   });
 });

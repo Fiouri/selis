@@ -49,7 +49,7 @@ export async function openWith(page: Page, files: ReadonlyArray<{ file: string; 
 /** Theme + language before the first frame (boot settings and the mock database). */
 export async function presetSettings(
   page: Page,
-  settings: { theme?: string; locale?: string; nightMode?: boolean },
+  settings: { theme?: string; locale?: string; nightMode?: boolean; scanAuto?: boolean },
 ): Promise<void> {
   await page.addInitScript((s) => {
     const merged = { locale: "system", theme: "system", librarySort: "recent", libraryView: "grid", nightMode: false, ...s };

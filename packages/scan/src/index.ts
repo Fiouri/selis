@@ -15,6 +15,8 @@ export {
   smoothQuad,
   svgPoints,
   toBox,
+  turn,
+  unturn,
   withCorner,
 } from "./geometry";
 export { downscale } from "./pixels";

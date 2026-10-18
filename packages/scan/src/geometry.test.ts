@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampPoint, defaultQuad, fromBox, isConvex, mapQuad, placement, type Quad, smoothQuad, svgPoints, toBox, withCorner } from "./geometry";
+import { clampPoint, defaultQuad, fromBox, isConvex, mapQuad, placement, type Quad, smoothQuad, svgPoints, toBox, turn, unturn, withCorner } from "./geometry";
 
 const square: Quad = [
   [0, 0],
@@ -56,5 +56,17 @@ describe("outlines", () => {
 
   it("renders SVG points", () => {
     expect(svgPoints(square)).toBe("0.0,0.0 10.0,0.0 10.0,10.0 0.0,10.0");
+  });
+
+  it("turns page points back and forth with the page", () => {
+    // Clockwise: the page's top-left corner shows at the top right after one turn.
+    expect(turn([0, 0], 1)).toEqual([1, 0]);
+    expect(turn([0.2, 0.1], 1)).toEqual([0.9, 0.2]);
+    for (const turns of [0, 1, 2, 3, 5, -1]) {
+      const p: [number, number] = [0.3, 0.8];
+      const back = unturn(turn(p, turns), turns);
+      expect(back[0]).toBeCloseTo(p[0], 9);
+      expect(back[1]).toBeCloseTo(p[1], 9);
+    }
   });
 });

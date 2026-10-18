@@ -129,6 +129,7 @@ export const api = {
     unwrap(ipc().long("share_export", (requestId) => commands.shareExport(requestId, uploadId, name, mime), PICK)),
   // Document scan (P4c, ADR 0016): Android only; the UI offers it there.
   openAppSettings: () => unwrap(ipc().short("open_app_settings", () => commands.openAppSettings(), READ)),
+  scanHaptic: () => unwrap(ipc().short("scan_haptic", () => commands.scanHaptic(), READ)),
   listSignatures: () => unwrap(ipc().short("list_signatures", () => commands.listSignatures(), READ)),
   // Keyed by the UI-chosen id: a repeat returns the stored signature.
   saveSignature: (id: string, kind: SignatureKind, pngBase64: string) =>

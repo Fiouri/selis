@@ -245,6 +245,11 @@ export const commands = {
 	/**  Opens this app's page in the system settings (permissions). */
 	openAppSettings: () => typedError<null, CommandError>(__TAURI_INVOKE("open_app_settings")),
 	/**
+	 *  A short confirm haptic for a captured page (Android: the view's haptic feedback, no
+	 *  permission; nothing elsewhere).
+	 */
+	scanHaptic: () => typedError<null, CommandError>(__TAURI_INVOKE("scan_haptic")),
+	/**
 	 *  The state of a long-running request: still running, its final result, or
 	 *  unknown (never received, or expired). Read-only; a fresh call the UI makes
 	 *  when the original reply did not arrive.
@@ -498,6 +503,8 @@ export type Settings = {
 	historyLimitMb: number,
 	/**  App lock (biometric gate lands later; the choice is stored now). */
 	appLock: boolean,
+	/**  Scan: capture automatically when the page is steady and sharp (ADR 0032). */
+	scanAuto: boolean,
 };
 
 /**  Partial update; `None` fields are left unchanged. */
@@ -513,6 +520,7 @@ export type SettingsPatch = {
 	versionsPerDocument: number | null,
 	historyLimitMb: number | null,
 	appLock: boolean | null,
+	scanAuto: boolean | null,
 };
 
 export type Signature = {

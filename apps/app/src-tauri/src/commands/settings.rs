@@ -60,6 +60,8 @@ pub struct Settings {
     pub history_limit_mb: u32,
     /// App lock (biometric gate lands later; the choice is stored now).
     pub app_lock: bool,
+    /// Scan: capture automatically when the page is steady and sharp (ADR 0032).
+    pub scan_auto: bool,
 }
 
 impl Default for Settings {
@@ -77,6 +79,7 @@ impl Default for Settings {
             history_limit_mb: u32::try_from(retention.history_limit_bytes / (1024 * 1024))
                 .unwrap_or(200),
             app_lock: false,
+            scan_auto: true,
         }
     }
 }
@@ -105,6 +108,7 @@ pub struct SettingsPatch {
     pub versions_per_document: Option<u32>,
     pub history_limit_mb: Option<u32>,
     pub app_lock: Option<bool>,
+    pub scan_auto: Option<bool>,
 }
 
 const KEY_LOCALE: &str = "locale";
@@ -117,6 +121,7 @@ const KEY_RELAY_URL: &str = "relayUrl";
 const KEY_VERSIONS_PER_DOCUMENT: &str = "versionsPerDocument";
 const KEY_HISTORY_LIMIT_MB: &str = "historyLimitMb";
 const KEY_APP_LOCK: &str = "appLock";
+const KEY_SCAN_AUTO: &str = "scanAuto";
 
 pub(crate) fn load(library: &Library) -> CommandResult<Settings> {
     let mut settings = Settings::default();
@@ -140,6 +145,7 @@ pub(crate) fn load(library: &Library) -> CommandResult<Settings> {
                     .map(|u| u.to_string());
             }
             KEY_APP_LOCK => settings.app_lock = value.as_bool().unwrap_or_default(),
+            KEY_SCAN_AUTO => settings.scan_auto = value.as_bool().unwrap_or(true),
             KEY_VERSIONS_PER_DOCUMENT => {
                 if let Some(v) = in_range(&value, &VERSIONS_PER_DOCUMENT) {
                     settings.versions_per_document = v;
@@ -200,6 +206,7 @@ pub(crate) fn apply_patch(library: &Library, patch: SettingsPatch) -> CommandRes
         }
     }
     store(library, KEY_APP_LOCK, patch.app_lock)?;
+    store(library, KEY_SCAN_AUTO, patch.scan_auto)?;
     let retention_changed =
         patch.versions_per_document.is_some() || patch.history_limit_mb.is_some();
     store(
@@ -260,6 +267,7 @@ mod tests {
         let s = load(&lib).expect("load");
         assert_eq!((s.versions_per_document, s.history_limit_mb), (10, 200));
         assert!(!s.local_only && !s.app_lock && !s.night_mode);
+        assert!(s.scan_auto);
         assert_eq!(s.theme, ThemePref::System);
         // English first, whatever the device language; Greek is a choice in Settings.
         assert_eq!(s.locale, LocalePref::En);
@@ -314,6 +322,15 @@ mod tests {
         )
         .expect("patch");
         assert!(saved.local_only);
+        let manual = apply_patch(
+            &lib,
+            SettingsPatch {
+                scan_auto: Some(false),
+                ..SettingsPatch::default()
+            },
+        )
+        .expect("patch");
+        assert!(!manual.scan_auto && manual.local_only);
         assert_eq!(
             (saved.versions_per_document, saved.history_limit_mb),
             (20, 500)

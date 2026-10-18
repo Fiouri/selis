@@ -1,17 +1,17 @@
 /**
- * "Adjust corners" (P4c; docs/design/p4-ui-brief.md §7): the still with the page outline and
- * four handles (44 px targets, 20 px dots; a magnifier while dragging; arrow keys nudge),
- * the filter chips, and Retake / Keep. Keep straightens the page in the scan worker.
+ * "Adjust corners" (P4c; docs/design/p4-ui-brief.md §7; ADR 0032): the still with the page
+ * outline and four handles (44 px targets, 20 px dots; a magnifier while dragging; arrow keys
+ * nudge), the filter chips (Enhance first, the default), and Retake / Keep. Keep straightens
+ * the page in the scan worker. Opened from a page being edited, it is Cancel / Done instead.
  */
-import { clampPoint, fromBox, isConvex, placement, type Point, type ScanFilter, svgPoints, toBox, withCorner } from "@selis/scan";
+import { clampPoint, fromBox, isConvex, placement, type Point, svgPoints, toBox, withCorner } from "@selis/scan";
 import { Button, Chip } from "@selis/ui";
 import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Busy } from "../transfer/parts";
-import { useScan } from "./scanStore";
+import { FILTER_KEYS, FILTER_ORDER, ID_SIDES, useScan } from "./scanStore";
 
 const CORNERS = ["scan.cornerTopLeft", "scan.cornerTopRight", "scan.cornerBottomRight", "scan.cornerBottomLeft"] as const;
-const FILTER_KEYS: Record<Exclude<ScanFilter, "enhance">, string> = { original: "scan.filterOriginal", grey: "scan.filterGrey", bw: "scan.filterBw" };
 /** Magnifier: diameter (px) and zoom. */
 const LOUPE = 112;
 const ZOOM = 2.5;
@@ -19,7 +19,8 @@ const ZOOM = 2.5;
 export function AdjustCorners() {
   const { t } = useTranslation();
   const phase = useScan((s) => s.phase);
-  const pageNumber = useScan((s) => s.pages.length + 1);
+  const pages = useScan((s) => s.pages);
+  const mode = useScan((s) => s.mode);
   const setQuad = useScan((s) => s.setQuad);
   const setFilter = useScan((s) => s.setFilter);
   const retake = useScan((s) => s.retake);
@@ -39,6 +40,10 @@ export function AdjustCorners() {
   if (phase.step !== "adjust" && phase.step !== "keeping") return null;
   const { still } = phase;
   const keeping = phase.step === "keeping";
+  const editing = still.target.kind === "edit";
+  const index = still.target.kind === "new" ? pages.length : pages.findIndex((p) => still.target.kind !== "new" && p.id === still.target.id);
+  const label =
+    mode === "idcard" && index < ID_SIDES ? t(index === 0 ? "scan.sideFront" : "scan.sideBack") : t("scan.pageNumber", { number: Math.max(0, index) + 1 });
   const picture = { width: still.width, height: still.height };
   const at = placement(picture, size, "contain");
   const shown = toBox(still.quad, at);
@@ -104,7 +109,9 @@ export function AdjustCorners() {
         style={{ paddingTop: "var(--safe-top)", height: "calc(var(--safe-top) + 52px)" }}
       >
         <h1 className="min-w-0 flex-1 truncate text-[17px] font-semibold">{t("scan.adjustTitle")}</h1>
-        <span className="text-sm text-neutral-11 tabular-nums">{t("scan.pageNumber", { number: pageNumber })}</span>
+        <span className="text-sm text-neutral-11 tabular-nums" data-testid="scan-adjust-page">
+          {label}
+        </span>
       </header>
       <div ref={area} className="relative min-h-0 flex-1 touch-none overflow-hidden bg-neutral-3" data-testid="scan-adjust-area">
         {preview && size.width > 0 ? (
@@ -155,8 +162,8 @@ export function AdjustCorners() {
         <p className={`text-[13px] ${convex ? "text-neutral-11" : "text-danger-11"}`} role={convex ? undefined : "alert"} data-testid="scan-adjust-hint">
           {!convex ? t("scan.outlineInvalid") : still.detected ? t("scan.adjustHint") : t("scan.notFound")}
         </p>
-        <div role="radiogroup" aria-label={t("scan.filter")} className="flex gap-2" data-testid="scan-filters">
-          {(Object.keys(FILTER_KEYS) as Array<keyof typeof FILTER_KEYS>).map((filter) => (
+        <div role="radiogroup" aria-label={t("scan.filter")} className="-mx-5 flex gap-2 overflow-x-auto px-5" data-testid="scan-filters">
+          {FILTER_ORDER.map((filter) => (
             <Chip key={filter} kind="radio" selected={still.filter === filter} onClick={() => void setFilter(filter)} disabled={keeping} data-testid={`scan-filter-${filter}`}>
               {t(FILTER_KEYS[filter])}
             </Chip>
@@ -169,10 +176,10 @@ export function AdjustCorners() {
         ) : (
           <div className="grid grid-cols-2 gap-3">
             <Button variant="secondary" onClick={retake} data-testid="scan-retake">
-              {t("scan.retake")}
+              {editing ? t("scan.cancel") : t("scan.retake")}
             </Button>
             <Button onClick={() => void keep()} disabled={!convex} data-testid="scan-keep">
-              {t("scan.keep")}
+              {editing ? t("scan.done") : t("scan.keep")}
             </Button>
           </div>
         )}
