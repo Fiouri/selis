@@ -101,8 +101,9 @@ pub const SHARPNESS_MIN: f32 = 800.0;
 pub const STEADY_MS: f64 = 600.0;
 /// Most a corner may move between consecutive frames, as a share of the page's diagonal.
 pub const MAX_DRIFT: f32 = 0.02;
-/// After a capture, the next one waits until the outline is lost for this many frames…
-const REARM_MISSES: u32 = 3;
+/// After a capture, the next one waits until the outline has been gone this long (ms; a page
+/// is lifted and another put down — a few frames lost to glare or a slow frame are not that)…
+const REARM_LOST_MS: f64 = 1000.0;
 /// …or has moved this share of its diagonal away from the captured outline (a new page put
 /// down elsewhere; a corner snapping to clutter moves less), measured on a full median.
 const REARM_DRIFT: f32 = 0.25;
@@ -152,6 +153,8 @@ pub struct AutoCapture {
     /// The outline last captured, while waiting for the page to change.
     fired: Option<Quad>,
     misses: u32,
+    /// When the outline was last seen (ms), for the time it has been gone.
+    last_seen: Option<f64>,
     /// The camera has just (re)started: frames without an outline do not count as the page
     /// going away until an outline has been seen again.
     resuming: bool,
@@ -247,7 +250,10 @@ impl AutoCapture {
                 self.previous = None;
                 self.steady_since = None;
             }
-            if self.misses >= REARM_MISSES {
+            if self
+                .last_seen
+                .is_none_or(|seen| now_ms - seen >= REARM_LOST_MS)
+            {
                 self.fired = None;
             }
             let hint = if dark {
@@ -263,6 +269,7 @@ impl AutoCapture {
         };
         self.misses = 0;
         self.resuming = false;
+        self.last_seen = Some(now_ms);
         self.history[self.next] = *quad;
         self.next = (self.next + 1) % HISTORY;
         self.filled = (self.filled + 1).min(HISTORY);
