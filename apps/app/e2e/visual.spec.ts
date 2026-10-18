@@ -82,7 +82,8 @@ for (const lang of LANGS) {
     const c = CONTENT[lang];
     test.describe(`${lang} ${theme}`, () => {
       test.beforeEach(async ({ page }) => {
-        await presetSettings(page, { theme, locale: lang });
+        // The fake scan camera holds one steady page: automatic capture would take it mid-shot.
+        await presetSettings(page, { theme, locale: lang, scanAuto: false });
       });
 
       test(`library empty (${theme})`, async ({ page }) => {
@@ -573,6 +574,24 @@ for (const lang of LANGS) {
           .toBe(true);
         await settle(page);
         await expect(page).toHaveScreenshot(shot("scan-queue"));
+        await page.getByTestId("scan-page-open").nth(1).click();
+        await expect(page.getByTestId("scan-page-preview")).toBeVisible({ timeout: 20_000 });
+        await expect(page.getByTestId("scan-page-rendering")).toHaveCount(0, { timeout: 20_000 });
+        await expect.poll(() => page.getByTestId("scan-page-preview").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("scan-page"));
+      });
+
+      test(`scan: ID card camera (${theme})`, async ({ page }) => {
+        await useFakeScanCamera(page);
+        await page.goto("/");
+        await page.getByTestId("scan-empty").click();
+        await expect(page.getByTestId("scan-outline")).toBeVisible();
+        await page.getByTestId("scan-mode").getByRole("tab").nth(1).click();
+        await expect(page.getByTestId("scan-id-side")).toBeVisible();
+        await page.waitForTimeout(1500);
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("scan-idcard"));
       });
 
       test(`scan: camera denied (${theme})`, async ({ page }) => {

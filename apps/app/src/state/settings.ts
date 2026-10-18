@@ -24,7 +24,7 @@ type SettingsState = Settings & {
   setLibraryView: (view: LibraryView) => Promise<void>;
   setNightMode: (on: boolean) => Promise<void>;
   /** Any other stored preference (Settings screen rows). */
-  setPreference: <K extends "localOnly" | "appLock" | "versionsPerDocument" | "historyLimitMb">(
+  setPreference: <K extends "localOnly" | "appLock" | "versionsPerDocument" | "historyLimitMb" | "scanAuto">(
     key: K,
     value: Settings[K],
   ) => Promise<void>;
@@ -44,6 +44,7 @@ const DEFAULTS: Settings = {
   versionsPerDocument: 10,
   historyLimitMb: 200,
   appLock: false,
+  scanAuto: true,
 };
 
 const SORTS: readonly LibrarySort[] = ["recent", "name", "size", "lastOpened"];
@@ -65,6 +66,7 @@ function snapshot(s: Settings): Settings {
     versionsPerDocument: s.versionsPerDocument,
     historyLimitMb: s.historyLimitMb,
     appLock: s.appLock,
+    scanAuto: s.scanAuto,
   };
 }
 
@@ -86,6 +88,7 @@ export function parseBootSettings(raw: string | null): Settings {
         typeof parsed.versionsPerDocument === "number" ? parsed.versionsPerDocument : DEFAULTS.versionsPerDocument,
       historyLimitMb: typeof parsed.historyLimitMb === "number" ? parsed.historyLimitMb : DEFAULTS.historyLimitMb,
       appLock: parsed.appLock === true,
+      scanAuto: parsed.scanAuto !== false,
     };
   } catch {
     return DEFAULTS;
@@ -150,6 +153,7 @@ export const useSettings = create<SettingsState>()((set, get) => {
         versionsPerDocument: patch.versionsPerDocument ?? null,
         historyLimitMb: patch.historyLimitMb ?? null,
         appLock: patch.appLock ?? null,
+        scanAuto: patch.scanAuto ?? null,
       });
       set(saved);
       writeBootSettings(saved);
@@ -193,6 +197,7 @@ export const useSettings = create<SettingsState>()((set, get) => {
         versionsPerDocument: null,
         historyLimitMb: null,
         appLock: null,
+        scanAuto: null,
       });
       set(saved);
       writeBootSettings(saved);

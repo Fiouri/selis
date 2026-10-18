@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS: Settings = {
   versionsPerDocument: 10,
   historyLimitMb: 200,
   appLock: false,
+  scanAuto: true,
 };
 
 const files = new Map<string, File>();
@@ -473,6 +474,7 @@ function updateSettings(patch: SettingsPatch): Settings {
     next.relayUrl = url ? new URL(url).toString() : null;
   }
   if (patch.appLock !== null) next.appLock = patch.appLock;
+  if (patch.scanAuto !== null) next.scanAuto = patch.scanAuto;
   if (patch.versionsPerDocument !== null) next.versionsPerDocument = patch.versionsPerDocument;
   if (patch.historyLimitMb !== null) next.historyLimitMb = patch.historyLimitMb;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
@@ -593,6 +595,8 @@ export function installMockIpc(): void {
         return setDocumentTags(String(args.documentId), args.tagIds as string[]);
       case "share_document":
         return fail("unsupported", "no native share sheet in the browser");
+      case "scan_haptic":
+        return null;
       case "open_app_settings":
         return fail("unsupported", "no app settings in the browser");
       case "pending_opens":

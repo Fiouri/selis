@@ -195,6 +195,32 @@ export function pageLayout(width: number, height: number, size: PageSizeOption):
   return { width: pw, height: ph, box: { x: (pw - bw) / 2, y: (ph - bh) / 2, width: bw, height: bh } };
 }
 
+/** Points per millimetre. */
+const MM = 72 / 25.4;
+/** ISO A4 in points, exactly (the "a4" page size above rounds it). */
+export const A4_EXACT = { width: 210 * MM, height: 297 * MM } as const;
+/** ID-1 (ISO/IEC 7810: bank and ID cards), landscape, in points. */
+export const ID1 = { width: 85.6 * MM, height: 54 * MM } as const;
+/** Space between the two sides of an ID card on the sheet. */
+const ID_GAP = 10 * MM;
+
+/**
+ * An ID card's sides on one A4 page (ADR 0032): each at the ID-1 size (85.6 × 54 mm; 54 × 85.6
+ * for a side taller than wide), centred one above the other with 10 mm between. Boxes are page
+ * points, bottom-left origin, the first side on top.
+ */
+export function idCardSheet(sides: readonly { width: number; height: number }[]): { width: number; height: number; boxes: Box[] } {
+  const sizes = sides.map((s) => (s.height > s.width ? { width: ID1.height, height: ID1.width } : { width: ID1.width, height: ID1.height }));
+  const total = sizes.reduce((h, s) => h + s.height, 0) + ID_GAP * Math.max(0, sizes.length - 1);
+  let top = (A4_EXACT.height + total) / 2;
+  const boxes = sizes.map((s) => {
+    const box = { x: (A4_EXACT.width - s.width) / 2, y: top - s.height, width: s.width, height: s.height };
+    top -= s.height + ID_GAP;
+    return box;
+  });
+  return { width: A4_EXACT.width, height: A4_EXACT.height, boxes };
+}
+
 /** Pixel size of a page exported at `dpi` (page size in points). */
 export function exportPixels(page: { readonly width: number; readonly height: number }, dpi: number): { width: number; height: number } {
   return { width: Math.round((page.width * dpi) / 72), height: Math.round((page.height * dpi) / 72) };
@@ -224,6 +250,15 @@ function context(engine: PdfiumNative, doc: PdfDocumentObject): DocCtx {
 }
 
 let builderId = 0;
+
+/** An image read and ready to embed. */
+type Prepared = {
+  readonly input: ImageInput;
+  /** JPEG data with the metadata removed (null for pixels). */
+  readonly jpeg: Uint8Array | null;
+  readonly stored: { width: number; height: number; orientation: number };
+  readonly shown: { width: number; height: number };
+};
 
 /**
  * The Emscripten runtime: heap views (re-read after every allocation: memory growth replaces
@@ -262,38 +297,60 @@ export class ImagePdfBuilder {
   }
 
   add(input: ImageInput, size: PageSizeOption): void {
-    const { pdf } = this;
-    const { docPtr } = context(this.engine, this.doc);
-    let shown: { width: number; height: number };
-    let stored: { width: number; height: number; orientation: number };
-    let jpeg: Uint8Array | null = null;
+    const prepared = this.prepare(input);
+    const layout = pageLayout(prepared.shown.width, prepared.shown.height, size);
+    this.page(layout.width, layout.height, [{ prepared, box: layout.box }]);
+  }
+
+  /**
+   * One page of `width × height` points with each image filling its box (page points, bottom-left
+   * origin; the image is stretched to the box). Used for an ID card's two sides (ADR 0032).
+   */
+  addSheet(width: number, height: number, items: readonly { input: ImageInput; box: Box }[]): void {
+    if (items.length === 0) throw new Error("a sheet needs at least one image");
+    this.page(
+      width,
+      height,
+      items.map((item) => ({ prepared: this.prepare(item.input), box: item.box })),
+    );
+  }
+
+  private prepare(input: ImageInput): Prepared {
     if (input.kind === "jpeg") {
       const info = inspectJpeg(new Uint8Array(input.bytes));
-      jpeg = info.stripped;
-      stored = { width: info.width, height: info.height, orientation: info.orientation };
-      shown = orientedSize(info.width, info.height, info.orientation);
-    } else {
-      if (input.data.byteLength < input.width * input.height * 4) throw new ImageFormatError("truncated pixels");
-      stored = { width: input.width, height: input.height, orientation: 1 };
-      shown = { width: input.width, height: input.height };
+      return {
+        input,
+        jpeg: info.stripped,
+        stored: { width: info.width, height: info.height, orientation: info.orientation },
+        shown: orientedSize(info.width, info.height, info.orientation),
+      };
     }
-    const layout = pageLayout(shown.width, shown.height, size);
+    if (input.data.byteLength < input.width * input.height * 4) throw new ImageFormatError("truncated pixels");
+    return { input, jpeg: null, stored: { width: input.width, height: input.height, orientation: 1 }, shown: { width: input.width, height: input.height } };
+  }
+
+  private page(width: number, height: number, images: readonly { prepared: Prepared; box: Box }[]): void {
+    const { pdf } = this;
+    const { docPtr } = context(this.engine, this.doc);
     // After the seed page and the pages added so far.
-    const page = pdf.FPDFPage_New(docPtr, this.pages + 1, layout.width, layout.height);
+    const page = pdf.FPDFPage_New(docPtr, this.pages + 1, width, height);
     if (!page) throw new Error("cannot add a page");
     try {
-      const image = pdf.FPDFPageObj_NewImageObj(docPtr);
-      if (!image) throw new Error("cannot create an image object");
-      let inserted = false;
-      try {
-        if (jpeg) this.loadJpeg(image, jpeg);
-        else if (input.kind === "rgba") this.loadPixels(image, input);
-        const m = imageMatrix(stored.orientation, stored.width, stored.height, layout.box);
-        if (!pdf.FPDFImageObj_SetMatrix(image, m[0], m[1], m[2], m[3], m[4], m[5])) throw new Error("cannot place the image");
-        pdf.FPDFPage_InsertObject(page, image);
-        inserted = true;
-      } finally {
-        if (!inserted) pdf.FPDFPageObj_Destroy(image);
+      for (const { prepared, box } of images) {
+        const image = pdf.FPDFPageObj_NewImageObj(docPtr);
+        if (!image) throw new Error("cannot create an image object");
+        let inserted = false;
+        try {
+          if (prepared.jpeg) this.loadJpeg(image, prepared.jpeg);
+          else if (prepared.input.kind === "rgba") this.loadPixels(image, prepared.input);
+          const { stored } = prepared;
+          const m = imageMatrix(stored.orientation, stored.width, stored.height, box);
+          if (!pdf.FPDFImageObj_SetMatrix(image, m[0], m[1], m[2], m[3], m[4], m[5])) throw new Error("cannot place the image");
+          pdf.FPDFPage_InsertObject(page, image);
+          inserted = true;
+        } finally {
+          if (!inserted) pdf.FPDFPageObj_Destroy(image);
+        }
       }
       if (!pdf.FPDFPage_GenerateContent(page)) throw new Error("cannot write the page");
     } finally {

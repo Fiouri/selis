@@ -106,3 +106,25 @@ export function smoothQuad(previous: Quad | null, next: Quad, jump: number, ease
 export function svgPoints(quad: Quad): string {
   return quad.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
 }
+
+/**
+ * A point of a page turned `turns` quarter turns clockwise (0–1 coordinates of what is shown)
+ * back on the page before turning (where touch-up strokes are stored, ADR 0032).
+ */
+export function unturn([u, v]: Point, turns: number): Point {
+  switch (((turns % 4) + 4) % 4) {
+    case 1:
+      return [v, 1 - u];
+    case 2:
+      return [1 - u, 1 - v];
+    case 3:
+      return [1 - v, u];
+    default:
+      return [u, v];
+  }
+}
+
+/** The inverse of `unturn`: a point of the page as shown after `turns` clockwise quarter turns. */
+export function turn([u, v]: Point, turns: number): Point {
+  return unturn([u, v], 4 - (((turns % 4) + 4) % 4));
+}

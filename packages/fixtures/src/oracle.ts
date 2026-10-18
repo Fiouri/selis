@@ -358,3 +358,41 @@ export async function pdfjsDocumentParts(bytes: Uint8Array): Promise<DocumentPar
     };
   });
 }
+
+/**
+ * The page size and where each image is drawn on page `pageIndex` (points, bottom-left origin),
+ * from pdf.js's operator list: the transformation matrix at each image painted.
+ */
+export async function pdfjsImagePlacements(bytes: Uint8Array, pageIndex: number): Promise<{ width: number; height: number; images: Box[] }> {
+  const { OPS } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  return withDocument(bytes, async (doc) => {
+    const page = await doc.getPage(pageIndex + 1);
+    const [x0 = 0, y0 = 0, x1 = 0, y1 = 0] = page.view;
+    const list = await page.getOperatorList();
+    type M = [number, number, number, number, number, number];
+    const mul = (m: M, n: M): M => [
+      m[0] * n[0] + m[1] * n[2],
+      m[0] * n[1] + m[1] * n[3],
+      m[2] * n[0] + m[3] * n[2],
+      m[2] * n[1] + m[3] * n[3],
+      m[4] * n[0] + m[5] * n[2] + n[4],
+      m[4] * n[1] + m[5] * n[3] + n[5],
+    ];
+    let ctm: M = [1, 0, 0, 1, 0, 0];
+    const stack: M[] = [];
+    const images: Box[] = [];
+    list.fnArray.forEach((fn, i) => {
+      const args = list.argsArray[i] as unknown[];
+      if (fn === OPS.save) stack.push(ctm);
+      else if (fn === OPS.restore) ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0];
+      else if (fn === OPS.transform) ctm = mul(args as M, ctm);
+      else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject) {
+        // The unit square through the matrix.
+        const xs = [ctm[4], ctm[4] + ctm[0], ctm[4] + ctm[2], ctm[4] + ctm[0] + ctm[2]];
+        const ys = [ctm[5], ctm[5] + ctm[1], ctm[5] + ctm[3], ctm[5] + ctm[1] + ctm[3]];
+        images.push({ x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) });
+      }
+    });
+    return { width: x1 - x0, height: y1 - y0, images };
+  });
+}

@@ -1,5 +1,6 @@
 import type { QuarterTurns } from "./geometry";
 import type { PageSizeOption } from "./images";
+import type { SheetImage } from "./types";
 import type { PageOp } from "./pages";
 import type {
   Annotation,
@@ -57,6 +58,7 @@ export type WorkerRequest =
   /** Images → PDF (P4b): a builder in the worker, fed one image at a time. */
   | { type: "imagesBegin"; reqId: number }
   | { type: "imagesAdd"; reqId: number; builder: number; bytes: ArrayBuffer; mime: string; size: PageSizeOption }
+  | { type: "imagesAddSheet"; reqId: number; builder: number; width: number; height: number; items: SheetImage[] }
   | { type: "imagesFinish"; reqId: number; builder: number }
   | { type: "imagesDiscard"; reqId: number; builder: number }
   /** A page as a PNG/JPEG at `dpi`, within `maxPixels`. */

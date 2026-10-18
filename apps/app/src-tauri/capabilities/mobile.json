@@ -55,6 +55,7 @@
     "allow-stage-photo",
     "allow-share-export",
     "allow-open-app-settings",
+    "allow-scan-haptic",
     "allow-pending-transfer-link",
     "allow-dismiss-transfer-link",
     "allow-transfer-open",

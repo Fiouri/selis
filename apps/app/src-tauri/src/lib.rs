@@ -97,6 +97,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::photos::stage_photo::<tauri::Wry>,
         commands::photos::share_export::<tauri::Wry>,
         commands::camera::open_app_settings::<tauri::Wry>,
+        commands::camera::scan_haptic::<tauri::Wry>,
         commands::requests::take_result,
     ])
 }

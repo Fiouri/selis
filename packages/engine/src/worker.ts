@@ -654,6 +654,21 @@ async function handleImagesAdd(req: Extract<WorkerRequest, { type: "imagesAdd" }
   }
 }
 
+async function handleImagesAddSheet(req: Extract<WorkerRequest, { type: "imagesAddSheet" }>): Promise<void> {
+  const builder = builders.get(req.builder);
+  if (!builder) {
+    post({ type: "error", reqId: req.reqId, code: "closed", message: "no such image builder" });
+    return;
+  }
+  try {
+    const items = await Promise.all(req.items.map(async (item) => ({ input: await decodeImage(item.bytes, item.mime), box: item.box })));
+    builder.addSheet(req.width, req.height, items);
+    post({ type: "imagesAdded", reqId: req.reqId, pages: builder.pageCount });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
 async function handleImagesFinish(req: Extract<WorkerRequest, { type: "imagesFinish" }>): Promise<void> {
   const builder = builders.get(req.builder);
   builders.delete(req.builder);
@@ -875,6 +890,9 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "imagesAdd":
       void handleImagesAdd(req);
+      break;
+    case "imagesAddSheet":
+      void handleImagesAddSheet(req);
       break;
     case "imagesFinish":
       void handleImagesFinish(req);

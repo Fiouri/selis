@@ -73,6 +73,7 @@ const APP_COMMANDS: &[&str] = &[
     "stage_photo",
     "share_export",
     "open_app_settings",
+    "scan_haptic",
     "take_result",
 ];
 

@@ -202,10 +202,19 @@ export type GrayPage = { readonly bytes: ArrayBuffer; readonly width: number; re
 /** What text a page has: characters outside Selis' OCR layer, and whether it has that layer. */
 export type PageTextInfo = { readonly chars: number; readonly ocr: boolean };
 
+/** An image placed on a sheet: its box in page points, bottom-left origin (filled exactly). */
+export type SheetImage = {
+  readonly bytes: ArrayBuffer;
+  readonly mime: string;
+  readonly box: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+};
+
 /** Images → PDF (P4b), one image at a time (see `images.ts`). */
 export type ImagePdfSession = {
   /** Adds a page for the image (JPEG kept as is, others decoded); resolves to the page count. */
   add(bytes: ArrayBuffer, mime: string, size: "fit" | "a4" | "letter"): Promise<number>;
+  /** Adds one `width × height` pt page with several images at given boxes (an ID card's sides); resolves to the page count. */
+  addSheet(width: number, height: number, items: readonly SheetImage[]): Promise<number>;
   /** The PDF; the session is over. */
   finish(): Promise<ArrayBuffer>;
   /** Drops what was built. */

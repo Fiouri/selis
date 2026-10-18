@@ -71,6 +71,14 @@ export class WorkerPdfEngine implements PdfEngine {
         );
         return msg.pages;
       },
+      addSheet: async (width, height, items) => {
+        ensure();
+        const msg = await this.request<Extract<WorkerResponse, { type: "imagesAdded" }>>(
+          (reqId) => ({ type: "imagesAddSheet", reqId, builder, width, height, items: [...items] }),
+          items.map((i) => i.bytes),
+        );
+        return msg.pages;
+      },
       finish: async () => {
         ensure();
         over = true;
