@@ -10,7 +10,7 @@ export type PhotoSource =
 export type WorkerRequest =
   | { type: "init"; reqId: number; simd: boolean }
   | { type: "live"; reqId: number; width: number; height: number; rgba: ArrayBuffer; now: number }
-  | { type: "resetAuto"; reqId: number }
+  | { type: "resetAuto"; reqId: number; resume: boolean }
   | { type: "still"; reqId: number; photo: PhotoSource; maxPixels: number; previewSide: number; quad: Quad | null }
   | { type: "preview"; reqId: number; filter: ScanFilter }
   | { type: "render"; reqId: number; edits: PageEdits; maxPixels: number }

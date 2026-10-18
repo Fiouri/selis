@@ -1,7 +1,8 @@
 # Document scan on Android (P4c, ADR 0016): five pages through the back camera (AVD: the
 # emulator's virtual scene; S23: whatever the camera sees — where no page is found the default
 # outline is used), each kept with a filter, then "Save as PDF" → one 5-page document in the
-# viewer. The camera permission is granted on first use (pm clear in scan.sh pre).
+# viewer. The camera permission is granted on first use (pm clear in scan.sh pre). Automatic
+# capture is switched off first (scan-auto.yaml covers it).
 # PRE_RUN="apps/app/e2e/maestro/scan.sh pre" POST_RUN="apps/app/e2e/maestro/scan.sh check".
 # Debug build (run-as). Run with ./run.sh.
 appId: com.anywecon.selis
@@ -19,6 +20,7 @@ name: Selis scan
       visible: "While using the app"
     commands:
       - tapOn: "While using the app"
+- runFlow: scan-auto-off.yaml
 - extendedWaitUntil:
     visible:
       text: "Take a photo of the page"

@@ -1,0 +1,42 @@
+# Switches the scan camera's automatic capture off (ADR 0032: on by default; the emulator's
+# virtual scene holds a steady page, so it may already have fired: then Retake first).
+appId: com.anywecon.selis
+---
+- extendedWaitUntil:
+    visible: "Adjust corners|Take a photo of the page"
+    timeout: 30000
+- repeat:
+    while:
+      notVisible:
+        id: "scan-auto-off"
+    times: 5
+    commands:
+      - runFlow:
+          when:
+            visible: "Adjust corners"
+          commands:
+            - tapOn:
+                id: "scan-retake"
+      - extendedWaitUntil:
+          visible:
+            id: "scan-auto-on"
+          timeout: 15000
+          optional: true
+      - tapOn:
+          id: "scan-auto-on"
+          optional: true
+# A capture that started just before Auto went off still opens Adjust: back to the camera.
+- extendedWaitUntil:
+    visible: "never shown, lets a capture in flight land"
+    timeout: 3000
+    optional: true
+- runFlow:
+    when:
+      visible: "Adjust corners"
+    commands:
+      - tapOn:
+          id: "scan-retake"
+- extendedWaitUntil:
+    visible:
+      id: "scan-auto-off"
+    timeout: 15000

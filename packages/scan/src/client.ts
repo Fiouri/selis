@@ -82,7 +82,12 @@ export class ScanClient {
 
   /** Forgets the automatic-capture state: the next steady page fires even if it was just captured. */
   async resetAuto(): Promise<void> {
-    await this.request("resetAuto", {});
+    await this.request("resetAuto", { resume: false });
+  }
+
+  /** The camera starts again after a capture: the page just captured is not taken again. */
+  async resumeAuto(): Promise<void> {
+    await this.request("resetAuto", { resume: true });
   }
 
   /**

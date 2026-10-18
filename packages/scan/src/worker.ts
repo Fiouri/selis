@@ -92,7 +92,9 @@ async function handle(req: WorkerRequest): Promise<void> {
       return;
     }
     case "resetAuto": {
-      (await ready()).resetAuto();
+      const scan = await ready();
+      if (req.resume) scan.resumeAuto();
+      else scan.resetAuto();
       post({ type: "autoReset", reqId: req.reqId });
       return;
     }

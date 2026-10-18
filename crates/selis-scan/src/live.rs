@@ -103,8 +103,9 @@ pub const STEADY_MS: f64 = 600.0;
 pub const MAX_DRIFT: f32 = 0.02;
 /// After a capture, the next one waits until the outline is lost for this many frames…
 const REARM_MISSES: u32 = 3;
-/// …or has moved this share of its diagonal away from the captured outline (a new page).
-const REARM_DRIFT: f32 = 0.10;
+/// …or has moved this share of its diagonal away from the captured outline (a new page put
+/// down elsewhere; a corner snapping to clutter moves less), measured on a full median.
+const REARM_DRIFT: f32 = 0.25;
 /// An outline smaller than this share of the frame is far away: "Move closer" (it is still
 /// captured when steady; a small page is a page).
 pub const MIN_AREA_SHARE: f32 = 0.35;
@@ -151,6 +152,9 @@ pub struct AutoCapture {
     /// The outline last captured, while waiting for the page to change.
     fired: Option<Quad>,
     misses: u32,
+    /// The camera has just (re)started: frames without an outline do not count as the page
+    /// going away until an outline has been seen again.
+    resuming: bool,
 }
 
 /// Detections the median is taken over.
@@ -196,6 +200,17 @@ impl AutoCapture {
         *self = Self::default();
     }
 
+    /// The camera starts again after a capture (the Adjust step stops it): keeps what was
+    /// captured, so the same page is not taken again, but forgets the outline's motion. Until
+    /// an outline is seen, missing frames (the camera warming up) do not re-arm it.
+    pub fn resume(&mut self) {
+        self.filled = 0;
+        self.previous = None;
+        self.steady_since = None;
+        self.misses = 0;
+        self.resuming = true;
+    }
+
     /// The corner-wise median of the recent detections.
     fn smoothed(&self) -> Quad {
         let recent = &self.history[..self.filled];
@@ -214,6 +229,18 @@ impl AutoCapture {
     pub fn update(&mut self, quad: Option<&Quad>, stats: &FrameStats, now_ms: f64) -> Verdict {
         let dark = stats.luma < DARK_LUMA;
         let Some(quad) = quad else {
+            if self.resuming {
+                let hint = if dark {
+                    Hint::MoreLight
+                } else {
+                    Hint::FindPage
+                };
+                return Verdict {
+                    progress: 0.0,
+                    fire: false,
+                    hint,
+                };
+            }
             self.misses = self.misses.saturating_add(1);
             if self.misses > GRACE_MISSES {
                 self.filled = 0;
@@ -235,12 +262,14 @@ impl AutoCapture {
             };
         };
         self.misses = 0;
+        self.resuming = false;
         self.history[self.next] = *quad;
         self.next = (self.next + 1) % HISTORY;
         self.filled = (self.filled + 1).min(HISTORY);
         let outline = self.smoothed();
         let allowed = (diagonal(&outline) * MAX_DRIFT).max(MIN_DRIFT_PX);
         if let Some(fired) = self.fired
+            && self.filled == HISTORY
             && drift(&fired, &outline) > diagonal(&outline) * REARM_DRIFT
         {
             self.fired = None;

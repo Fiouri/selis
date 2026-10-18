@@ -146,11 +146,11 @@ test("auto: a steady page is captured by itself, once; Auto off is remembered", 
   await expect(page.getByTestId("scan-camera")).toBeVisible();
   await expect(page.getByTestId("scan-count")).toHaveText("1 page");
   await expect(page.getByTestId("scan-progress")).toHaveCount(0);
-  // Retake makes the same page fair game again.
+  // After Retake the same framing is not taken again by itself; the shutter still works.
   await page.getByTestId("scan-shutter").click();
   await page.getByTestId("scan-retake").click();
-  await expect(page.getByTestId("scan-adjust")).toBeVisible({ timeout: 20_000 });
-  await page.getByTestId("scan-retake").click();
+  await page.waitForTimeout(2500);
+  await expect(page.getByTestId("scan-camera")).toBeVisible();
 
   await page.getByRole("switch", { name: "Auto" }).click();
   await expect(page.getByRole("switch", { name: "Auto" })).toHaveAttribute("aria-checked", "false");

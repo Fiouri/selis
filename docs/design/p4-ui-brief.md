@@ -132,6 +132,18 @@ scanned pages?" (Discard / Keep scanning). The queue grid uses the Images-to-PDF
 earlier / later, remove), with "Add page" and "Save as PDF"; the result opens in the viewer and
 a toast says "Scan saved to the library."
 
+Scan 2.0 (P7a, ADR 0032): the header adds an "Auto" switch (pill, 44 high; accent when on) —
+automatic capture when the outline is steady and sharp, a 56 px progress ring at the outline's
+centre (no transition under reduced motion), a haptic tick on capture. Hints in a pill above the
+strip: "Hold steady", "Move closer", "More light needed" (a button that turns the flash on when
+there is one). A "Document / ID card" segmented control at the top of the preview while no page
+is kept; ID card shows "Front of the card" / "Back of the card". Kept pages show in a 64 px strip
+over the bottom of the preview (overlay, no layout shift). Filter chips scroll sideways:
+Enhance (default), Grey, Black & white, Original. The queue becomes the review: a tap opens the
+page screen (the page as saved; chips; Corners, Rotate, Touch up, Retake as 56 px tool buttons;
+Delete in the header; Touch up shows Undo / Done and a hint), a long press drags a page (a bar
+marks the slot). At the device's memory cap a dialog offers "Save now" / "Review pages".
+
 ## 8. OCR (P4d)
 
 Precedent: the transfer progress card (`Progress` bar, per-item line, Cancel, Resume).

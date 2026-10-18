@@ -1,0 +1,147 @@
+# Batch scan on Android (ADR 0032): nine numbered page photos (scan.sh pre-batch: page k has k
+# bars) through "Scan a photo" and a tenth page from the camera, then in the review: page 3 moved to the front, page 5 turned in
+# its page screen, page 7 removed, page 2 retaken with the camera (AVD: the emulator's virtual
+# scene) → "Save as PDF" → one 9-page document. scan.sh check-batch reads the order back:
+# 3, retaken, 2, 4, 5 turned, 6, 8, 9, camera (the 7th tile, photo 7, is removed).
+# PRE_RUN="apps/app/e2e/maestro/scan.sh pre-batch" POST_RUN="apps/app/e2e/maestro/scan.sh check-batch".
+# Debug build (run-as). Run with ./run.sh.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis scan batch
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Scan a document"
+- runFlow:
+    when:
+      visible: "While using the app"
+    commands:
+      - tapOn: "While using the app"
+- runFlow: scan-auto-off.yaml
+- runFlow:
+    file: scan-photo-page.yaml
+    env:
+      INDEX: "0"
+      COUNT: "1 page"
+- runFlow:
+    file: scan-photo-page.yaml
+    env:
+      INDEX: "1"
+      COUNT: "2 pages"
+- runFlow:
+    file: scan-photo-page.yaml
+    env:
+      INDEX: "2"
+      COUNT: "3 pages"
+- runFlow:
+    file: scan-photo-page.yaml
+    env:
+      INDEX: "3"
+      COUNT: "4 pages"
+- runFlow:
+    file: scan-photo-page.yaml
+    env:
+      INDEX: "4"
+      COUNT: "5 pages"
+- runFlow:
+    file: scan-photo-page.yaml
+    env:
+      INDEX: "5"
+      COUNT: "6 pages"
+- runFlow:
+    file: scan-photo-page.yaml
+    env:
+      INDEX: "6"
+      COUNT: "7 pages"
+- runFlow:
+    file: scan-photo-page.yaml
+    env:
+      INDEX: "7"
+      COUNT: "8 pages"
+- runFlow:
+    file: scan-photo-page.yaml
+    env:
+      INDEX: "8"
+      COUNT: "9 pages"
+# Page 10 from the camera (the picker shows nine photos without scrolling).
+- tapOn: "Take a photo of the page"
+- extendedWaitUntil:
+    visible: "Adjust corners"
+    timeout: 60000
+- tapOn:
+    id: "scan-keep"
+- extendedWaitUntil:
+    visible: "10 pages"
+    timeout: 60000
+- tapOn: "See the 10 scanned pages"
+- extendedWaitUntil:
+    visible: "Scanned pages"
+    timeout: 10000
+# Page 3 to the front.
+- tapOn: "Move page 3 earlier"
+- tapOn: "Move page 2 earlier"
+# Page 5 turned a quarter in its page screen.
+- scrollUntilVisible:
+    element: "Edit page 5"
+    direction: DOWN
+- tapOn: "Edit page 5"
+- extendedWaitUntil:
+    visible: "Page 5 of 10"
+    timeout: 30000
+- extendedWaitUntil:
+    notVisible: "Updating the page…"
+    timeout: 60000
+- tapOn:
+    id: "scan-page-rotate"
+- extendedWaitUntil:
+    notVisible: "Updating the page…"
+    timeout: 60000
+- tapOn: "Back to the pages"
+- extendedWaitUntil:
+    visible: "Scanned pages"
+    timeout: 60000
+# Page 7 removed.
+- scrollUntilVisible:
+    element: "Remove page 7"
+    direction: DOWN
+- tapOn: "Remove page 7"
+- extendedWaitUntil:
+    visible: "9 pages"
+    timeout: 10000
+# Page 2 retaken with the camera; it keeps its place.
+- scrollUntilVisible:
+    element: "Edit page 2"
+    direction: UP
+- tapOn: "Edit page 2"
+- extendedWaitUntil:
+    visible: "Page 2 of 9"
+    timeout: 30000
+- tapOn:
+    id: "scan-page-retake"
+- extendedWaitUntil:
+    visible: "Retake page 2"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      text: "Take a photo of the page"
+      enabled: true
+    timeout: 30000
+- tapOn: "Take a photo of the page"
+- extendedWaitUntil:
+    visible: "Adjust corners"
+    timeout: 60000
+- assertVisible: "Page 2"
+- tapOn:
+    id: "scan-keep"
+- extendedWaitUntil:
+    visible: "Scanned pages"
+    timeout: 60000
+- assertVisible: "9 pages"
+- tapOn: "Save as PDF"
+- extendedWaitUntil:
+    visible: 'Page \d+ of 9.*'
+    timeout: 180000
+- back
+- assertVisible: "Import PDF"

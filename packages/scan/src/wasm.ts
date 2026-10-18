@@ -54,6 +54,7 @@ type Exports = {
   scan_free: (ptr: number, len: number) => void;
   scan_live: (rgba: number, width: number, height: number, nowMs: number, out: number) => number;
   scan_auto_reset: () => void;
+  scan_auto_resume: () => void;
   scan_find_page: (rgba: number, width: number, height: number, out: number) => number;
   scan_filter: (rgba: number, width: number, height: number, filter: number) => number;
   scan_render: (
@@ -256,6 +257,11 @@ export class ScanModule {
     } finally {
       if (strokes) this.x.scan_free(strokesPtr, strokes.byteLength);
     }
+  }
+
+  /** The camera starts again after a capture: the captured page is not taken again, and the camera's first empty frames do not count. */
+  resumeAuto(): void {
+    this.x.scan_auto_resume();
   }
 
   /** Bytes of linear memory (it grows to the largest photo and never shrinks). */
