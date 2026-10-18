@@ -29,11 +29,11 @@ describe("ScanClient", () => {
     expect(client.canvasInWorker).toBe(true);
   });
 
-  it("hands frames over and returns the outline", async () => {
+  it("hands frames over and returns the outline and the auto-capture verdict", async () => {
     const { worker, sent } = fakeWorker((req) =>
-      req.type === "detect"
+      req.type === "live"
         ? {
-            type: "detected",
+            type: "live",
             reqId: req.reqId,
             ms: 3,
             quad: [
@@ -42,14 +42,26 @@ describe("ScanClient", () => {
               [5, 6],
               [7, 8],
             ],
+            sharpness: 900,
+            luma: 120,
+            areaShare: 0.5,
+            progress: 1,
+            fire: true,
+            hint: "none",
           }
-        : null,
+        : req.type === "resetAuto"
+          ? { type: "autoReset", reqId: req.reqId }
+          : null,
     );
     const client = new ScanClient(worker);
-    const result = await client.detect(new Uint8ClampedArray(16), 2, 2);
+    const result = await client.live(new Uint8ClampedArray(16), 2, 2, 1234);
     expect(result.ms).toBe(3);
     expect(result.quad?.[3]).toEqual([7, 8]);
-    expect(sent[0]).toMatchObject({ type: "detect", width: 2, height: 2 });
+    expect(result.fire).toBe(true);
+    expect(result).not.toHaveProperty("reqId");
+    expect(sent[0]).toMatchObject({ type: "live", width: 2, height: 2, now: 1234 });
+    await client.resetAuto();
+    expect(sent[1]).toMatchObject({ type: "resetAuto" });
   });
 
   it("rejects on a worker error and on terminate", async () => {

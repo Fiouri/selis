@@ -186,7 +186,7 @@ export const useScan = create<ScanState>()((set, get) => ({
     if (phase.step !== "adjust" || !client) return false;
     set({ phase: { step: "keeping", still: phase.still } });
     try {
-      const kept = await client.keep(phase.still.quad, phase.still.filter, pagePixels(), THUMB_SIDE);
+      const kept = await client.keep({ quad: phase.still.quad, filter: phase.still.filter, strokes: [], turns: 0 }, pagePixels(), THUMB_SIDE);
       const blob = await pictureBlob(kept.page, kept.mime);
       const thumb = URL.createObjectURL(await pictureBlob(kept.thumb, "image/jpeg", 0.8));
       revokeStill(phase.still);

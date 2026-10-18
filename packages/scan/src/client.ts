@@ -1,11 +1,11 @@
 /**
- * Main-thread client of the scan worker (P4c, ADR 0016). One worker per scan session: it is
+ * Main-thread client of the scan worker (P4c, ADR 0016; Scan 2.0, ADR 0032). One worker per scan session: it is
  * started when the camera opens and terminated when the scan screen closes (its WebAssembly
  * memory grows to the largest photo and never shrinks).
  */
 import type { Quad } from "./geometry";
 import type { Picture, PhotoSource, WorkerRequest, WorkerResponse } from "./protocol";
-import { type ScanFilter, simdSupported } from "./wasm";
+import { type LiveFrame, type PageEdits, type ScanFilter, simdSupported } from "./wasm";
 
 /** Minimal surface of `Worker` (tests inject a fake). */
 export type ScanWorkerLike = {
@@ -15,7 +15,14 @@ export type ScanWorkerLike = {
   onerror: ((event: ErrorEvent) => void) | null;
 };
 
-export type Still = { readonly width: number; readonly height: number; readonly quad: Quad | null; readonly preview: Picture };
+export type Still = {
+  readonly width: number;
+  readonly height: number;
+  readonly quad: Quad | null;
+  readonly preview: Picture;
+  /** The photo as a JPEG when it came as pixels (to edit the page later); null for a Blob photo. */
+  readonly source: Picture | null;
+};
 export type KeptPage = { readonly page: Picture; readonly mime: "image/jpeg" | "image/png"; readonly thumb: Picture; readonly ms: number };
 
 type Pending = { resolve: (msg: WorkerResponse) => void; reject: (err: Error) => void };
@@ -66,17 +73,26 @@ export class ScanClient {
     this.canvasInWorker = ready.canvas;
   }
 
-  /** The page in a small live frame (its buffer is handed over). Frame pixels. */
-  async detect(rgba: Uint8ClampedArray<ArrayBuffer>, width: number, height: number): Promise<{ quad: Quad | null; ms: number }> {
-    const msg = await this.request<"detect", Extract<WorkerResponse, { type: "detected" }>>("detect", { width, height, rgba: rgba.buffer }, [rgba.buffer]);
-    return { quad: msg.quad, ms: msg.ms };
+  /** One live frame (its buffer is handed over) taken at `now`: outline (frame pixels) and auto-capture verdict. */
+  async live(rgba: Uint8ClampedArray<ArrayBuffer>, width: number, height: number, now: number): Promise<LiveFrame & { ms: number }> {
+    const msg = await this.request<"live", Extract<WorkerResponse, { type: "live" }>>("live", { width, height, rgba: rgba.buffer, now }, [rgba.buffer]);
+    const { type: _type, reqId: _reqId, ...frame } = msg;
+    return frame;
   }
 
-  /** A captured still: its size (after the pixel cap), the page found in it, and a preview. */
-  async still(photo: PhotoSource, maxPixels: number, previewSide: number): Promise<Still> {
+  /** Forgets the automatic-capture state: the next steady page fires even if it was just captured. */
+  async resetAuto(): Promise<void> {
+    await this.request("resetAuto", {});
+  }
+
+  /**
+   * A captured still: its size (after the pixel cap), the page found in it (or `quad`, when
+   * the outline is already known), and a preview.
+   */
+  async still(photo: PhotoSource, maxPixels: number, previewSide: number, quad: Quad | null = null): Promise<Still> {
     const transfer = photo.kind === "rgba" ? [photo.rgba] : [];
-    const msg = await this.request<"still", Extract<WorkerResponse, { type: "still" }>>("still", { photo, maxPixels, previewSide }, transfer);
-    return { width: msg.width, height: msg.height, quad: msg.quad, preview: msg.preview };
+    const msg = await this.request<"still", Extract<WorkerResponse, { type: "still" }>>("still", { photo, maxPixels, previewSide, quad }, transfer);
+    return { width: msg.width, height: msg.height, quad: msg.quad, preview: msg.preview, source: msg.source };
   }
 
   /** The still's preview with `filter` applied. */
@@ -84,9 +100,14 @@ export class ScanClient {
     return (await this.request<"preview", Extract<WorkerResponse, { type: "preview" }>>("preview", { filter })).preview;
   }
 
-  /** Straightens the still to `quad` (photo pixels), applies `filter`, and lets the still go. */
-  async keep(quad: Quad, filter: ScanFilter, maxPixels: number, thumbSide: number): Promise<KeptPage> {
-    const msg = await this.request<"keep", Extract<WorkerResponse, { type: "kept" }>>("keep", { quad, filter, maxPixels, thumbSide });
+  /** The still's page made with `edits` (at most `maxPixels`, JPEG); the still stays. */
+  async render(edits: PageEdits, maxPixels: number): Promise<Picture> {
+    return (await this.request<"render", Extract<WorkerResponse, { type: "rendered" }>>("render", { edits, maxPixels })).page;
+  }
+
+  /** Makes the still's page with `edits` and lets the still go. */
+  async keep(edits: PageEdits, maxPixels: number, thumbSide: number): Promise<KeptPage> {
+    const msg = await this.request<"keep", Extract<WorkerResponse, { type: "kept" }>>("keep", { edits, maxPixels, thumbSide });
     return { page: msg.page, mime: msg.mime, thumb: msg.thumb, ms: msg.ms };
   }
 

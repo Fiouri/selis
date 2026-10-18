@@ -11,7 +11,7 @@ import { Busy } from "../transfer/parts";
 import { useScan } from "./scanStore";
 
 const CORNERS = ["scan.cornerTopLeft", "scan.cornerTopRight", "scan.cornerBottomRight", "scan.cornerBottomLeft"] as const;
-const FILTER_KEYS: Record<ScanFilter, string> = { original: "scan.filterOriginal", grey: "scan.filterGrey", bw: "scan.filterBw" };
+const FILTER_KEYS: Record<Exclude<ScanFilter, "enhance">, string> = { original: "scan.filterOriginal", grey: "scan.filterGrey", bw: "scan.filterBw" };
 /** Magnifier: diameter (px) and zoom. */
 const LOUPE = 112;
 const ZOOM = 2.5;
@@ -156,7 +156,7 @@ export function AdjustCorners() {
           {!convex ? t("scan.outlineInvalid") : still.detected ? t("scan.adjustHint") : t("scan.notFound")}
         </p>
         <div role="radiogroup" aria-label={t("scan.filter")} className="flex gap-2" data-testid="scan-filters">
-          {(Object.keys(FILTER_KEYS) as ScanFilter[]).map((filter) => (
+          {(Object.keys(FILTER_KEYS) as Array<keyof typeof FILTER_KEYS>).map((filter) => (
             <Chip key={filter} kind="radio" selected={still.filter === filter} onClick={() => void setFilter(filter)} disabled={keeping} data-testid={`scan-filter-${filter}`}>
               {t(FILTER_KEYS[filter])}
             </Chip>

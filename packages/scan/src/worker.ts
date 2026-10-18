@@ -1,16 +1,17 @@
 /// <reference lib="webworker" />
 /**
- * The scan worker (P4c, ADR 0016): page detection on live frames, and for each still the
- * page outline, a preview, filter previews and the straightened page — all in the scan
- * WebAssembly module, off the UI thread. The current still stays here (its pixels never go
- * back to the main thread) until it is kept or dropped.
+ * The scan worker (P4c, ADR 0016; Scan 2.0, ADR 0032): page detection and the automatic-capture
+ * verdict on live frames, and for each still the page outline, a preview, filter previews,
+ * page renders while it is edited and the finished page — all in the scan WebAssembly module,
+ * off the UI thread. The current still stays here (its pixels never go back to the main
+ * thread) until it is kept or dropped.
  *
  * Decoding and encoding use OffscreenCanvas when the WebView has it in workers (Android,
  * iOS 16.4+, desktops); otherwise the client hands over pixels and gets pixels back.
  */
 import baseUrl from "../wasm/selis_scan_base.wasm?url";
 import simdUrl from "../wasm/selis_scan_simd.wasm?url";
-import { PAGE_JPEG_QUALITY, type Picture, type PhotoSource, type WorkerRequest, type WorkerResponse } from "./protocol";
+import { PAGE_JPEG_QUALITY, type Picture, type PhotoSource, SOURCE_JPEG_QUALITY, type WorkerRequest, type WorkerResponse } from "./protocol";
 import { downscale } from "./pixels";
 import { ScanModule } from "./wasm";
 
@@ -83,21 +84,35 @@ async function handle(req: WorkerRequest): Promise<void> {
       post({ type: "ready", reqId: req.reqId, canvas: canvasInWorker });
       return;
     }
-    case "detect": {
+    case "live": {
       const scan = await ready();
       const start = performance.now();
-      const quad = scan.detect(new Uint8ClampedArray(req.rgba), req.width, req.height);
-      post({ type: "detected", reqId: req.reqId, quad, ms: performance.now() - start });
+      const frame = scan.live(new Uint8ClampedArray(req.rgba), req.width, req.height, req.now);
+      post({ type: "live", reqId: req.reqId, ms: performance.now() - start, ...frame });
+      return;
+    }
+    case "resetAuto": {
+      (await ready()).resetAuto();
+      post({ type: "autoReset", reqId: req.reqId });
       return;
     }
     case "still": {
       still = null;
       const photo = await pixelsOf(req.photo, req.maxPixels);
-      const quad = (await ready()).findPage(photo.rgba, photo.width, photo.height);
+      const quad = req.quad ?? (await ready()).findPage(photo.rgba, photo.width, photo.height);
       const preview = downscale(photo, req.previewSide);
       still = { photo, preview };
-      const { picture: shown, transfer } = await picture(copyOf(preview), "image/jpeg", 0.85);
-      post({ type: "still", reqId: req.reqId, width: photo.width, height: photo.height, quad, preview: shown }, transfer);
+      const transfer: Transferable[] = [];
+      // A photo that came as pixels is handed back as a JPEG, to edit its page later.
+      let source: Picture | null = null;
+      if (req.photo.kind === "rgba") {
+        const encoded = await picture(copyOf(photo), "image/jpeg", SOURCE_JPEG_QUALITY);
+        source = encoded.picture;
+        transfer.push(...encoded.transfer);
+      }
+      const shown = await picture(copyOf(preview), "image/jpeg", 0.85);
+      transfer.push(...shown.transfer);
+      post({ type: "still", reqId: req.reqId, width: photo.width, height: photo.height, quad, preview: shown.picture, source }, transfer);
       return;
     }
     case "preview": {
@@ -108,14 +123,22 @@ async function handle(req: WorkerRequest): Promise<void> {
       post({ type: "preview", reqId: req.reqId, preview: shown }, transfer);
       return;
     }
+    case "render": {
+      if (!still) throw new Error("no still");
+      const { photo } = still;
+      const page = (await ready()).render(photo.rgba, photo.width, photo.height, req.edits, req.maxPixels);
+      const shown = await picture(page, "image/jpeg", 0.85);
+      post({ type: "rendered", reqId: req.reqId, page: shown.picture }, shown.transfer);
+      return;
+    }
     case "keep": {
       if (!still) throw new Error("no still");
       const start = performance.now();
       const { photo } = still;
       still = null;
-      const page = (await ready()).straighten(photo.rgba, photo.width, photo.height, req.quad, req.maxPixels, req.filter);
+      const page = (await ready()).render(photo.rgba, photo.width, photo.height, req.edits, req.maxPixels);
       const thumb = downscale(page, req.thumbSide);
-      const mime = req.filter === "bw" ? "image/png" : "image/jpeg";
+      const mime = req.edits.filter === "bw" ? "image/png" : "image/jpeg";
       const encodedThumb = await picture(thumb, "image/jpeg", 0.8);
       const encodedPage = await picture(page, mime, PAGE_JPEG_QUALITY);
       post(

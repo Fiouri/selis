@@ -1,6 +1,6 @@
 # ADR 0016 — Document scan: page detection in Rust compiled to WebAssembly (P4c)
 
-- Status: accepted
+- Status: accepted; amended 2026-10-18 (Scan 2.0, ADR 0032)
 - Date: 2026-10-14
 
 ## Context
@@ -87,3 +87,16 @@ off the UI thread). Size, start-up, CSP and the build decide: **(b)**.
 - Not in v1: automatic capture when the outline is steady, shadow removal beyond the B&W
   filter, pages that fill the whole frame (their edges are outside it — the default outline is
   the frame inset by 8 %).
+
+## Amendment (2026-10-18): Scan 2.0 (ADR 0032)
+
+- **ABI**: `scan_detect` became `scan_live` (outline plus sharpness, mean luma, the outline's
+  share of the frame and the automatic-capture verdict; the grey frame and the tracker live in
+  the module between frames) with `scan_auto_reset`; `scan_straighten` became `scan_render`
+  (outline, filter, touch-up strokes, quarter turns). Filter code 3 is Enhance, the new default.
+- **Automatic capture** when the outline is steady for 0.6 s and the frame is sharp, hints, the
+  "Auto" setting; **batch review** (reopen, rotate, touch up, retake, delete, drag to reorder;
+  the photo stays with each page); **ID card** mode (two sides at ID-1 size on one A4 page).
+- The "Not in v1" items above: automatic capture and shadow removal for colour pages are done;
+  pages that fill the whole frame are still not detected.
+- WebAssembly: ~412 KB for both variants (was ~350 KB).

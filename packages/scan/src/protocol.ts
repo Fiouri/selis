@@ -1,6 +1,6 @@
 /** Messages between the scan client (main thread) and the scan worker. */
 import type { Quad } from "./geometry";
-import type { ScanFilter } from "./wasm";
+import type { LiveFrame, PageEdits, ScanFilter } from "./wasm";
 
 /** A captured photo: a still (`Blob`, decoded in the worker) or pixels the main thread read. */
 export type PhotoSource =
@@ -9,10 +9,12 @@ export type PhotoSource =
 
 export type WorkerRequest =
   | { type: "init"; reqId: number; simd: boolean }
-  | { type: "detect"; reqId: number; width: number; height: number; rgba: ArrayBuffer }
-  | { type: "still"; reqId: number; photo: PhotoSource; maxPixels: number; previewSide: number }
+  | { type: "live"; reqId: number; width: number; height: number; rgba: ArrayBuffer; now: number }
+  | { type: "resetAuto"; reqId: number }
+  | { type: "still"; reqId: number; photo: PhotoSource; maxPixels: number; previewSide: number; quad: Quad | null }
   | { type: "preview"; reqId: number; filter: ScanFilter }
-  | { type: "keep"; reqId: number; quad: Quad; filter: ScanFilter; maxPixels: number; thumbSide: number }
+  | { type: "render"; reqId: number; edits: PageEdits; maxPixels: number }
+  | { type: "keep"; reqId: number; edits: PageEdits; maxPixels: number; thumbSide: number }
   | { type: "drop"; reqId: number };
 
 /** An image the worker could encode (`blob`) or, without OffscreenCanvas, raw pixels. */
@@ -22,12 +24,25 @@ export type Picture =
 
 export type WorkerResponse =
   | { type: "ready"; reqId: number; canvas: boolean }
-  | { type: "detected"; reqId: number; quad: Quad | null; ms: number }
-  | { type: "still"; reqId: number; width: number; height: number; quad: Quad | null; preview: Picture }
+  | ({ type: "live"; reqId: number; ms: number } & LiveFrame)
+  | { type: "autoReset"; reqId: number }
+  | {
+      type: "still";
+      reqId: number;
+      width: number;
+      height: number;
+      quad: Quad | null;
+      preview: Picture;
+      /** The photo as a JPEG (at most `maxPixels`) when it came as pixels: kept to edit the page later. */
+      source: Picture | null;
+    }
   | { type: "preview"; reqId: number; preview: Picture }
+  | { type: "rendered"; reqId: number; page: Picture }
   | { type: "kept"; reqId: number; page: Picture; mime: "image/jpeg" | "image/png"; thumb: Picture; ms: number }
   | { type: "dropped"; reqId: number }
   | { type: "error"; reqId: number; message: string };
 
 /** JPEG quality of colour and grey pages (black-and-white pages are PNG). */
 export const PAGE_JPEG_QUALITY = 0.9;
+/** JPEG quality of a photo kept to edit its page later. */
+export const SOURCE_JPEG_QUALITY = 0.92;
