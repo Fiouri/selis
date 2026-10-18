@@ -8,6 +8,15 @@ short summaries of these sections.
 
 ## [Unreleased]
 
+### Added
+
+- Scan 2.0 (ADR 0032): automatic capture when the page is steady and sharp (progress ring,
+  haptic, "Auto" switch, on by default; the shutter always works), hints "Hold steady",
+  "Move closer", "More light needed" (turns the flash on); an Enhance filter, the new default,
+  that removes shadows and uneven light in colour; batch review — open a page to change its
+  corners or filter, rotate it, touch up a mark, retake or delete it, drag pages to reorder;
+  ID card mode: front and back on one A4 page at 85.6 × 54 mm.
+
 ## [1.0.0-rc.1] - 2026-10-16
 
 First release candidate of the mobile 1.0 (Android, iOS). Desktop builds come with 1.0 of the

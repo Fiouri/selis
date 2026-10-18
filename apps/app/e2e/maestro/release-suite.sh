@@ -34,5 +34,8 @@ run pack "$M/pack.sh pre" "" pack.yaml
 run tools "$M/tools.sh pre" "" tools.yaml
 run images "$M/images.sh pre" "" images.yaml
 run scan "$M/scan.sh pre" "" scan.yaml
+run scan-auto "$M/scan.sh pre" "" scan-auto.yaml
+run scan-batch "$M/scan.sh pre-batch" "" scan-batch.yaml
+run scan-idcard "$M/scan.sh pre" "" scan-idcard.yaml
 run ocr "$M/ocr.sh pre" "$M/ocr.sh check-release" ocr.yaml
 echo "suite done" | tee -a "$sum"

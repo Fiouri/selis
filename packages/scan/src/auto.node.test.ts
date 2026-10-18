@@ -109,6 +109,17 @@ describe("automatic capture on the scan-sample corpus", () => {
     expect(mid.progress).toBeGreaterThan(0.4);
   });
 
+  it("does not take the same page again when the camera comes back after a capture", async () => {
+    const scan = await load();
+    const { frame } = samples[0]!;
+    expect(replay(scan, frame, 20, () => 0, false)).toHaveLength(1);
+    scan.resumeAuto();
+    // The camera's first frames after a restart: black.
+    const black = new Uint8ClampedArray(frame.rgba.length).fill(0);
+    for (let i = 0; i < 8; i++) expect(scan.live(black, frame.width, frame.height, 5000 + i * FRAME_MS).fire).toBe(false);
+    for (let i = 0; i < 30; i++) expect(scan.live(videoFrame(frame, i, 0, false), frame.width, frame.height, 6000 + i * FRAME_MS).fire).toBe(false);
+  });
+
   it("does not fire on blurred frames", async () => {
     const scan = await load();
     for (const { name, frame } of samples) {

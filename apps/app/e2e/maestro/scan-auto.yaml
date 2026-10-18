@@ -1,0 +1,62 @@
+# Automatic capture on Android (ADR 0032): the camera (AVD: the emulator's virtual scene, a
+# steady TV) captures the page by itself — the Adjust step opens without the shutter; after
+# Keep the same scene is not captured again; a second page by the shutter; "Save as PDF".
+# PRE_RUN="apps/app/e2e/maestro/scan.sh pre" POST_RUN="apps/app/e2e/maestro/scan.sh check-auto"
+# (one 2-page PDF, exactly one automatic capture in logcat). Debug build (run-as). Run with
+# ./run.sh.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis scan auto
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Scan a document"
+- runFlow:
+    when:
+      visible: "While using the app"
+    commands:
+      - tapOn: "While using the app"
+# No shutter: the steady, sharp scene is captured by itself (Auto is on by default; on the
+# emulator it fires within a second or two of the camera starting).
+- extendedWaitUntil:
+    visible: "Adjust corners"
+    timeout: 30000
+- tapOn:
+    id: "scan-keep"
+- extendedWaitUntil:
+    visible: "1 page"
+    timeout: 60000
+# Still the same scene: nothing more for six seconds.
+- extendedWaitUntil:
+    visible: "never shown, waits six seconds"
+    timeout: 6000
+    optional: true
+- assertNotVisible: "Adjust corners"
+- assertVisible: "1 page"
+- tapOn:
+    id: "scan-auto-on"
+- assertVisible:
+    id: "scan-auto-off"
+- extendedWaitUntil:
+    visible:
+      text: "Take a photo of the page"
+      enabled: true
+    timeout: 30000
+- tapOn: "Take a photo of the page"
+- extendedWaitUntil:
+    visible: "Adjust corners"
+    timeout: 60000
+- tapOn:
+    id: "scan-keep"
+- extendedWaitUntil:
+    visible: "2 pages"
+    timeout: 60000
+- tapOn: "See the 2 scanned pages"
+- tapOn: "Save as PDF"
+- extendedWaitUntil:
+    visible: 'Page \d+ of 2.*'
+    timeout: 120000
+- back
+- assertVisible: "Import PDF"

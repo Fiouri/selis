@@ -1,6 +1,6 @@
-**Current:** v1.0.0-rc.1 — tagged; draft pre-release built, signed and verified (run 38876355215)
-**Next step:** owner: review and publish the draft pre-release; upload selis-1.0.0-rc.1.aab to Play Internal testing by hand
-**Last session:** 2026-10-16 — pre-RC cleanup (#61: store images en-only + CI guard, AAB on the release, zip 9.0.3), #58 merged, #57/#59 closed; Maestro 18/18 on AVD 36, main CI + release run green
+**Current:** P7a Scan 2.0 — done (PRs #64, #65, #66); on main after #66 merges, not tagged
+**Next step:** owner: check the scan screens by hand (list in the P7a section), then say "go" for v1.0.0-rc.2 (Play Internal testing, S23)
+**Last session:** 2026-10-18 — Scan 2.0: auto-capture, Enhance, batch review/edit, touch-up, ID card; Tier 1 + Playwright en/el + CI green; Maestro 24 flows + upgrade-locale on AVD 36
 
 ## P5b (2026-10-15)
 
@@ -47,4 +47,25 @@ checked locally, reproducible arm64 APK byte-identical + apksigcopier OK. versio
 (AAB/universal), per ABI 10000011–14. No TestFlight (Apple secrets not set).
 
 Open: the release is a draft until the owner publishes it; Play upload manual.
+
+## P7a — Scan 2.0 (2026-10-18)
+
+Done (PRs #64 core, #65 app, #66 device fix + flows; ADR 0032, ADR 0016 amended): automatic
+capture (0.6 s steady, < 2 % corner drift, sharpness ≥ 800 calibrated on the scan-sample corpus;
+progress ring, haptic, "Auto" switch saved as `scanAuto`, default on; re-arms only after the
+page is gone 1 s or moved 25 %), hints Hold steady / Move closer / More light (torch); Enhance
+filter (default): background σ −84…−95 % on the generated photos, text contrast up; batch with a
+thumbnail strip, review (open a page: corners, filter, rotate, touch-up eraser with undo, retake
+in place, delete; long-press drag), memory cap 120/240/480 MB by tier; ID card mode (A4, both
+sides 85.6 × 54 mm). WASM: SIMD 179 262 → 212 954 B, base 172 778 → 201 167 B; JS 372 → 380 KB
+gzip (budget 1.5 MB).
+
+Verified: Tier 1 (vitest, cargo test incl. corpus replay, clippy -D warnings incl. wasm32,
+deny); Playwright en + el, new scan visual baselines from CI reviewed; Maestro on AVD 36:
+scan-auto, scan-batch (9-page PDF read back in order 3,x,2,4,5r,6,8,9,x), scan-idcard
+(210 × 297 mm, sides 85.60 × 54.00 mm) and the other 21 flows; upgrade-locale. The S23 was not
+used (Play build).
+
+Open: device haptic and auto-capture feel on a real phone (S23 via Play Internal); iOS has no
+haptic; automatic Keep after an automatic capture is not done (the Adjust step stays).
 

@@ -28,8 +28,10 @@ Developed with AI assistance (Claude Code); every change is reviewed and tested 
 - **Pages**: reorder, rotate, delete, insert, extract.
 - **Redact** for real: the text under a box is removed from the file, not just covered.
 - **Tools**: password protection, make the file smaller, optimise, repair, save a page as an image.
-- **Scan** paper with the camera (or from a photo), photos to PDF, and **OCR** that makes scans
-  searchable — all on the device.
+- **Scan** paper with the camera (or from a photo): captures by itself when the page is steady
+  and sharp, an Enhance filter that removes shadows, many pages in one go (reorder, rotate,
+  retake, touch up a mark), ID cards front and back on one A4 page; photos to PDF, and **OCR**
+  that makes scans searchable — all on the device.
 - **Transfer** to your other device without an account, or as a `.selispack` file (below).
 - English and Greek, light / dark / sepia themes.
 

@@ -191,6 +191,8 @@ name: Store screenshots
 - tapOn:
     text: "While using the app"
     optional: true
+# The camera would capture the emulator's steady scene by itself (ADR 0032).
+- runFlow: scan-auto-off.yaml
 - tapOn: ${T_FROM_PHOTO}
 - extendedWaitUntil:
     visible: "Photo taken on.*"

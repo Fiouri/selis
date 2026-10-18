@@ -1,0 +1,53 @@
+# ID card mode on Android (ADR 0032): "ID card", front and back through the camera (AVD: the
+# emulator's virtual scene), the review with Front / Back, "Save as PDF" → one A4 page with
+# both sides at 85.6 × 54 mm. Automatic capture off (scan-auto.yaml covers it).
+# PRE_RUN="apps/app/e2e/maestro/scan.sh pre" POST_RUN="apps/app/e2e/maestro/scan.sh check-idcard".
+# Debug build (run-as). Run with ./run.sh.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis scan ID card
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Scan a document"
+- runFlow:
+    when:
+      visible: "While using the app"
+    commands:
+      - tapOn: "While using the app"
+- runFlow: scan-auto-off.yaml
+- tapOn: "ID card"
+- assertVisible: "Front of the card"
+- extendedWaitUntil:
+    visible:
+      text: "Take a photo of the page"
+      enabled: true
+    timeout: 30000
+- tapOn: "Take a photo of the page"
+- extendedWaitUntil:
+    visible: "Adjust corners"
+    timeout: 60000
+- assertVisible: "Front"
+- tapOn:
+    id: "scan-keep"
+- extendedWaitUntil:
+    visible: "Back of the card"
+    timeout: 60000
+- tapOn: "Take a photo of the page"
+- extendedWaitUntil:
+    visible: "Adjust corners"
+    timeout: 60000
+- tapOn:
+    id: "scan-keep"
+- extendedWaitUntil:
+    visible: "Edit the Front"
+    timeout: 60000
+- assertVisible: "Edit the Back"
+- tapOn: "Save as PDF"
+- extendedWaitUntil:
+    visible: 'Page \d+ of 1.*'
+    timeout: 120000
+- back
+- assertVisible: "Import PDF"

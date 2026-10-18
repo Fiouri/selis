@@ -155,7 +155,13 @@ Tier 2 — end of every feature:
   `POST_RUN="…/scan.sh check"` (P4c: five pages through the camera — the AVD's virtual scene,
   the S23's real camera — with each filter, one 5-page PDF that passes qpdf and pdf.js; prints
   the live-detection stats and, on a real device, fails under 10 fps or on a UI frame gap over
-  200 ms). The scan module is Rust → WebAssembly (`crates/selis-scan`, ADR 0016), built by
+  200 ms). Scan 2.0 (ADR 0032): `scan-auto.yaml` (`PRE_RUN="…/scan.sh pre"`,
+  `POST_RUN="…/scan.sh check-auto"`: the steady virtual scene is captured with no shutter, not
+  again after Keep; one automatic capture in logcat), `scan-batch.yaml` (`…/scan.sh pre-batch`,
+  `…/scan.sh check-batch`: ten numbered page photos through "Scan a photo", then reorder, turn,
+  remove, retake → a 9-page PDF read back in the right order) and `scan-idcard.yaml`
+  (`…/scan.sh pre`, `…/scan.sh check-idcard`: one A4 page, both sides 85.6 × 54 mm ± 1). Flows
+  that use the camera manually switch Auto off first (`scan-auto-off.yaml`). The scan module is Rust → WebAssembly (`crates/selis-scan`, ADR 0016), built by
   `npm run build:scan` (npm pre-scripts; needs `rustup target add wasm32-unknown-unknown`).
   And `ocr.yaml` with `PRE_RUN="…/ocr.sh pre"` and `POST_RUN="…/ocr.sh check"` (P4d: the scanned
   Greek fixture made searchable; per-page times from logcat, PSS (and RSS) of app + our WebView renderer around

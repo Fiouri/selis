@@ -53,11 +53,14 @@ fn auto_fires_once_after_the_steady_time_and_reports_progress() {
 fn auto_rearms_when_the_page_goes_away_or_after_a_reset() {
     let mut auto = AutoCapture::new();
     assert_eq!(run(&mut auto, 0.0, 15, |_| (Some(PAGE), SHARP)).len(), 1);
-    // The page is lifted (three frames without it), a new one is put down.
-    assert!(run(&mut auto, 1000.0, 3, |_| (None, SHARP)).is_empty());
-    assert_eq!(run(&mut auto, 1200.0, 15, |_| (Some(PAGE), SHARP)).len(), 1);
+    // A few frames lost (glare, a slow frame) do not re-arm it…
+    assert!(run(&mut auto, 1000.0, 5, |_| (None, SHARP)).is_empty());
+    assert!(run(&mut auto, 1330.0, 15, |_| (Some(PAGE), SHARP)).is_empty());
+    // …the page lifted for a second and another put down does.
+    assert!(run(&mut auto, 2400.0, 17, |_| (None, SHARP)).is_empty());
+    assert_eq!(run(&mut auto, 3600.0, 15, |_| (Some(PAGE), SHARP)).len(), 1);
     // Moved far (a new page in another place) re-arms as well.
-    let moved = shifted(&PAGE, 40.0);
+    let moved = shifted(&PAGE, 70.0);
     assert_eq!(
         run(&mut auto, 2200.0, 15, |_| (Some(moved), SHARP)).len(),
         1
@@ -65,6 +68,28 @@ fn auto_rearms_when_the_page_goes_away_or_after_a_reset() {
     auto.reset();
     assert_eq!(
         run(&mut auto, 3200.0, 15, |_| (Some(moved), SHARP)).len(),
+        1
+    );
+}
+
+#[test]
+fn auto_does_not_take_the_same_page_again_when_the_camera_comes_back() {
+    let mut auto = AutoCapture::new();
+    assert_eq!(run(&mut auto, 0.0, 15, |_| (Some(PAGE), SHARP)).len(), 1);
+    // Adjust, Keep: the camera restarts and its first frames show nothing.
+    auto.resume();
+    assert!(run(&mut auto, 5000.0, 10, |_| (None, SHARP)).is_empty());
+    assert!(run(&mut auto, 6000.0, 30, |_| (Some(PAGE), SHARP)).is_empty());
+    // A corner snapping away for a frame right after the restart does not re-arm it either.
+    let mut snapped = PAGE;
+    snapped.0[2] = (180.0, 290.0);
+    auto.resume();
+    assert!(run(&mut auto, 8000.0, 1, |_| (Some(snapped), SHARP)).is_empty());
+    assert!(run(&mut auto, 8100.0, 20, |_| (Some(PAGE), SHARP)).is_empty());
+    // Once the outline was seen, the page going away re-arms it as before.
+    assert!(run(&mut auto, 9500.0, 17, |_| (None, SHARP)).is_empty());
+    assert_eq!(
+        run(&mut auto, 10700.0, 15, |_| (Some(PAGE), SHARP)).len(),
         1
     );
 }

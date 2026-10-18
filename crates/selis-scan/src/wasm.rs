@@ -135,6 +135,13 @@ pub extern "C" fn scan_auto_reset() {
     LIVE.with_borrow_mut(|live| live.auto.reset());
 }
 
+/// The camera starts again after a capture: the tracker keeps the captured page (no second
+/// capture of it) and ignores the camera's first frames without an outline.
+#[unsafe(no_mangle)]
+pub extern "C" fn scan_auto_resume() {
+    LIVE.with_borrow_mut(|live| live.auto.resume());
+}
+
 /// Looks for the page in a full-size RGBA photo (borrowed): found on a small copy, then
 /// sharpened against the photo itself. Writes the corners as `scan_live` does (8 `f32`s) and
 /// returns 1, or returns 0 when there is no page.

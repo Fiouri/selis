@@ -233,6 +233,8 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
     const stats = scanStats();
     stats.start();
     void (async () => {
+      // The camera was stopped while a still was adjusted: its first frames are empty.
+      await client.resumeAuto().catch(() => undefined);
       while (!stopped()) {
         const started = performance.now();
         const frame: Frame | null = sampleFrame(el, canvas);

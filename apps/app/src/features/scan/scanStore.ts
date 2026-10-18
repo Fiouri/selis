@@ -360,9 +360,9 @@ export const useScan = create<ScanState>()((set, get) => {
         void renderEditing();
         return;
       }
+      // The camera resumes the tracker: the same framing is not captured again by itself
+      // until the page moves or goes (the shutter always works).
       void client?.drop().catch(() => undefined);
-      // A retake: the tracker may fire on the same page again.
-      void client?.resetAuto().catch(() => undefined);
       set({ phase: { step: "camera" } });
     },
 

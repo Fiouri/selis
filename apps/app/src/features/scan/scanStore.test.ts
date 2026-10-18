@@ -21,6 +21,7 @@ const client = {
   preview: vi.fn<(filter: ScanFilter) => Promise<Picture>>(),
   render: vi.fn<(edits: PageEdits, maxPixels: number) => Promise<Picture>>(),
   resetAuto: vi.fn<() => Promise<void>>(),
+  resumeAuto: vi.fn<() => Promise<void>>(),
   keep: vi.fn<(edits: PageEdits, maxPixels: number, thumbSide: number) => Promise<KeptPage>>(),
   drop: vi.fn<() => Promise<void>>(),
   terminate: vi.fn<() => void>(),
@@ -130,12 +131,12 @@ describe("scan session", () => {
     ]);
   });
 
-  it("retake lets the still go, re-arms auto-capture and returns to the camera", async () => {
+  it("retake lets the still go and returns to the camera (auto-capture resumes, not reset)", async () => {
     await useScan.getState().open();
     await capture();
     useScan.getState().retake();
     expect(client.drop).toHaveBeenCalled();
-    expect(client.resetAuto).toHaveBeenCalled();
+    expect(client.resetAuto).not.toHaveBeenCalled();
     expect(useScan.getState().phase).toEqual({ step: "camera" });
   });
 
