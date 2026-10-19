@@ -355,6 +355,25 @@ describe("scan session", () => {
       expect(useScan.getState().pages[1]?.edits.filter).toBe("enhance");
     });
 
+    it("keeps a page the still missed with the live outline when the still has the frame's shape", async () => {
+      await useScan.getState().open();
+      await scanPages(1);
+      // Live frame 240 × 320 (3:4); still 300 × 400 (3:4): the live outline, scaled.
+      const live = { quad: [[8, 8], [232, 10], [230, 310], [10, 312]] as Quad, width: 240, height: 320 };
+      client.still.mockResolvedValueOnce({ ...stillOf(), quad: null });
+      client.keep.mockResolvedValueOnce(kept());
+      expect(await useScan.getState().autoCapture(photo, 0.95, live)).toBe("kept");
+      expect(client.keep.mock.lastCall?.[0].quad).toEqual([
+        [10, 10],
+        [290, 12.5],
+        [287.5, 387.5],
+        [12.5, 390],
+      ]);
+      // A still of another shape (a 4:3 photo from a 16:9 preview) goes through Adjust.
+      client.still.mockResolvedValueOnce({ ...stillOf(), quad: null });
+      expect(await useScan.getState().autoCapture(photo, 0.95, { ...live, width: 180, height: 320 })).toBe("adjust");
+    });
+
     it("opens Adjust for a doubtful outline, a page not found in the still, a retake or an ID card", async () => {
       await useScan.getState().open();
       await scanPages(1);

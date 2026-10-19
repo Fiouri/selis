@@ -31,7 +31,7 @@ import { type Frame, photoStill, sampleFrame, takeStill } from "./capture";
 import { ScanPageEditor } from "./ScanPageEditor";
 import { ScanQueue } from "./ScanQueue";
 import { scanStats } from "./scanStats";
-import { ID_SIDES, type ScanMode, stillPixels, useScan } from "./scanStore";
+import { ID_SIDES, type LiveOutline, type ScanMode, stillPixels, useScan } from "./scanStore";
 
 /** Live detection rate cap: enough for a steady outline, light on the battery. */
 const DETECT_INTERVAL_MS = 66;
@@ -205,7 +205,7 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
     if (el) el.scrollLeft = el.scrollWidth;
   }, [pages.length]);
 
-  const onShutter = async (automatic = false, confidence = 0) => {
+  const onShutter = async (automatic = false, confidence = 0, live?: LiveOutline) => {
     const cam = camera.current;
     const el = video.current;
     const scan = useScan.getState();
@@ -219,7 +219,7 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
     }
     // Local only (logcat), read by the device checks (scan.sh).
     console.info("[selis:perf] scan auto-capture");
-    const outcome = await autoCapture(still, confidence);
+    const outcome = await autoCapture(still, confidence, live);
     if (outcome === "kept") {
       const kept = useScan.getState().pages;
       const page = kept[kept.length - 1];
@@ -306,7 +306,10 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
             }
             setLive({ progress: autoRef.current ? result.progress : 0, hint: result.hint });
             // The tracker fires once per page; the capture moves the session on (and ends this loop).
-            if (result.fire && autoRef.current) void shutterRef.current(true, result.confidence);
+            if (result.fire && autoRef.current) {
+              const live = result.quad ? { quad: result.quad, width: frame.width, height: frame.height } : undefined;
+              void shutterRef.current(true, result.confidence, live);
+            }
           } catch {
             // A frame that could not be checked (the worker is still starting, or closing):
             // try the next one; a closed session stops the loop through `stopped`.

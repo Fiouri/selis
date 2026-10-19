@@ -16,6 +16,7 @@ import {
   type Picture,
   type PhotoSource,
   type Quad,
+  scaleQuad,
   type ScanClient,
   type ScanFilter,
   type Size,
@@ -28,6 +29,9 @@ import { currentRenderLimits, getEngine } from "../../lib/engine";
 import { upload } from "../../lib/save";
 
 export type ScanMode = "document" | "idcard";
+
+/** The live frame's outline at the moment of an automatic capture (frame pixels). */
+export type LiveOutline = { readonly quad: Quad; readonly width: number; readonly height: number };
 
 export type ScannedPage = {
   readonly id: string;
@@ -178,7 +182,7 @@ type ScanState = {
    * edge support ≥ `AUTO_KEEP_CONFIDENCE` and the page found in the still, the page is kept at
    * once with the default filter ("kept"); otherwise the Adjust step opens ("adjust").
    */
-  autoCapture: (photo: () => Promise<PhotoSource>, confidence: number) => Promise<"kept" | "adjust" | "failed">;
+  autoCapture: (photo: () => Promise<PhotoSource>, confidence: number, live?: LiveOutline) => Promise<"kept" | "adjust" | "failed">;
   setQuad: (quad: Quad) => void;
   setFilter: (filter: ScanFilter) => Promise<void>;
   /** Leaves the Adjust step: back to the camera (or to the page being edited). */
@@ -348,14 +352,18 @@ export const useScan = create<ScanState>()((set, get) => {
       return true;
     },
 
-    autoCapture: async (photo, confidence) => {
+    autoCapture: async (photo, confidence, live) => {
       const { mode, pages, retaking } = get();
       // A batch (a document with a page kept already) keeps a confident automatic capture as
       // it is; the first page, ID cards and doubtful outlines go through Adjust (ADR 0032).
       const keepNow = mode === "document" && pages.length >= 1 && !retaking && confidence >= AUTO_KEEP_CONFIDENCE;
       const loaded = await loadStill(photo);
       if (!loaded) return "failed";
-      const quad = loaded.still.quad;
+      const { still } = loaded;
+      // The page not found in the still: a still with the live frame's shape is that frame (or
+      // the same view), so the confident live outline, scaled, stands in.
+      const sameShape = live && Math.abs(still.width / still.height - live.width / live.height) < 0.01 * (live.width / live.height);
+      const quad = still.quad ?? (live && sameShape ? scaleQuad(live.quad, still.width / live.width, still.height / live.height) : null);
       if (!keepNow || !quad) {
         openAdjust(loaded);
         return "adjust";

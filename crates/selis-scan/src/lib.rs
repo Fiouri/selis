@@ -167,19 +167,39 @@ pub const DETECT_SIZE: u32 = 320;
 /// Finds the page in a full-size photo: `detect` on a small copy, then `refine` at full size.
 #[must_use]
 pub fn find_page(photo: &GrayImage) -> Option<Quad> {
-    let scale = DETECT_SIZE as f32 / photo.width().max(photo.height()) as f32;
-    let small = if scale < 1.0 {
-        image::imageops::resize(
-            photo,
-            ((photo.width() as f32 * scale).round() as u32).max(1),
-            ((photo.height() as f32 * scale).round() as u32).max(1),
-            image::imageops::FilterType::Triangle,
-        )
-    } else {
-        photo.clone()
+    let scale = (DETECT_SIZE as f32 / photo.width().max(photo.height()) as f32).min(1.0);
+    let (w, h) = (
+        ((photo.width() as f32 * scale).round() as u32).max(1),
+        ((photo.height() as f32 * scale).round() as u32).max(1),
+    );
+    // First an area-averaged copy (less noise), then one scaled like the live preview (bilinear
+    // samples, edges kept crisp): a thin outline such as a TV's bezel can vanish in the first
+    // (seen on the emulator's camera, where the live frames found it).
+    let averaged = || {
+        if scale < 1.0 {
+            image::imageops::resize(photo, w, h, image::imageops::FilterType::Triangle)
+        } else {
+            photo.clone()
+        }
     };
-    let scale = scale.min(1.0);
-    let found = detect(&small)?;
+    let sampled = || {
+        let mut small = GrayImage::new(w, h);
+        warp_into(
+            photo,
+            Projection::scale(scale, scale) * Projection::translate(-0.5, -0.5),
+            Interpolation::Bilinear,
+            Border::Replicate,
+            &mut small,
+        );
+        small
+    };
+    let found = detect(&averaged()).or_else(|| {
+        if scale < 1.0 {
+            detect(&sampled())
+        } else {
+            None
+        }
+    })?;
     Some(refine(
         photo,
         &Quad(found.0.map(|(x, y)| (x / scale, y / scale))),
