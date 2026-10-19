@@ -1,0 +1,1 @@
+Scan 2.0: the camera captures the page by itself when it is steady and sharp, an Enhance filter removes shadows, edit scanned pages (corners, filter, rotate, touch up, retake, reorder) before saving, and ID cards go front and back on one A4 page.

@@ -8,6 +8,10 @@ short summaries of these sections.
 
 ## [Unreleased]
 
+## [1.0.0-rc.2] - 2026-10-19
+
+Second release candidate: Scan 2.0.
+
 ### Added
 
 - Scan 2.0 (ADR 0032): automatic capture when the page is steady and sharp (progress ring,
@@ -17,6 +21,11 @@ short summaries of these sections.
   corners or filter, rotate it, touch up a mark, retake or delete it, drag pages to reorder;
   ID card mode: front and back on one A4 page at 85.6 × 54 mm. In a batch, a confident automatic
   capture is kept straight away ("Page N added"), without the Adjust step.
+
+### Changed
+
+- The scan camera's header keeps its text clear of the screen edges on narrow phones (360 dp)
+  in English and Greek; the page count appears with the first page.
 
 ## [1.0.0-rc.1] - 2026-10-16
 
@@ -58,5 +67,6 @@ desktop shell (P6).
 - No analytics, crash reporting, advertising or account; nothing is collected
   ([PRIVACY.md](docs/PRIVACY.md)).
 
-[Unreleased]: https://github.com/Fiouri/selis/compare/v1.0.0-rc.1...HEAD
+[Unreleased]: https://github.com/Fiouri/selis/compare/v1.0.0-rc.2...HEAD
+[1.0.0-rc.2]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.1
