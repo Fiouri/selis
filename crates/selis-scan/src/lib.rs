@@ -76,6 +76,14 @@ const MAX_CORNER_DEG: f64 = 145.0;
 /// thickening stays apart); the largest well-supported outline wins.
 #[must_use]
 pub fn detect(gray: &GrayImage) -> Option<Quad> {
+    detect_scored(gray).map(|(quad, _)| quad)
+}
+
+/// Like `detect`, with the outline's support: the share of its weakest side's middle 80 % that
+/// runs along edge pixels (at least `MIN_SIDE_SUPPORT`; Scan 2.0 keeps a page without the
+/// Adjust step only above `live::AUTO_KEEP_SUPPORT`).
+#[must_use]
+pub fn detect_scored(gray: &GrayImage) -> Option<(Quad, f32)> {
     let (w, h) = gray.dimensions();
     if w < 16 || h < 16 {
         return None;
@@ -84,7 +92,7 @@ pub fn detect(gray: &GrayImage) -> Option<Quad> {
     let thick = dilate(&thin, imageproc::distance_transform::Norm::LInf, 1);
     let min_area = f64::from(w) * f64::from(h) * MIN_AREA_SHARE;
 
-    let mut best: Option<(f64, Quad)> = None;
+    let mut best: Option<(f64, Quad, f32)> = None;
     // Contours run along the outside of the edge pixels: this far outside the page's real
     // edge, in frame pixels.
     for (edges, outside) in [(&thick, 1.5), (&thin, 0.5)] {
@@ -109,13 +117,13 @@ pub fn detect(gray: &GrayImage) -> Option<Quad> {
                     continue;
                 }
                 let score = area * f64::from(support);
-                if best.as_ref().is_none_or(|(s, _)| score > *s) {
-                    best = Some((score, quad));
+                if best.as_ref().is_none_or(|(s, _, _)| score > *s) {
+                    best = Some((score, quad, support));
                 }
             }
         }
     }
-    best.map(|(_, quad)| quad)
+    best.map(|(_, quad, support)| (quad, support))
 }
 
 /// Every side of a found page lies on edge pixels for at least this share of its middle 80 %
@@ -159,19 +167,39 @@ pub const DETECT_SIZE: u32 = 320;
 /// Finds the page in a full-size photo: `detect` on a small copy, then `refine` at full size.
 #[must_use]
 pub fn find_page(photo: &GrayImage) -> Option<Quad> {
-    let scale = DETECT_SIZE as f32 / photo.width().max(photo.height()) as f32;
-    let small = if scale < 1.0 {
-        image::imageops::resize(
-            photo,
-            ((photo.width() as f32 * scale).round() as u32).max(1),
-            ((photo.height() as f32 * scale).round() as u32).max(1),
-            image::imageops::FilterType::Triangle,
-        )
-    } else {
-        photo.clone()
+    let scale = (DETECT_SIZE as f32 / photo.width().max(photo.height()) as f32).min(1.0);
+    let (w, h) = (
+        ((photo.width() as f32 * scale).round() as u32).max(1),
+        ((photo.height() as f32 * scale).round() as u32).max(1),
+    );
+    // First an area-averaged copy (less noise), then one scaled like the live preview (bilinear
+    // samples, edges kept crisp): a thin outline such as a TV's bezel can vanish in the first
+    // (seen on the emulator's camera, where the live frames found it).
+    let averaged = || {
+        if scale < 1.0 {
+            image::imageops::resize(photo, w, h, image::imageops::FilterType::Triangle)
+        } else {
+            photo.clone()
+        }
     };
-    let scale = scale.min(1.0);
-    let found = detect(&small)?;
+    let sampled = || {
+        let mut small = GrayImage::new(w, h);
+        warp_into(
+            photo,
+            Projection::scale(scale, scale) * Projection::translate(-0.5, -0.5),
+            Interpolation::Bilinear,
+            Border::Replicate,
+            &mut small,
+        );
+        small
+    };
+    let found = detect(&averaged()).or_else(|| {
+        if scale < 1.0 {
+            detect(&sampled())
+        } else {
+            None
+        }
+    })?;
     Some(refine(
         photo,
         &Quad(found.0.map(|(x, y)| (x / scale, y / scale))),

@@ -751,7 +751,8 @@
     "reviewPages": "Έλεγχος σελίδων",
     "retaking": "Ξανά λήψη σελίδας {number}",
     "cancelRetake": "Πίσω στις σελίδες",
-    "cancel": "Άκυρο"
+    "cancel": "Άκυρο",
+    "pageAdded": "Η σελίδα {number} προστέθηκε"
   },
   "ocr": {
     "title": "Αναζήτηση στο κείμενο (OCR)",

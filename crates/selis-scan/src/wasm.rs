@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use image::{GrayImage, RgbaImage};
 
 use crate::live::{AutoCapture, frame_stats};
-use crate::{Edits, Filter, Quad, RelativeStroke, apply, detect, find_page, render};
+use crate::{Edits, Filter, Quad, RelativeStroke, apply, detect_scored, find_page, render};
 
 /// State of the live detection loop, kept between frames so the frame-sized buffers are not
 /// allocated again for every frame: the grey copy of the frame (reallocated only when the frame
@@ -85,14 +85,15 @@ unsafe fn write_quad(quad: &Quad, out: *mut f32) {
 }
 
 /// Number of `f32`s `scan_live` writes.
-pub const LIVE_OUT: usize = 14;
+pub const LIVE_OUT: usize = 15;
 
 /// One live frame (small RGBA, `width × height`, borrowed; about 320 px on the long side) taken
 /// at `now_ms`: looks for the page and feeds the automatic-capture tracker. Writes `LIVE_OUT`
 /// `f32`s to `out`: the corners (x, y × 4: top-left, top-right, bottom-right, bottom-left; only
 /// when found), the sharpness, the mean luma, the outline's share of the frame, the steady
-/// progress (0–1), 1 when the frame should be captured now (else 0), and the hint code
-/// (`live::Hint`). Returns 1 when a page was found, 0 otherwise.
+/// progress (0–1), 1 when the frame should be captured now (else 0), the hint code
+/// (`live::Hint`) and the outline's edge support (0–1). Returns 1 when a page was found, 0
+/// otherwise.
 ///
 /// # Safety
 /// `rgba` points to `width * height * 4` readable bytes, `out` to `LIVE_OUT` writable `f32`s.
@@ -110,8 +111,9 @@ pub unsafe extern "C" fn scan_live(
     let out = unsafe { std::slice::from_raw_parts_mut(out, LIVE_OUT) };
     LIVE.with_borrow_mut(|live| {
         grey_into(&mut live.gray, pixels, width, height);
-        let quad = detect(&live.gray);
-        let stats = frame_stats(&live.gray, quad.as_ref());
+        let found = detect_scored(&live.gray);
+        let stats = frame_stats(&live.gray, found.as_ref().map(|(q, s)| (q, *s)));
+        let quad = found.map(|(q, _)| q);
         let verdict = live.auto.update(quad.as_ref(), &stats, now_ms);
         if let Some(q) = &quad {
             for (i, (x, y)) in q.0.iter().enumerate() {
@@ -125,6 +127,7 @@ pub unsafe extern "C" fn scan_live(
         out[11] = verdict.progress;
         out[12] = if verdict.fire { 1.0 } else { 0.0 };
         out[13] = f32::from(verdict.hint as u8);
+        out[14] = stats.support;
         u32::from(quad.is_some())
     })
 }

@@ -10,6 +10,7 @@ const SHARP: FrameStats = FrameStats {
     sharpness: 1000.0,
     luma: 120.0,
     area_share: 0.5,
+    support: 0.9,
 };
 
 fn shifted(q: &Quad, dx: f32) -> Quad {
@@ -149,7 +150,8 @@ fn hints_follow_the_frame() {
 fn frame_measures() {
     let flat = GrayImage::from_pixel(100, 80, Luma([90]));
     let quad = Quad([(10.0, 10.0), (90.0, 10.0), (90.0, 70.0), (10.0, 70.0)]);
-    let stats = live::frame_stats(&flat, Some(&quad));
+    let stats = live::frame_stats(&flat, Some((&quad, 0.9)));
+    assert!((stats.support - 0.9).abs() < f32::EPSILON);
     assert_eq!(stats.sharpness, 0.0);
     assert!((stats.luma - 90.0).abs() < 0.01);
     assert!((stats.area_share - 0.6).abs() < 0.001);

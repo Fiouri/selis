@@ -334,4 +334,72 @@ describe("scan session", () => {
       expect(mm(item.box.height)).toBeCloseTo(54, 1);
     }
   });
+
+  describe("automatic capture in a batch", () => {
+    const photo = () => Promise.resolve({ kind: "blob" as const, blob: blob("image/jpeg") });
+    const kept = (): KeptPage => ({ page: picture("image/jpeg"), mime: "image/jpeg", thumb: picture("image/jpeg"), ms: 7 });
+
+    it("keeps a confident page at once with the default filter once a page is kept", async () => {
+      await useScan.getState().open();
+      // The first page always goes through Adjust.
+      client.still.mockResolvedValueOnce(stillOf());
+      expect(await useScan.getState().autoCapture(photo, 0.99)).toBe("adjust");
+      expect(useScan.getState().phase.step).toBe("adjust");
+      await keepPage();
+      client.still.mockResolvedValueOnce(stillOf());
+      client.keep.mockResolvedValueOnce(kept());
+      expect(await useScan.getState().autoCapture(photo, 0.9)).toBe("kept");
+      expect(client.keep).toHaveBeenLastCalledWith({ quad: QUAD, filter: "enhance", strokes: [], turns: 0 }, 6_000_000, 360);
+      expect(useScan.getState().phase).toEqual({ step: "camera" });
+      expect(useScan.getState().pages).toHaveLength(2);
+      expect(useScan.getState().pages[1]?.edits.filter).toBe("enhance");
+    });
+
+    it("keeps a page the still missed with the live outline when the still has the frame's shape", async () => {
+      await useScan.getState().open();
+      await scanPages(1);
+      // Live frame 240 × 320 (3:4); still 300 × 400 (3:4): the live outline, scaled.
+      const live = { quad: [[8, 8], [232, 10], [230, 310], [10, 312]] as Quad, width: 240, height: 320 };
+      client.still.mockResolvedValueOnce({ ...stillOf(), quad: null });
+      client.keep.mockResolvedValueOnce(kept());
+      expect(await useScan.getState().autoCapture(photo, 0.95, live)).toBe("kept");
+      expect(client.keep.mock.lastCall?.[0].quad).toEqual([
+        [10, 10],
+        [290, 12.5],
+        [287.5, 387.5],
+        [12.5, 390],
+      ]);
+      // A still of another shape (a 4:3 photo from a 16:9 preview) goes through Adjust.
+      client.still.mockResolvedValueOnce({ ...stillOf(), quad: null });
+      expect(await useScan.getState().autoCapture(photo, 0.95, { ...live, width: 180, height: 320 })).toBe("adjust");
+    });
+
+    it("opens Adjust for a doubtful outline, a page not found in the still, a retake or an ID card", async () => {
+      await useScan.getState().open();
+      await scanPages(1);
+      // Edge support under 85 %.
+      client.still.mockResolvedValueOnce(stillOf());
+      expect(await useScan.getState().autoCapture(photo, 0.8)).toBe("adjust");
+      useScan.getState().retake();
+      // Confident live outline, but the still has no page.
+      client.still.mockResolvedValueOnce({ ...stillOf(), quad: null });
+      expect(await useScan.getState().autoCapture(photo, 0.95)).toBe("adjust");
+      useScan.getState().retake();
+      // A retake from the review.
+      useScan.getState().showQueue();
+      useScan.getState().retakePage(useScan.getState().pages[0]?.id ?? "");
+      client.still.mockResolvedValueOnce(stillOf());
+      expect(await useScan.getState().autoCapture(photo, 0.95)).toBe("adjust");
+      expect(client.keep).toHaveBeenCalledTimes(1);
+
+      useScan.getState().close();
+      await useScan.getState().open();
+      useScan.getState().setMode("idcard");
+      await capture();
+      await keepPage();
+      client.still.mockResolvedValueOnce(stillOf());
+      expect(await useScan.getState().autoCapture(photo, 0.99)).toBe("adjust");
+    });
+  });
 });
+

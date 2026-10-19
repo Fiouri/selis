@@ -48,6 +48,7 @@ describe("ScanClient", () => {
             progress: 1,
             fire: true,
             hint: "none",
+            confidence: 0.95,
           }
         : req.type === "resetAuto"
           ? { type: "autoReset", reqId: req.reqId }

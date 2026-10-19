@@ -51,7 +51,8 @@ async function thumbs(page: Page): Promise<string[]> {
 test("scans two pages, reorders them and saves one PDF", async ({ page }) => {
   await useFakeScanCamera(page);
   await openCamera(page);
-  await expect(page.getByTestId("scan-count")).toHaveText("No pages");
+  // No count before the first page.
+  await expect(page.getByTestId("scan-count")).toHaveCount(0);
 
   await capture(page);
   await expect(page.getByTestId("scan-adjust-hint")).toHaveText("Drag the corners to the page's edges if needed.");
@@ -113,7 +114,8 @@ test("corners can be moved; crossed corners cannot be kept; retake goes back", a
   await expect(page.getByTestId("scan-keep")).toBeDisabled();
   await page.getByTestId("scan-retake").click();
   await expect(page.getByTestId("scan-camera")).toHaveAttribute("data-camera", "live");
-  await expect(page.getByTestId("scan-count")).toHaveText("No pages");
+  // No count before the first page.
+  await expect(page.getByTestId("scan-count")).toHaveCount(0);
 });
 
 test("leaving with scanned pages asks first", async ({ page }) => {
@@ -133,7 +135,7 @@ test("leaving with scanned pages asks first", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => [...document.querySelectorAll("video")].some((v) => v.srcObject !== null))).toBe(false);
 });
 
-test("auto: a steady page is captured by itself, once; Auto off is remembered", async ({ page }) => {
+test("auto: a steady page is captured by itself, once; later pages of a batch are kept by themselves; Auto off is remembered", async ({ page }) => {
   await useFakeScanCamera(page);
   await openCamera(page);
   await expect(page.getByRole("switch", { name: "Auto" })).toHaveAttribute("aria-checked", "true");
@@ -152,8 +154,20 @@ test("auto: a steady page is captured by itself, once; Auto off is remembered", 
   await page.waitForTimeout(2500);
   await expect(page.getByTestId("scan-camera")).toBeVisible();
 
-  await page.getByRole("switch", { name: "Auto" }).click();
-  await expect(page.getByRole("switch", { name: "Auto" })).toHaveAttribute("aria-checked", "false");
+  // A batch (a page kept): Auto off and on again, and the confident page is kept by itself —
+  // no Adjust step, "Page 2 added", its thumbnail in the strip.
+  const auto = page.getByRole("switch", { name: "Auto" });
+  await auto.click();
+  await expect(auto).toHaveAttribute("aria-checked", "false");
+  await auto.click();
+  await expect(page.getByTestId("scan-page-added")).toHaveText("Page 2 added", { timeout: 20_000 });
+  await expect(page.getByTestId("scan-count")).toHaveText("2 pages");
+  await expect(page.getByTestId("scan-adjust")).toHaveCount(0);
+  await expect(page.getByTestId("scan-strip").locator("img")).toHaveCount(2);
+  await expect(page.getByTestId("scan-page-added")).toHaveCount(0, { timeout: 3000 });
+
+  await auto.click();
+  await expect(auto).toHaveAttribute("aria-checked", "false");
   await page.waitForTimeout(2000);
   await expect(page.getByTestId("scan-camera")).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
@@ -296,3 +310,56 @@ test("an ID card: front and back on one A4 page at the ID-1 size", async ({ page
     expect(Math.abs((short ?? 0) - 54)).toBeLessThanOrEqual(1);
   }
 });
+
+test("auto: with reduced motion the kept page does not fly into the strip", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await useFakeScanCamera(page);
+  await openCamera(page);
+  await expect(page.getByTestId("scan-adjust")).toBeVisible({ timeout: 20_000 });
+  await keep(page, "1 page");
+  const auto = page.getByRole("switch", { name: "Auto" });
+  await auto.click();
+  await auto.click();
+  await expect(page.getByTestId("scan-page-added")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("scan-fly-in")).toBeHidden();
+  await expect(page.getByTestId("scan-count")).toHaveText("2 pages");
+});
+
+for (const locale of ["en", "el"] as const) {
+  test(`header at 360 dp (${locale}): no text reaches the screen edges`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await presetSettings(page, { locale, theme: "light", scanAuto: false });
+    await useFakeScanCamera(page);
+    await openCamera(page);
+    /** Every text run in the header: its box (text, not element) and whether it is cut by an ellipsis. */
+    const runs = () =>
+      page.getByTestId("scan-header").evaluate((header) => {
+        const out: { text: string; left: number; right: number }[] = [];
+        const walker = document.createTreeWalker(header, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const parent = node.parentElement;
+          if (!node.textContent?.trim() || !parent || parent.closest(".sr-only")) continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const box = range.getBoundingClientRect();
+          // A truncated run ends at its element's padding box, with an ellipsis.
+          const clip = parent.getBoundingClientRect();
+          out.push({ text: node.textContent.trim(), left: Math.max(box.left, clip.left), right: Math.min(box.right, clip.right) });
+        }
+        return out;
+      });
+    const check = async () => {
+      const found = await runs();
+      expect(found.length).toBeGreaterThan(0);
+      for (const run of found) {
+        expect(run.left, run.text).toBeGreaterThanOrEqual(16);
+        expect(run.right, run.text).toBeLessThanOrEqual(360 - 16);
+      }
+    };
+    await check();
+    await capture(page);
+    await page.getByTestId("scan-keep").click();
+    await expect(page.getByTestId("scan-count")).toBeVisible({ timeout: 20_000 });
+    await check();
+  });
+}

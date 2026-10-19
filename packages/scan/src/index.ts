@@ -21,4 +21,4 @@ export {
 } from "./geometry";
 export { downscale } from "./pixels";
 export type { Picture, PhotoSource } from "./protocol";
-export { FILTERS, HINTS, type LiveFrame, type LiveHint, type PageEdits, type ScanFilter, simdSupported, type Stroke } from "./wasm";
+export { AUTO_KEEP_CONFIDENCE, FILTERS, HINTS, type LiveFrame, type LiveHint, type PageEdits, type ScanFilter, simdSupported, type Stroke } from "./wasm";

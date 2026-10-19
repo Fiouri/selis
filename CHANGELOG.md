@@ -15,7 +15,8 @@ short summaries of these sections.
   "Move closer", "More light needed" (turns the flash on); an Enhance filter, the new default,
   that removes shadows and uneven light in colour; batch review — open a page to change its
   corners or filter, rotate it, touch up a mark, retake or delete it, drag pages to reorder;
-  ID card mode: front and back on one A4 page at 85.6 × 54 mm.
+  ID card mode: front and back on one A4 page at 85.6 × 54 mm. In a batch, a confident automatic
+  capture is kept straight away ("Page N added"), without the Adjust step.
 
 ## [1.0.0-rc.1] - 2026-10-16
 

@@ -16,6 +16,9 @@ pub struct FrameStats {
     pub luma: f32,
     /// The outline's area as a share of the frame (0 without an outline).
     pub area_share: f32,
+    /// How well the outline sits on edges: the share of its weakest side's middle 80 % on edge
+    /// pixels (0 without an outline).
+    pub support: f32,
 }
 
 /// Mean luma of a grey frame.
@@ -67,15 +70,22 @@ pub fn sharpness(gray: &GrayImage, quad: &Quad) -> f32 {
     (sum_sq / n - mean * mean).max(0.0) as f32
 }
 
-/// The measurements of a grey live frame and its outline.
+/// The measurements of a grey live frame and its outline (with the outline's edge support,
+/// from `detect_scored`).
 #[must_use]
-pub fn frame_stats(gray: &GrayImage, quad: Option<&Quad>) -> FrameStats {
+pub fn frame_stats(gray: &GrayImage, found: Option<(&Quad, f32)>) -> FrameStats {
     FrameStats {
-        sharpness: quad.map_or(0.0, |q| sharpness(gray, q)),
+        sharpness: found.map_or(0.0, |(q, _)| sharpness(gray, q)),
         luma: mean_luma(gray),
-        area_share: quad.map_or(0.0, |q| area_share(q, gray.width(), gray.height())),
+        area_share: found.map_or(0.0, |(q, _)| area_share(q, gray.width(), gray.height())),
+        support: found.map_or(0.0, |(_, s)| s),
     }
 }
+
+/// Edge support an automatic capture needs to keep the page without the Adjust step (batch
+/// mode, ADR 0032): every side on edge pixels for at least 85 % of its middle 80 % — stricter
+/// than the 70 % a found outline needs.
+pub const AUTO_KEEP_SUPPORT: f32 = 0.85;
 
 /// The share of a `width × height` frame that `quad` covers.
 #[must_use]

@@ -191,8 +191,9 @@ fn replay(
     let mut fired = Vec::new();
     for i in 0..frames {
         let frame = video_frame(still, i, offset(i), blur);
-        let quad = detect(&frame);
-        let stats = live::frame_stats(&frame, quad.as_ref());
+        let found = detect_scored(&frame);
+        let stats = live::frame_stats(&frame, found.as_ref().map(|(q, s)| (q, *s)));
+        let quad = found.map(|(q, _)| q);
         let now = f64::from(i) * FRAME_MS;
         if auto.update(quad.as_ref(), &stats, now).fire {
             fired.push(now);
@@ -377,6 +378,23 @@ fn enhance_removes_shadows_and_keeps_text_contrast() {
             contrast_e >= contrast_o,
             "{}: text contrast fell from {contrast_o} to {contrast_e}",
             sample.file
+        );
+    }
+}
+
+#[test]
+fn steady_samples_are_found_with_auto_keep_support() {
+    // Batch mode keeps an automatic capture without the Adjust step only above
+    // `AUTO_KEEP_SUPPORT`; every photo of the corpus, held steady, gets there.
+    for path in corpus() {
+        let frame = detection_frame(&path);
+        let (_, support) =
+            detect_scored(&frame).unwrap_or_else(|| panic!("{}: no page", name(&path)));
+        println!("{}: edge support {support:.2}", name(&path));
+        assert!(
+            support >= live::AUTO_KEEP_SUPPORT,
+            "{}: support {support}",
+            name(&path)
         );
     }
 }
