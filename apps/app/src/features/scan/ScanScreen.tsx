@@ -12,7 +12,7 @@ import { type LiveHint, placement, type Quad, scaleQuad, smoothQuad, svgPoints, 
 import { Button, IconButton, Segmented } from "@selis/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { CameraOff, ChevronLeft, ImageUp, Images, Settings, X, Zap, ZapOff } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FullScreenLayer } from "../../components/FullScreenLayer";
@@ -43,6 +43,10 @@ const MISSES_TO_HIDE = 4;
 const RING_R = 24;
 const RING_STROKE = 4;
 const RING_LENGTH = 2 * Math.PI * RING_R;
+/** How long "Page N added" shows after a page was kept by itself (batch auto-keep). */
+const ADDED_MS = 600;
+/** The kept page's thumbnail flies from the middle of the preview into the strip. */
+const FLY_MS = 400;
 
 type CameraStatus = "starting" | "live" | CameraFailure;
 
@@ -127,6 +131,7 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
   const pages = useScan((s) => s.pages);
   const client = useScan((s) => s.client);
   const capture = useScan((s) => s.capture);
+  const autoCapture = useScan((s) => s.autoCapture);
   const showQueue = useScan((s) => s.showQueue);
   const mode = useScan((s) => s.mode);
   const setMode = useScan((s) => s.setMode);
@@ -149,6 +154,9 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
   const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
   const [retry, setRetry] = useState(0);
   const [fullDismissed, setFullDismissed] = useState(false);
+  /** "Page N added" after an automatic keep, and the thumbnail flying into the strip. */
+  const [added, setAdded] = useState<{ text: string; thumb: string; key: number } | null>(null);
+  const fly = useRef<HTMLImageElement>(null);
   const capturing = phase.step === "capturing";
   const wanted = (phase.step === "camera" || capturing) && visible;
   const blocked = full && !retaking;
@@ -197,20 +205,65 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
     if (el) el.scrollLeft = el.scrollWidth;
   }, [pages.length]);
 
-  const onShutter = async (automatic = false) => {
+  const onShutter = async (automatic = false, confidence = 0) => {
     const cam = camera.current;
     const el = video.current;
     const scan = useScan.getState();
     if (!cam || !el || !client || scan.phase.step !== "camera") return;
     captureHaptic();
-    if (automatic) {
-      setAnnounce(t("scan.captured"));
-      // Local only (logcat), read by the device checks (scan.sh).
-      console.info("[selis:perf] scan auto-capture");
+    const still = () => takeStill(cam.track, el, stillPixels(), !client.canvasInWorker);
+    if (!automatic) {
+      const ok = await capture(still);
+      if (!ok && useScan.getState().phase.step === "camera") useToast.getState().show(t("scan.captureFailed"), "error");
+      return;
     }
-    const ok = await capture(() => takeStill(cam.track, el, stillPixels(), !client.canvasInWorker));
-    if (!ok && useScan.getState().phase.step === "camera") useToast.getState().show(t("scan.captureFailed"), "error");
+    // Local only (logcat), read by the device checks (scan.sh).
+    console.info("[selis:perf] scan auto-capture");
+    const outcome = await autoCapture(still, confidence);
+    if (outcome === "kept") {
+      const kept = useScan.getState().pages;
+      const page = kept[kept.length - 1];
+      const text = t("scan.pageAdded", { number: kept.length });
+      setAnnounce(text);
+      if (page) setAdded({ text, thumb: page.thumb, key: performance.now() });
+    } else if (outcome === "adjust") {
+      setAnnounce(t("scan.captured"));
+    } else if (useScan.getState().phase.step === "camera") {
+      useToast.getState().show(t("scan.captureFailed"), "error");
+    }
   };
+
+  // "Page N added" for a moment; the thumbnail flies from the middle of the preview to its place
+  // in the strip (not with reduced motion).
+  useEffect(() => {
+    if (!added) return;
+    const timer = window.setTimeout(() => setAdded(null), ADDED_MS);
+    return () => window.clearTimeout(timer);
+  }, [added]);
+  useLayoutEffect(() => {
+    const img = fly.current;
+    const area = box.current;
+    const slot = strip.current?.lastElementChild;
+    if (!added || !img || !area || !slot) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      img.style.display = "none";
+      return;
+    }
+    const at = area.getBoundingClientRect();
+    const to = slot.getBoundingClientRect();
+    img.style.left = `${String(to.left - at.left)}px`;
+    img.style.top = `${String(to.top - at.top)}px`;
+    const dx = at.width / 2 - (to.left - at.left + to.width / 2);
+    const dy = at.height / 2 - (to.top - at.top + to.height / 2);
+    const animation = img.animate(
+      [
+        { transform: `translate(${String(dx)}px, ${String(dy)}px) scale(4)`, opacity: 0.4 },
+        { transform: "translate(0, 0) scale(1)", opacity: 1 },
+      ],
+      { duration: FLY_MS, easing: "cubic-bezier(0.2, 0, 0, 1)", fill: "forwards" },
+    );
+    return () => animation.cancel();
+  }, [added]);
   // The detection loop reads the latest values without restarting.
   const shutterRef = useRef(onShutter);
   const autoRef = useRef(auto && !blocked);
@@ -253,7 +306,7 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
             }
             setLive({ progress: autoRef.current ? result.progress : 0, hint: result.hint });
             // The tracker fires once per page; the capture moves the session on (and ends this loop).
-            if (result.fire && autoRef.current) void shutterRef.current(true);
+            if (result.fire && autoRef.current) void shutterRef.current(true, result.confidence);
           } catch {
             // A frame that could not be checked (the worker is still starting, or closing):
             // try the next one; a closed session stops the loop through `stopped`.
@@ -316,8 +369,9 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
   return (
     <div className="flex h-full flex-col bg-[#0c0c0f] text-[#f4f4f6]" data-testid="scan-camera" data-camera={status}>
       <header
-        className="flex shrink-0 items-center gap-1 px-1"
+        className="flex shrink-0 items-center gap-1 px-2"
         style={{ paddingTop: "var(--safe-top)", height: "calc(var(--safe-top) + 52px)" }}
+        data-testid="scan-header"
       >
         {retaking ? (
           <IconButton label={t("scan.cancelRetake")} icon={<ChevronLeft size={22} strokeWidth={1.75} />} onClick={cancelRetake} className={onDark} data-testid="scan-cancel-retake" />
@@ -350,9 +404,15 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
             {t("scan.autoLabel")}
           </span>
         </button>
-        <span className="px-2 text-sm tabular-nums text-[#c9c9d1]" data-testid="scan-count">
-          {t("scan.count", { count: pages.length })}
-        </span>
+        {/* No count before the first page (the strip and its badge show it after); text keeps
+            16 dp from the edge and never pushes the header wider (360 dp, en and el). */}
+        {pages.length > 0 ? (
+          <span className="max-w-[96px] shrink-0 truncate pr-2 pl-1 text-sm tabular-nums text-[#c9c9d1]" data-testid="scan-count">
+            {t("scan.count", { count: pages.length })}
+          </span>
+        ) : (
+          <span className="w-2 shrink-0" aria-hidden="true" />
+        )}
       </header>
       <div ref={box} className="relative min-h-0 flex-1 overflow-hidden">
         <video
@@ -436,6 +496,26 @@ function CameraView({ onChoosePhotos, onClose, onSave }: { onChoosePhotos: () =>
               ))}
             </ul>
           </button>
+        ) : null}
+        {added ? (
+          <>
+            <img
+              key={`fly-${String(added.key)}`}
+              ref={fly}
+              src={added.thumb}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute size-12 origin-center rounded-[6px] border border-[#ffffff]/60 object-cover"
+              data-testid="scan-fly-in"
+            />
+            <p
+              key={`added-${String(added.key)}`}
+              className="pointer-events-none absolute inset-x-0 top-1/3 mx-auto w-fit rounded-full bg-[#000000]/70 px-4 py-2 text-[15px] font-semibold"
+              data-testid="scan-page-added"
+            >
+              {added.text}
+            </p>
+          </>
         ) : null}
         {capturing ? (
           <div className="absolute inset-0 flex items-center justify-center bg-[#000000]/50">

@@ -44,7 +44,12 @@ export type LiveFrame = {
   /** Capture now. */
   readonly fire: boolean;
   readonly hint: LiveHint;
+  /** The outline's edge support, 0–1: the share of its weakest side on edge pixels. */
+  readonly confidence: number;
 };
+
+/** Edge support above which an automatic capture in a batch is kept without Adjust (`live::AUTO_KEEP_SUPPORT`). */
+export const AUTO_KEEP_CONFIDENCE = 0.85;
 
 export type StraightPage = { readonly width: number; readonly height: number; readonly rgba: Uint8ClampedArray<ArrayBuffer> };
 
@@ -97,7 +102,7 @@ export function simdSupported(): boolean {
 }
 
 /** `f32`s `scan_live` writes (`LIVE_OUT`). */
-const LIVE_OUT = 14;
+const LIVE_OUT = 15;
 
 /** The strokes as the module reads them: count, then per stroke radius, point count, points. */
 export function encodeStrokes(strokes: readonly Stroke[]): Float32Array {
@@ -187,6 +192,7 @@ export class ScanModule {
       progress: f[11] ?? 0,
       fire: f[12] === 1,
       hint: HINTS[f[13] ?? 0] ?? "none",
+      confidence: f[14] ?? 0,
     };
   }
 

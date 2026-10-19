@@ -113,14 +113,16 @@ case "$mode" in
   check-batch)
     status=0
     if pull_one; then
-      (cd "$here" && node scan-check.ts "$(win "$state/scan.pdf")" 9) || status=1
-      (cd "$here" && node scan-batch-check.ts "$(win "$state/scan.pdf")" "3,x,2,4,5r,6,8,9,x") || status=1
+      (cd "$here" && node scan-check.ts "$(win "$state/scan.pdf")" 12) || status=1
+      (cd "$here" && node scan-batch-check.ts "$(win "$state/scan.pdf")" "3,x,2,4,5r,6,8,9,x,x,x,x") || status=1
     else
       status=1
     fi
     adb -s "$serial" shell rm -rf "$remote"
     media_scan
-    [ "$status" = 0 ] && echo "scan-batch: one 9-page PDF in the expected order"
+    autos="$(adb -s "$serial" logcat -d | grep -c 'scan auto-keep=' || true)"
+    [ "$autos" -ge 3 ] || { echo "expected three pages kept by themselves, logcat has $autos"; status=1; }
+    [ "$status" = 0 ] && echo "scan-batch: one 12-page PDF in the expected order, $autos pages kept by themselves"
     exit "$status"
     ;;
   check-idcard)

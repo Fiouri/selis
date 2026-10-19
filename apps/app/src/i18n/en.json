@@ -751,7 +751,8 @@
     "reviewPages": "Review pages",
     "retaking": "Retake page {number}",
     "cancelRetake": "Back to the pages",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "pageAdded": "Page {number} added"
   },
   "ocr": {
     "title": "Make text searchable",

@@ -103,6 +103,7 @@ describe("automatic capture on the scan-sample corpus", () => {
     expect(first.hint).toBe("holdSteady");
     expect(first.luma).toBeGreaterThan(60);
     expect(first.areaShare).toBeGreaterThan(0.35);
+    expect(first.confidence).toBeGreaterThanOrEqual(0.85);
     const later = scan.live(videoFrame(frame, 1, 0, false), frame.width, frame.height, 66);
     const mid = scan.live(videoFrame(frame, 2, 0, false), frame.width, frame.height, 366);
     expect(later.progress).toBeLessThan(mid.progress);

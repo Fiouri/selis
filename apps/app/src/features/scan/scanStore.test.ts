@@ -334,4 +334,53 @@ describe("scan session", () => {
       expect(mm(item.box.height)).toBeCloseTo(54, 1);
     }
   });
+
+  describe("automatic capture in a batch", () => {
+    const photo = () => Promise.resolve({ kind: "blob" as const, blob: blob("image/jpeg") });
+    const kept = (): KeptPage => ({ page: picture("image/jpeg"), mime: "image/jpeg", thumb: picture("image/jpeg"), ms: 7 });
+
+    it("keeps a confident page at once with the default filter once a page is kept", async () => {
+      await useScan.getState().open();
+      // The first page always goes through Adjust.
+      client.still.mockResolvedValueOnce(stillOf());
+      expect(await useScan.getState().autoCapture(photo, 0.99)).toBe("adjust");
+      expect(useScan.getState().phase.step).toBe("adjust");
+      await keepPage();
+      client.still.mockResolvedValueOnce(stillOf());
+      client.keep.mockResolvedValueOnce(kept());
+      expect(await useScan.getState().autoCapture(photo, 0.9)).toBe("kept");
+      expect(client.keep).toHaveBeenLastCalledWith({ quad: QUAD, filter: "enhance", strokes: [], turns: 0 }, 6_000_000, 360);
+      expect(useScan.getState().phase).toEqual({ step: "camera" });
+      expect(useScan.getState().pages).toHaveLength(2);
+      expect(useScan.getState().pages[1]?.edits.filter).toBe("enhance");
+    });
+
+    it("opens Adjust for a doubtful outline, a page not found in the still, a retake or an ID card", async () => {
+      await useScan.getState().open();
+      await scanPages(1);
+      // Edge support under 85 %.
+      client.still.mockResolvedValueOnce(stillOf());
+      expect(await useScan.getState().autoCapture(photo, 0.8)).toBe("adjust");
+      useScan.getState().retake();
+      // Confident live outline, but the still has no page.
+      client.still.mockResolvedValueOnce({ ...stillOf(), quad: null });
+      expect(await useScan.getState().autoCapture(photo, 0.95)).toBe("adjust");
+      useScan.getState().retake();
+      // A retake from the review.
+      useScan.getState().showQueue();
+      useScan.getState().retakePage(useScan.getState().pages[0]?.id ?? "");
+      client.still.mockResolvedValueOnce(stillOf());
+      expect(await useScan.getState().autoCapture(photo, 0.95)).toBe("adjust");
+      expect(client.keep).toHaveBeenCalledTimes(1);
+
+      useScan.getState().close();
+      await useScan.getState().open();
+      useScan.getState().setMode("idcard");
+      await capture();
+      await keepPage();
+      client.still.mockResolvedValueOnce(stillOf());
+      expect(await useScan.getState().autoCapture(photo, 0.99)).toBe("adjust");
+    });
+  });
 });
+

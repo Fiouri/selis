@@ -9,6 +9,7 @@
  */
 import { idCardSheet } from "@selis/engine";
 import {
+  AUTO_KEEP_CONFIDENCE,
   createScanClient,
   defaultQuad,
   type PageEdits,
@@ -18,6 +19,7 @@ import {
   type ScanClient,
   type ScanFilter,
   type Size,
+  type Still,
   type Stroke,
 } from "@selis/scan";
 import { create } from "zustand";
@@ -171,6 +173,12 @@ type ScanState = {
   setMode: (mode: ScanMode) => void;
   /** Hands a still to the worker and moves to the Adjust screen. */
   capture: (photo: () => Promise<PhotoSource>) => Promise<boolean>;
+  /**
+   * An automatic capture: in a document batch (a page kept already), with the live outline's
+   * edge support ≥ `AUTO_KEEP_CONFIDENCE` and the page found in the still, the page is kept at
+   * once with the default filter ("kept"); otherwise the Adjust step opens ("adjust").
+   */
+  autoCapture: (photo: () => Promise<PhotoSource>, confidence: number) => Promise<"kept" | "adjust" | "failed">;
   setQuad: (quad: Quad) => void;
   setFilter: (filter: ScanFilter) => Promise<void>;
   /** Leaves the Adjust step: back to the camera (or to the page being edited). */
@@ -248,6 +256,58 @@ export const useScan = create<ScanState>()((set, get) => {
     void renderEditing();
   };
 
+  /** A captured still in the worker, its preview and the photo kept with the page; the phase is "capturing". */
+  type Loaded = { still: Still; preview: Blob; source: Blob };
+
+  /** Hands a photo to the worker (phase "capturing"); null when the session cannot take one or it failed. */
+  const loadStill = async (photo: () => Promise<PhotoSource>): Promise<Loaded | null> => {
+    const { client, phase, retaking } = get();
+    if (!client || phase.step !== "camera") return null;
+    if (get().full && !retaking) return null;
+    set({ phase: { step: "capturing" } });
+    try {
+      const source = await photo();
+      const still = await client.still(source, stillPixels(), PREVIEW_SIDE);
+      const preview = await pictureBlob(still.preview, "image/jpeg", 0.85);
+      const kept = source.kind === "blob" ? source.blob : still.source ? await pictureBlob(still.source, "image/jpeg", 0.92) : null;
+      if (get().phase.step !== "capturing") return null;
+      if (!kept) throw new Error("no photo to keep");
+      console.info(`[selis:perf] scan still=${String(still.width)}x${String(still.height)} found=${String(still.quad !== null)}`);
+      return { still, preview, source: kept };
+    } catch (err) {
+      console.warn("selis: capture failed", err);
+      if (get().phase.step === "capturing") set({ phase: { step: "camera" } });
+      return null;
+    }
+  };
+
+  /** The Adjust step for a loaded still. */
+  const openAdjust = ({ still, preview, source }: Loaded) => {
+    const retaking = get().retaking;
+    const found = still.quad ?? defaultQuad({ width: still.width, height: still.height });
+    const target: StillTarget = retaking ? { kind: "replace", id: retaking } : { kind: "new" };
+    const filter: ScanFilter = get().mode === "idcard" ? "original" : "enhance";
+    set({
+      phase: {
+        step: "adjust",
+        still: {
+          width: still.width,
+          height: still.height,
+          found,
+          detected: still.quad !== null,
+          quad: found,
+          filter,
+          previews: { original: URL.createObjectURL(preview) },
+          previewWidth: still.preview.width,
+          previewHeight: still.preview.height,
+          source,
+          target,
+        },
+      },
+    });
+    if (filter !== "original") void get().setFilter(filter);
+  };
+
   /** Where the camera goes after a page was kept or a retake ended. */
   const afterKeep = (pages: ScannedPage[], replaced: boolean): ScanPhase => {
     if (replaced) return { step: "queue" };
@@ -282,45 +342,54 @@ export const useScan = create<ScanState>()((set, get) => {
     },
 
     capture: async (photo) => {
-      const { client, phase, retaking } = get();
-      if (!client || phase.step !== "camera") return false;
-      if (get().full && !retaking) return false;
-      set({ phase: { step: "capturing" } });
+      const loaded = await loadStill(photo);
+      if (!loaded) return false;
+      openAdjust(loaded);
+      return true;
+    },
+
+    autoCapture: async (photo, confidence) => {
+      const { mode, pages, retaking } = get();
+      // A batch (a document with a page kept already) keeps a confident automatic capture as
+      // it is; the first page, ID cards and doubtful outlines go through Adjust (ADR 0032).
+      const keepNow = mode === "document" && pages.length >= 1 && !retaking && confidence >= AUTO_KEEP_CONFIDENCE;
+      const loaded = await loadStill(photo);
+      if (!loaded) return "failed";
+      const quad = loaded.still.quad;
+      if (!keepNow || !quad) {
+        openAdjust(loaded);
+        return "adjust";
+      }
+      const { client } = get();
+      if (!client) return "failed";
+      const edits: PageEdits = { quad, filter: "enhance", strokes: [], turns: 0 };
       try {
-        const source = await photo();
-        const still = await client.still(source, stillPixels(), PREVIEW_SIDE);
-        const preview = await pictureBlob(still.preview, "image/jpeg", 0.85);
-        const kept = source.kind === "blob" ? source.blob : still.source ? await pictureBlob(still.source, "image/jpeg", 0.92) : null;
-        if (get().phase.step !== "capturing") return false;
-        if (!kept) throw new Error("no photo to keep");
-        const found = still.quad ?? defaultQuad({ width: still.width, height: still.height });
-        const target: StillTarget = retaking ? { kind: "replace", id: retaking } : { kind: "new" };
-        const filter: ScanFilter = get().mode === "idcard" ? "original" : "enhance";
-        set({
-          phase: {
-            step: "adjust",
-            still: {
-              width: still.width,
-              height: still.height,
-              found,
-              detected: still.quad !== null,
-              quad: found,
-              filter,
-              previews: { original: URL.createObjectURL(preview) },
-              previewWidth: still.preview.width,
-              previewHeight: still.preview.height,
-              source: kept,
-              target,
-            },
-          },
-        });
-        if (filter !== "original") void get().setFilter(filter);
-        console.info(`[selis:perf] scan still=${String(still.width)}x${String(still.height)} found=${String(still.quad !== null)}`);
-        return true;
+        const kept = await client.keep(edits, pagePixels(), THUMB_SIDE);
+        const blob = await pictureBlob(kept.page, kept.mime);
+        const thumb = URL.createObjectURL(await pictureBlob(kept.thumb, "image/jpeg", 0.8));
+        if (get().phase.step !== "capturing") {
+          URL.revokeObjectURL(thumb);
+          return "failed";
+        }
+        const page: ScannedPage = {
+          id: `scan-${String(nextId++)}`,
+          source: loaded.source,
+          photo: { width: loaded.still.width, height: loaded.still.height },
+          edits,
+          blob,
+          mime: kept.mime,
+          size: { width: kept.page.width, height: kept.page.height },
+          thumb,
+        };
+        const next = [...get().pages, page];
+        set({ pages: next, phase: { step: "camera" }, full: batchBytes(next) >= batchCapBytes() });
+        console.info(`[selis:perf] scan auto-keep=${String(Math.round(kept.ms))}ms pages=${String(next.length)}`);
+        return "kept";
       } catch (err) {
-        console.warn("selis: capture failed", err);
+        // The still is gone with the failed keep: back to the camera, the page not taken.
+        console.warn("selis: keeping the page failed", err);
         if (get().phase.step === "capturing") set({ phase: { step: "camera" } });
-        return false;
+        return "failed";
       }
     },
 

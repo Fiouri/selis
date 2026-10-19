@@ -76,6 +76,14 @@ const MAX_CORNER_DEG: f64 = 145.0;
 /// thickening stays apart); the largest well-supported outline wins.
 #[must_use]
 pub fn detect(gray: &GrayImage) -> Option<Quad> {
+    detect_scored(gray).map(|(quad, _)| quad)
+}
+
+/// Like `detect`, with the outline's support: the share of its weakest side's middle 80 % that
+/// runs along edge pixels (at least `MIN_SIDE_SUPPORT`; Scan 2.0 keeps a page without the
+/// Adjust step only above `live::AUTO_KEEP_SUPPORT`).
+#[must_use]
+pub fn detect_scored(gray: &GrayImage) -> Option<(Quad, f32)> {
     let (w, h) = gray.dimensions();
     if w < 16 || h < 16 {
         return None;
@@ -84,7 +92,7 @@ pub fn detect(gray: &GrayImage) -> Option<Quad> {
     let thick = dilate(&thin, imageproc::distance_transform::Norm::LInf, 1);
     let min_area = f64::from(w) * f64::from(h) * MIN_AREA_SHARE;
 
-    let mut best: Option<(f64, Quad)> = None;
+    let mut best: Option<(f64, Quad, f32)> = None;
     // Contours run along the outside of the edge pixels: this far outside the page's real
     // edge, in frame pixels.
     for (edges, outside) in [(&thick, 1.5), (&thin, 0.5)] {
@@ -109,13 +117,13 @@ pub fn detect(gray: &GrayImage) -> Option<Quad> {
                     continue;
                 }
                 let score = area * f64::from(support);
-                if best.as_ref().is_none_or(|(s, _)| score > *s) {
-                    best = Some((score, quad));
+                if best.as_ref().is_none_or(|(s, _, _)| score > *s) {
+                    best = Some((score, quad, support));
                 }
             }
         }
     }
-    best.map(|(_, quad)| quad)
+    best.map(|(_, quad, support)| (quad, support))
 }
 
 /// Every side of a found page lies on edge pixels for at least this share of its middle 80 %

@@ -645,3 +645,27 @@ test("viewer night mode keeps the image on page 2", async ({ page }) => {
   await settle(page);
   await expect(page).toHaveScreenshot("viewer-night.png");
 });
+
+// The scan camera's header at the narrowest common phone width (360 dp): no text at the edges,
+// en and el, before and after the first page.
+test.describe("scan header at 360 × 800", () => {
+  test.use({ viewport: { width: 360, height: 800 } });
+  for (const lang of ["en", "el"] as const) {
+    test(`scan header 360 (${lang})`, async ({ page }) => {
+      await presetSettings(page, { theme: "light", locale: lang, scanAuto: false });
+      await useFakeScanCamera(page);
+      await page.goto("/");
+      await page.getByTestId("scan-empty").click();
+      await expect(page.getByTestId("scan-camera")).toHaveAttribute("data-camera", "live");
+      const header = page.getByTestId("scan-header");
+      await settle(page);
+      await expect(header).toHaveScreenshot(`scan-header-360-${lang}.png`);
+      await page.getByTestId("scan-shutter").click();
+      await expect(page.getByTestId("scan-keep")).toBeVisible({ timeout: 20_000 });
+      await page.getByTestId("scan-keep").click();
+      await expect(page.getByTestId("scan-count")).toBeVisible({ timeout: 20_000 });
+      await settle(page);
+      await expect(header).toHaveScreenshot(`scan-header-360-page-${lang}.png`);
+    });
+  }
+});
