@@ -1,6 +1,6 @@
-**Current:** P7a Scan 2.0 — done (PRs #64, #65, #66); on main after #66 merges, not tagged
-**Next step:** owner: check the scan screens by hand (list in the P7a section), then say "go" for v1.0.0-rc.2 (Play Internal testing, S23)
-**Last session:** 2026-10-18 — Scan 2.0: auto-capture, Enhance, batch review/edit, touch-up, ID card; Tier 1 + Playwright en/el + CI green; Maestro 24 flows + upgrade-locale on AVD 36
+**Current:** v1.0.0-rc.2 — tagged on 08f4eac; draft pre-release built, signed and verified (run 39313459397)
+**Next step:** owner: review and publish the draft pre-release; upload selis-1.0.0-rc.2.aab to Play Internal testing and test Scan 2.0 on the S23
+**Last session:** 2026-10-19 — P7a follow-ups (#67: auto-keep in a batch, 360 dp header) + release #68; Tier 1, Playwright en/el, Maestro 24 flows on AVD 36, CI and release run green
 
 ## P5b (2026-10-15)
 
@@ -68,4 +68,25 @@ used (Play build).
 
 Open: device haptic and auto-capture feel on a real phone (S23 via Play Internal); iOS has no
 haptic; automatic Keep after an automatic capture is not done (the Adjust step stays).
+
+## v1.0.0-rc.2 (2026-10-19)
+
+Done: #67 — auto-keep in a batch (Auto on, a page kept, live edge support ≥ 85 %, page found in
+the still → kept with Enhance, "Page N added" 600 ms + thumbnail fly-in, none with reduced
+motion; otherwise Adjust; `find_page` falls back to a bilinear-sampled copy, and a still of the
+live frame's shape uses the scaled live outline), camera header fits 360 dp (no count before the
+first page, 16 dp text inset, ellipsis; layout test + `scan-header-360-*` baselines); #68 —
+version 1.0.0-rc.2 (versionCode 10000020 / 10000021–24 per ABI), CHANGELOG, Play "What's new"
+en-US + el-GR; annotated tag `v1.0.0-rc.2` on 08f4eac.
+
+Verified: Tier 1 (vitest 395, Rust, deny); Playwright en + el incl. 360 × 800 header baselines
+(CI-written, reviewed); Maestro on AVD 36: all 24 flows (scan-batch: 12-page PDF in order, three
+pages kept by themselves; transfer-recover/-background and tools needed a rerun after another
+session's Maestro / stale samplers of mine); release run: SHA256SUMS ok, APKs signed with the app
+key 2b9682e1…af1598 (= SELIS_APK_CERT_SHA256), AAB with the upload key d7dee4ae…9d0762, AAB and
+universal APK versionCode 10000020, reproducible arm64 APK byte-identical + apksigcopier ok,
+SBOMs npm 72 / Rust 714 components. No TestFlight (App Store Connect secrets not set).
+
+Open: the release is a draft until the owner publishes it; Play upload manual; S23 test of Scan
+2.0 on the Play build.
 
