@@ -119,3 +119,22 @@ EmbedPDF 2.15.1 ships PDFium's redaction (`/Redact` annotations, `applyAllRedact
   a linked document's external file never is (unit test). When the library opens, a sweep removes
   any file in the library-owned folders that no row refers to: what a crash between the commit and
   the file removals would leave behind.
+
+## Update 2026-10-20 (shared images and forms: copy-on-write)
+
+- **Problem (data loss, found in P7b, ADR 0033).** PDFium's `EPDFPage_ApplyRedactions` blanks
+  image pixels in the image data and rewrites form XObject content in place. An image or form
+  drawn on several pages (a logo, a letterhead) or several times on one page lost its content
+  everywhere it was drawn, not only under the mark.
+- **Decision.** Between the two passes, every image or form XObject drawn over a mark gets its own
+  copy under a fresh name (`/SelisE<n>`, a name the resource dictionary does not use yet), with
+  the `Do` operand rewritten and the page (and each copied form) given resource dictionaries of
+  its own (`unshare.ts`, the same step as the Erase tool's). PDFium then changes only the copies;
+  the full rewrite keeps the original wherever it is still drawn. A content stream that cannot be
+  rewritten (an encoding other than Flate or none) makes the redaction fail with an error rather
+  than change other pages.
+- **Verified** (`redact.node.test.ts`, fixture `shared-xobjects`: a logo image and a form on three
+  pages, the logo twice on page 2): redacting the logo on page 2 leaves pages 1 and 3
+  byte-identical when rendered (PDFium raster and pdf.js raster) and the second logo on page 2
+  unchanged; the same for the form, whose text pdf.js still extracts on pages 1 and 3 and no
+  longer on page 2. Without the step both tests fail.

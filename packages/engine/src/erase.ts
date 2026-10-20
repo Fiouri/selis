@@ -24,7 +24,6 @@ import type { PdfiumNative } from "@embedpdf/engines/pdfium";
 import type { PdfDocumentObject } from "@embedpdf/models";
 import type { EmbeddedText } from "./annotations";
 import {
-  apply,
   ContentSyntaxError,
   fmt,
   IDENTITY,
@@ -32,7 +31,6 @@ import {
   mapSubpaths,
   type Matrix,
   maxScale,
-  multiply,
   operations,
   type PaintEvent,
   pathText,
@@ -41,19 +39,11 @@ import {
 } from "./content-stream";
 import type { PageRect } from "./geometry";
 import { type Box, boxesMeet, clipFill, clipStroke, pathMeets, shrinkBoxes, type Subpath } from "./path-clip";
-import {
-  bytesToLatin1,
-  decodeStream,
-  deflate,
-  latin1ToBytes,
-  nameOf,
-  type PdfDict,
-  PdfDocumentObjects,
-  type PdfObj,
-} from "./pdf-objects";
+import { bytesToLatin1, decodeStream, type PdfDict, PdfDocumentObjects, type PdfObj } from "./pdf-objects";
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { documentPointer, removePageObject, toUserSpace } from "./pdfium-objects";
 import type { EraseArea, PageObjectInfo } from "./types";
+import { ContentRewriteError, contentOf, type Ctx, finish, num, setStreamText, unsharePage, type XObject, xobject, writeContents } from "./unshare";
 
 export class EraseError extends Error {
   override readonly name = "EraseError";
@@ -68,103 +58,6 @@ async function withScratch<T>(engine: PdfiumNative, bytes: ArrayBuffer, use: (do
   } finally {
     await engine.closeDocument(doc).toPromise();
   }
-}
-
-type Stream = Extract<PdfObj, { t: "stream" }>;
-type Ctx = { readonly doc: PdfDocumentObjects; readonly boxes: readonly Box[]; readonly changed: Set<Stream>; next: number };
-
-const num = (o: PdfObj | undefined): number | null => (o?.t === "num" ? Number(o.v) : null);
-
-function matrixOf(doc: PdfDocumentObjects, o: PdfObj | undefined): Matrix {
-  const arr = doc.array(o)?.map((x) => num(doc.get(x)));
-  return arr && arr.length === 6 && arr.every((x) => x !== null) ? (arr as unknown as Matrix) : IDENTITY;
-}
-
-/** The page-space bounding box of a unit square or form BBox drawn with `m`. */
-function drawnBox(corners: readonly [number, number, number, number], m: Matrix): Box {
-  const [x0, y0, x1, y1] = corners;
-  const pts = [apply(m, { x: x0, y: y0 }), apply(m, { x: x1, y: y0 }), apply(m, { x: x0, y: y1 }), apply(m, { x: x1, y: y1 })];
-  return {
-    x0: Math.min(...pts.map((p) => p.x)),
-    y0: Math.min(...pts.map((p) => p.y)),
-    x1: Math.max(...pts.map((p) => p.x)),
-    y1: Math.max(...pts.map((p) => p.y)),
-  };
-}
-
-type XObject = { readonly stream: Stream; readonly form: boolean; readonly box: Box; readonly matrix: Matrix };
-
-/** The image or form XObject `name` and where it lands in page space, or null. */
-function xobject(ctx: Ctx, resources: PdfDict, name: string, ctm: Matrix): XObject | null {
-  const target = ctx.doc.get(ctx.doc.dict(resources.get("XObject"))?.get(name));
-  if (target.t !== "stream") return null;
-  const subtype = nameOf(target.dict.get("Subtype"));
-  if (subtype === "Image") return { stream: target, form: false, box: drawnBox([0, 0, 1, 1], ctm), matrix: ctm };
-  if (subtype !== "Form") return null;
-  const bbox = ctx.doc.array(target.dict.get("BBox"))?.map((x) => num(ctx.doc.get(x)) ?? 0);
-  const matrix = multiply(matrixOf(ctx.doc, target.dict.get("Matrix")), ctm);
-  const corners: [number, number, number, number] =
-    bbox && bbox.length === 4 ? [bbox[0] ?? 0, bbox[1] ?? 0, bbox[2] ?? 0, bbox[3] ?? 0] : [-1e9, -1e9, 1e9, 1e9];
-  return { stream: target, form: true, box: drawnBox(corners, matrix), matrix };
-}
-
-/** A resource dictionary of one's own: the dict copied, its XObject subdictionary too. */
-function ownResources(doc: PdfDocumentObjects, resources: PdfDict | null): PdfDict {
-  const copy: PdfDict = new Map(resources ?? []);
-  const xobjects = doc.dict(copy.get("XObject"));
-  copy.set("XObject", { t: "dict", v: new Map(xobjects ?? []) });
-  return copy;
-}
-
-async function contentOf(doc: PdfDocumentObjects, contents: PdfObj | undefined): Promise<string> {
-  const target = doc.get(contents);
-  const parts = target.t === "arr" ? target.v.map((x) => doc.get(x)) : [target];
-  const out: string[] = [];
-  for (const part of parts) {
-    if (part.t !== "stream") continue;
-    const data = await decodeStream(part);
-    if (!data) throw new EraseError("a content stream uses an encoding the erase cannot rewrite");
-    out.push(bytesToLatin1(data));
-  }
-  return out.join("\n");
-}
-
-function setStreamText(ctx: Ctx, stream: Stream, text: string): void {
-  stream.data = latin1ToBytes(text);
-  stream.dict.delete("Filter");
-  stream.dict.delete("DecodeParms");
-  stream.dict.delete("DL");
-  ctx.changed.add(stream);
-}
-
-/**
- * Pass 1: gives every XObject drawn in `text` that meets the area a copy of its
- * own under a new name (recursively inside forms). Returns the new content, or
- * null when nothing was renamed.
- */
-async function unshareContent(ctx: Ctx, text: string, resources: PdfDict, base: Matrix): Promise<string | null> {
-  const draws: { name: string; ctm: Matrix; start: number; end: number }[] = [];
-  walk(operations(text), base, { onDo: (e) => draws.push({ name: e.name, ctm: e.ctm, start: e.nameStart, end: e.nameEnd }) });
-  const xobjects = ctx.doc.dict(resources.get("XObject"));
-  const edits: { start: number; end: number; text: string }[] = [];
-  for (const draw of draws) {
-    const x = xobject(ctx, resources, draw.name, draw.ctm);
-    if (!x || !xobjects || !ctx.boxes.some((b) => boxesMeet(x.box, b))) continue;
-    const copy: Stream = { t: "stream", dict: new Map(x.stream.dict), data: x.stream.data };
-    if (x.form) {
-      const own = ownResources(ctx.doc, ctx.doc.dict(x.stream.dict.get("Resources")) ?? resources);
-      copy.dict.set("Resources", { t: "dict", v: own });
-      const inner = await decodeStream(x.stream);
-      if (inner) {
-        const renamed = await unshareContent(ctx, bytesToLatin1(inner), own, x.matrix);
-        if (renamed !== null) setStreamText(ctx, copy, renamed);
-      }
-    }
-    const name = `SelisE${ctx.next++}`;
-    xobjects.set(name, ctx.doc.add(copy));
-    edits.push({ start: draw.start, end: draw.end, text: `/${name}` });
-  }
-  return edits.length > 0 ? splice(text, edits) : null;
 }
 
 const FILLS = new Set(["f", "F", "f*", "B", "B*", "b", "b*"]);
@@ -245,21 +138,6 @@ function pageOf(doc: PdfDocumentObjects, index: number): { dict: PdfDict; resour
   return page;
 }
 
-function writeContents(ctx: Ctx, page: PdfDict, text: string): void {
-  const stream: Stream = { t: "stream", dict: new Map(), data: new Uint8Array() };
-  setStreamText(ctx, stream, text);
-  page.set("Contents", ctx.doc.add(stream));
-}
-
-/** Compresses every stream written in this pass and writes the file anew. */
-async function finish(ctx: Ctx): Promise<Uint8Array> {
-  for (const s of ctx.changed) {
-    s.data = await deflate(s.data);
-    s.dict.set("Filter", { t: "name", v: "FlateDecode" });
-  }
-  return ctx.doc.write();
-}
-
 /**
  * Erases `area` from the document `current` and returns the new bytes: the
  * text, image pixels and paths under it are gone and the area is filled.
@@ -290,13 +168,8 @@ export async function eraseArea(
 
   try {
     // 1. Un-share what the page draws over the area.
-    const first = await PdfDocumentObjects.parse(new Uint8Array(plain));
-    const ctx1: Ctx = { doc: first, boxes, changed: new Set(), next: 1 };
-    const page1 = pageOf(first, area.page);
-    const resources = ownResources(first, page1.resources);
-    page1.dict.set("Resources", { t: "dict", v: resources });
-    const renamed = await unshareContent(ctx1, await contentOf(first, page1.dict.get("Contents")), resources, IDENTITY);
-    if (renamed !== null) writeContents(ctx1, page1.dict, renamed);
+    const ctx1: Ctx = { doc: await PdfDocumentObjects.parse(new Uint8Array(plain)), boxes, changed: new Set() };
+    await unsharePage(ctx1, area.page);
     const unshared = await finish(ctx1);
 
     // 2. PDFium: glyphs and image pixels.
@@ -311,7 +184,7 @@ export async function eraseArea(
 
     // 3. Paths, then the fill on top; 4. a fresh file.
     const last = await PdfDocumentObjects.parse(new Uint8Array(redacted));
-    const ctx3: Ctx = { doc: last, boxes, changed: new Set(), next: 1 };
+    const ctx3: Ctx = { doc: last, boxes, changed: new Set() };
     const page3 = pageOf(last, area.page);
     const content = await contentOf(last, page3.dict.get("Contents"));
     const cut = await cutContent(ctx3, content, page3.resources ?? new Map<string, PdfObj>(), IDENTITY);
@@ -321,6 +194,7 @@ export async function eraseArea(
     return { bytes: bytes.slice().buffer, paths: cut.paths, ownerPassword };
   } catch (err) {
     if (err instanceof ContentSyntaxError) throw new EraseError(`cannot read the page content: ${err.message}`);
+    if (err instanceof ContentRewriteError) throw new EraseError(err.message);
     throw err;
   }
 }

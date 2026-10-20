@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import { type PdfAnnotationObject, PdfAnnotationSubtype, type PdfDocumentObject } from "@embedpdf/models";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
-import { FIXTURES, type FixtureName, GREEK_TEXT, greekGlyphHex } from "@selis/fixtures";
+import { FIXTURES, type FixtureName, GREEK_TEXT, greekGlyphHex, SHARED_TEXT } from "@selis/fixtures";
 import {
   type Box,
   boxDistance,
@@ -363,5 +363,82 @@ describe("the redacted file, read by pdf.js", () => {
     expect(annots.some((a) => a.subtype === "Redact")).toBe(false);
     expect(annots.filter((a) => a.subtype === "Widget").length).toBeGreaterThan(0);
     await checkSample("redacted-form.pdf", out);
+  });
+});
+
+/**
+ * Copy-on-write (ADR 0009 amendment): PDFium blanks image data and rewrites
+ * form content in place, so a redaction over a logo drawn on three pages used
+ * to blank it on all of them. The shared-xobjects fixture draws the logo and
+ * the form on pages 1–3 (and the logo twice on page 2).
+ */
+describe("redacting a shared image or form", () => {
+  const H = 841.89;
+  // Viewer coordinates (top-left origin) of the fixture's draws.
+  const LOGO = { x: 56, y: H - 800, width: 120, height: 120 };
+  const LOGO_AGAIN = { x: 56, y: H - 320, width: 120, height: 120 };
+  const FORM = { x: 300, y: H - 760, width: 200, height: 80 };
+
+  async function renders(bytes: ArrayBuffer): Promise<Uint8Array[]> {
+    const doc = await open(bytes);
+    try {
+      const out: Uint8Array[] = [];
+      for (const page of doc.pages) out.push(new Uint8Array((await engine.renderPageRaw(doc, page, { scaleFactor: 1 }).toPromise()).data));
+      return out;
+    } finally {
+      await engine.closeDocument(doc).toPromise();
+    }
+  }
+
+  /** The RGBA pixels of `box` (viewer points at scale 1) of a page raster 596 px wide. */
+  function crop(data: Uint8Array, width: number, box: PageRect): number[] {
+    const out: number[] = [];
+    for (let y = Math.ceil(box.y); y < Math.floor(box.y + box.height); y++) {
+      for (let x = Math.ceil(box.x); x < Math.floor(box.x + box.width); x++) {
+        const o = (y * width + x) * 4;
+        out.push(data[o] ?? 0, data[o + 1] ?? 0, data[o + 2] ?? 0);
+      }
+    }
+    return out;
+  }
+
+  it("blanks the logo on page 2 only: pages 1 and 3 and the second logo render as before", async () => {
+    const original = fixture("shared-xobjects");
+    const before = await renders(original);
+    const pending = await withMarks(original, [mark(1, LOGO)]);
+    const { bytes } = await applyRedactions(engine, text, pending);
+    const after = await renders(bytes);
+    // PDFium and pdf.js: pages 1 and 3 byte-identical.
+    expect(after[0]).toEqual(before[0]);
+    expect(after[2]).toEqual(before[2]);
+    for (const page of [0, 2]) {
+      const a = await pdfjsRender(new Uint8Array(original), page, 2, false);
+      const b = await pdfjsRender(new Uint8Array(bytes), page, 2, false);
+      expect(Buffer.compare(Buffer.from(a.data), Buffer.from(b.data)), `pdf.js page ${page + 1}`).toBe(0);
+    }
+    const width = Math.round(595.28);
+    const p2Before = before[1] as Uint8Array;
+    const p2After = after[1] as Uint8Array;
+    // The logo under the mark is gone (black box), the second draw of it on the same page kept.
+    expect(crop(p2After, width, LOGO)).not.toEqual(crop(p2Before, width, LOGO));
+    expect(crop(p2After, width, LOGO_AGAIN)).toEqual(crop(p2Before, width, LOGO_AGAIN));
+    expect(await pixel(await open(bytes), 1, 116, H - 740)).toEqual([0, 0, 0]);
+  });
+
+  it("removes the form's text on page 2 only: pages 1 and 3 keep it and render as before", async () => {
+    const original = fixture("shared-xobjects");
+    const before = await renders(original);
+    const pending = await withMarks(original, [mark(1, FORM)]);
+    const { bytes } = await applyRedactions(engine, text, pending);
+    const after = await renders(bytes);
+    expect(after[0]).toEqual(before[0]);
+    expect(after[2]).toEqual(before[2]);
+    const { pages } = await pdfjsText(new Uint8Array(bytes));
+    expect(pages[0]).toContain(SHARED_TEXT.form);
+    expect(pages[1]).not.toContain("Heron");
+    expect(pages[2]).toContain(SHARED_TEXT.form);
+    // The logos of page 2 are not under the mark: unchanged.
+    const width = Math.round(595.28);
+    expect(crop(after[1] as Uint8Array, width, LOGO)).toEqual(crop(before[1] as Uint8Array, width, LOGO));
   });
 });

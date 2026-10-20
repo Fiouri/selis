@@ -14,6 +14,7 @@ export {
   LEAKY_SECRET_LINE,
   leakyDocument,
   ownerPasswordDocument,
+  SHARED_TEXT,
 } from "./corpus.ts";
 export { SCANNED_DPI, SCANNED_TEXT, type ScannedLanguage, scannedWords } from "./scanned.ts";
 export { exifSegment, insertSegments, makePhoto, PHOTO_QUADRANTS, PHOTO_SECRETS, type PhotoOptions } from "./photo.ts";
