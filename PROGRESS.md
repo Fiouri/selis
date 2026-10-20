@@ -1,6 +1,39 @@
-**Current:** v1.0.0-rc.2 — tagged on 08f4eac; draft pre-release built, signed and verified (run 39313459397)
-**Next step:** owner: review and publish the draft pre-release; upload selis-1.0.0-rc.2.aab to Play Internal testing and test Scan 2.0 on the S23
-**Last session:** 2026-10-19 — P7a follow-ups (#67: auto-keep in a batch, 360 dp header) + release #68; Tier 1, Playwright en/el, Maestro 24 flows on AVD 36, CI and release run green
+**Current:** P7b content erase — merged to main (#72 English first, #73 engine, #74 app); no tag
+**Next step:** owner: "go" for rc.3 → first the translation-pass PR (37 Greek keys + Greek visual baselines, incl. the stale annotate-note-el), then the rc.3 release PR and tag; S23 checks after the Play build
+**Last session:** 2026-10-20 — P7b Erase (brush, rectangle, delete object, fills, signed warning, 'erase' versions) + ADR 0033 + ADR 0030 amendment; Tier 1 local + CI, Playwright en (erase 8/8 + new baselines), Maestro 25/25 on AVD 36 (2 passed on retry: host ANR / Maestro error)
+
+
+## P7b (2026-10-20)
+
+Done (PRs #72–#74, #71 Dependabot merged — bindgen stays on syn 3):
+- English first for new strings (ADR 0030 amendment): en.json only; `tools/i18n/check-el.ts`
+  warns in CI between RCs and fails in the `translation-pass` PR and on release tags; runtime
+  fallback to English tested; Greek Playwright/visual sets run only in the translation pass.
+- Erase (ADR 0033): brush S/M/L, rectangle, object mode (tap = topmost, long press = next);
+  white / match background / eyedropper fill; preview + undo per stroke; each apply is a new
+  version labelled `erase` (schema 8); signed documents warn once. Engine: un-share XObjects
+  over the area, PDFium glyph + image-pixel removal, geometric path cutting in the content
+  stream, fill, full rewrite.
+
+Verified: engine tests against pdf.js + bytes (erased words gone, image samples replaced in the
+stream, no path point inside the area, page identical outside a 2 px margin except anti-aliasing
+on cut curves ≤ 65/255 on ≤ 0.02 % of pixels, shared page untouched, rotated page, delete
+object count − 1); Rust v7→v8 migration test; Playwright erase (Pixel 7 + iPhone 15); CI visual
+baselines erase-strokes / erase-object; Maestro erase + full suite (25) on selis-midrange-api36.
+
+Open risks:
+- Found while measuring: ADR 0009 redaction changes images/forms shared with other pages in place
+  (a redacted area over a logo drawn on every page blanks it everywhere). Erase un-shares first;
+  the same step should go into `redact.ts` (follow-up PR).
+- EmbedPDF's text rects are not turned on /Rotate pages (seen in tests; may affect text
+  selection / redaction "text" tool on rotated pages).
+- Not cut by Erase: shadings and pattern cells (covered), soft masks of erased images, dash
+  phase after a cut; annotations stay (ADR 0033).
+- Dependabot alert #1: glib < 0.20 (Linux desktop only, via Tauri/gtk); waits for the Tauri line.
+
+Device testing (owner, S23 after the Play build): Annotate → Erase with each mode and fill; the
+signed warning on a signed PDF; undo after Apply; a rotated page; Greek UI shows the Erase tool in
+English until the translation pass.
 
 ## P5b (2026-10-15)
 
