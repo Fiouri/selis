@@ -14,6 +14,8 @@ export {
   LEAKY_SECRET_LINE,
   leakyDocument,
   ownerPasswordDocument,
+  ROTATED_PAGES,
+  ROTATED_WORDS,
   SHARED_TEXT,
 } from "./corpus.ts";
 export { SCANNED_DPI, SCANNED_TEXT, type ScannedLanguage, scannedWords } from "./scanned.ts";

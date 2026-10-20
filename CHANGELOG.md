@@ -25,6 +25,10 @@ short summaries of these sections.
   letterhead), or twice on one page, is copied before the redaction changes it, so only the
   redacted area loses it (ADR 0009 amendment). A second erase on a page could reuse the name an
   earlier one gave a copied image or form and draw the wrong one; names are now always new.
+- Rotated pages (/Rotate 90, 180, 270): text selection, "copy text" and the accessibility layer
+  sat beside the words; the engine now reads text and glyph boxes itself and maps them as the
+  page is shown, for every feature (ADR 0034). Night mode no longer inverts images on rotated or
+  cropped pages.
 
 ### Changed
 
