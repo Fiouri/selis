@@ -12,7 +12,7 @@
  * edits made before it and never overlaps another save.
  */
 import type { DocHandle } from "@selis/engine";
-import { api, type SavedVersion } from "../../lib/api";
+import { api, type SavedVersion, type VersionLabel } from "../../lib/api";
 import { saveWorkingCopy } from "../../lib/save";
 
 export const AUTOSAVE_IDLE_MS = 3_000;
@@ -29,6 +29,11 @@ export type SaveStatus =
 export type Command = {
   /** Which tool made the edit (undo/redo history per tool). */
   readonly tool: string;
+  /**
+   * Changes only what is shown over the page (an erase stroke waiting for
+   * "Apply", ADR 0033), not the document: undoable, nothing to autosave.
+   */
+  readonly preview?: boolean;
   apply(): Promise<void>;
   revert(): Promise<void>;
 };
@@ -43,14 +48,14 @@ export type SessionState = {
 
 type Deps = {
   saveWorkingCopy: typeof saveWorkingCopy;
-  saveVersion: (documentId: string) => Promise<SavedVersion>;
+  saveVersion: (documentId: string, label: VersionLabel) => Promise<SavedVersion>;
   setTimer: (fn: () => void, ms: number) => number;
   clearTimer: (id: number) => void;
 };
 
 const defaultDeps: Deps = {
   saveWorkingCopy,
-  saveVersion: (documentId) => api.saveVersion(documentId, "manual"),
+  saveVersion: (documentId, label) => api.saveVersion(documentId, label),
   setTimer: (fn, ms) => window.setTimeout(fn, ms),
   clearTimer: (id) => window.clearTimeout(id),
 };
@@ -144,7 +149,7 @@ export class EditSession {
       await command.apply();
       this.undoStack.push(command);
       this.redoStack = [];
-      this.changed();
+      if (!command.preview) this.changed();
       this.emit();
     });
   }
@@ -160,7 +165,7 @@ export class EditSession {
         throw err;
       }
       this.redoStack.push(command);
-      this.changed();
+      if (!command.preview) this.changed();
       this.emit();
     });
   }
@@ -176,7 +181,7 @@ export class EditSession {
         throw err;
       }
       this.undoStack.push(command);
-      this.changed();
+      if (!command.preview) this.changed();
       this.emit();
     });
   }
@@ -204,10 +209,11 @@ export class EditSession {
   }
 
   /**
-   * Makes the edits so far a version (autosaving first). Resolves null when
-   * there was nothing new to save.
+   * Makes the edits so far a version (autosaving first), labelled `label`
+   * ("erase" after the Erase tool, ADR 0033). Resolves null when there was
+   * nothing new to save.
    */
-  async commit(): Promise<SavedVersion | null> {
+  async commit(label: VersionLabel = "manual"): Promise<SavedVersion | null> {
     await this.autosave();
     return this.enqueue(async () => {
       if (!this.pendingVersion) {
@@ -216,7 +222,7 @@ export class EditSession {
       }
       this.setStatus("saving");
       try {
-        const saved = await this.deps.saveVersion(this.documentId);
+        const saved = await this.deps.saveVersion(this.documentId, label);
         this.pendingVersion = false;
         this.base = saved.document.blake3;
         this.setStatus(this.dirty ? "saving" : "saved");

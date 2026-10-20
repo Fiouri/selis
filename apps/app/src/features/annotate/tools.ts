@@ -7,10 +7,11 @@ import type { Annotation, DocHandle } from "@selis/engine";
 import { create } from "zustand";
 import type { Command } from "./session";
 
-export type Tool = "highlight" | "underline" | "strikeout" | "pen" | "shapes" | "text" | "note" | "eraser";
+/** "eraser" removes annotations; "erase" removes page content (ADR 0033). */
+export type Tool = "highlight" | "underline" | "strikeout" | "pen" | "shapes" | "text" | "note" | "eraser" | "erase";
 export type Shape = "square" | "circle" | "line" | "arrow";
 
-export const TOOLS: readonly Tool[] = ["highlight", "underline", "strikeout", "pen", "shapes", "text", "note", "eraser"];
+export const TOOLS: readonly Tool[] = ["highlight", "underline", "strikeout", "pen", "shapes", "text", "note", "eraser", "erase"];
 export const SHAPES: readonly Shape[] = ["square", "circle", "line", "arrow"];
 
 /** Brief §3 swatches; black first for ink-like tools (text on white must stay readable). */
@@ -27,9 +28,9 @@ export type ColorName = keyof typeof COLORS;
 const MARKUP_COLORS: readonly ColorName[] = ["yellow", "green", "pink", "blue", "orange"];
 const INK_COLORS: readonly ColorName[] = ["black", "yellow", "green", "pink", "blue", "orange"];
 
-/** Swatches offered for a tool (none for the eraser). */
+/** Swatches offered for a tool (none for the erasers). */
 export function colorsFor(tool: Tool): readonly ColorName[] {
-  if (tool === "eraser") return [];
+  if (tool === "eraser" || tool === "erase") return [];
   return tool === "highlight" || tool === "underline" || tool === "strikeout" || tool === "note" ? MARKUP_COLORS : INK_COLORS;
 }
 
@@ -67,6 +68,7 @@ export const useTools = create<ToolState>((set) => ({
     text: "black",
     note: "yellow",
     eraser: "black",
+    erase: "black",
   },
   thickness: 3,
   fontSize: 14,

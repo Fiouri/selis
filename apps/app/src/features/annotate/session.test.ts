@@ -100,6 +100,32 @@ describe("EditSession", () => {
     expect(working).toHaveLength(1);
   });
 
+  it("a preview edit is undoable but leaves nothing to autosave", async () => {
+    const { session, deps } = setup();
+    const shown: string[] = [];
+    const preview = {
+      tool: "erase:stroke",
+      preview: true,
+      apply: () => {
+        shown.push("s");
+        return Promise.resolve();
+      },
+      revert: () => {
+        shown.pop();
+        return Promise.resolve();
+      },
+    };
+    await session.run(preview);
+    expect(session.state).toMatchObject({ canUndo: true, status: "saved" });
+    expect(deps.setTimer).not.toHaveBeenCalled();
+    await session.undo();
+    await session.redo();
+    expect(shown).toEqual(["s"]);
+    expect(deps.setTimer).not.toHaveBeenCalled();
+    await expect(session.commit()).resolves.toBeNull();
+    expect(deps.saveVersion).not.toHaveBeenCalled();
+  });
+
   it("commit makes one version from the latest edits and rebases later saves on it", async () => {
     const { session, deps, working, onVersion } = setup();
     await session.run(edit([], "a"));
@@ -108,11 +134,13 @@ describe("EditSession", () => {
     expect(saved?.seq).toBe(2);
     expect(deps.saveWorkingCopy).toHaveBeenCalledTimes(1);
     expect(deps.saveVersion).toHaveBeenCalledTimes(1);
+    expect(deps.saveVersion).toHaveBeenLastCalledWith("d", "manual");
     expect(onVersion).toHaveBeenCalledWith(saved);
     expect(session.state.status).toBe("saved");
-    // The next edit autosaves against the new version.
+    // The next edit autosaves against the new version; a label names how it came to be.
     await session.run(edit([], "c"));
-    await session.commit();
+    await session.commit("erase");
+    expect(deps.saveVersion).toHaveBeenLastCalledWith("d", "erase");
     expect(working).toEqual(["hash-v1", "hash-v2"]);
   });
 
