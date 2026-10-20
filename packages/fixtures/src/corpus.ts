@@ -17,7 +17,8 @@ export type FixtureName =
   | "scanned-greek"
   | "scanned-english"
   | "erase"
-  | "shared-xobjects";
+  | "shared-xobjects"
+  | "rotated-text";
 
 export type Fixture = {
   readonly name: FixtureName;
@@ -800,6 +801,55 @@ function buildSharedXObjects(): Uint8Array {
   return w.toBytes();
 }
 
+/** Single-word lines of the rotated-text fixture (/Rotate and text-matrix tests). */
+export const ROTATED_WORDS = {
+  /** Upright words: [text, x, baseline y] in PDF user space. */
+  upright: [
+    ["Kestrel", 90, 700],
+    ["Saffron", 330, 520],
+    ["Marigold", 120, 300],
+  ],
+  /** A word drawn turned 90° counter-clockwise by its text matrix, from (470, 160) upwards. */
+  turned: ["Vertical", 470, 160],
+} as const;
+
+/** The /Rotate of each page of the rotated-text fixture. */
+export const ROTATED_PAGES = [0, 90, 180, 270] as const;
+
+/**
+ * The same page four times, /Rotate 0 / 90 / 180 / 270, each with a CropBox
+ * that does not start at 0,0 (so the conversion must use the crop origin):
+ * three upright 18 pt words far apart, and one word turned by its text matrix
+ * (a rotated CTM for its glyphs). Selection, search, redaction and erase must
+ * find each word where it is drawn on every page.
+ */
+function buildRotatedText(): Uint8Array {
+  const w = new PdfWriter("selis-fixture-rotated-text");
+  const resources = helveticaResources(w);
+  const [word, tx, ty] = ROTATED_WORDS.turned;
+  const content = [
+    ...ROTATED_WORDS.upright.map(([text, x, y]) => `BT /F1 18 Tf ${x} ${y} Td ${lit(text)} Tj ET`),
+    `BT /F1 18 Tf 0 1 -1 0 ${tx} ${ty} Tm ${lit(word)} Tj ET`,
+  ].join("\n");
+  const pagesRef = w.reserve();
+  const resRef = w.add(resources);
+  const kids = ROTATED_PAGES.map((rotate) =>
+    w.add({
+      Type: n("Page"),
+      Parent: pagesRef,
+      MediaBox: [0, 0, A4[0], A4[1]],
+      CropBox: [30, 40, A4[0] - 10, A4[1] - 20],
+      ...(rotate ? { Rotate: rotate } : {}),
+      Resources: resRef,
+      Contents: w.addStream({}, content),
+    }),
+  );
+  w.set(pagesRef, { Type: n("Pages"), Kids: kids, Count: kids.length });
+  w.setRoot(w.add({ Type: n("Catalog"), Pages: pagesRef }));
+  w.setInfo({ Title: Str.ascii("Rotated text fixture") });
+  return w.toBytes();
+}
+
 export const LARGE_PAGE_COUNT = 1000;
 
 export const FIXTURES: readonly Fixture[] = [
@@ -866,5 +916,12 @@ export const FIXTURES: readonly Fixture[] = [
     description: "A logo image and a form XObject shared by three pages, the logo drawn twice on page 2 (redaction copy-on-write).",
     pageCount: 3,
     build: buildSharedXObjects,
+  },
+  {
+    name: "rotated-text",
+    file: "rotated-text.pdf",
+    description: "One page at /Rotate 0, 90, 180 and 270 with a CropBox: upright words and a word turned by its text matrix.",
+    pageCount: ROTATED_PAGES.length,
+    build: buildRotatedText,
   },
 ];

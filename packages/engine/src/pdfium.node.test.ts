@@ -145,7 +145,7 @@ describe("PDFium WASM against the fixture corpus", () => {
     expect(ptr).not.toBeNull();
     const page = doc.pages[1];
     if (!page || ptr === null) throw new Error("no page or pointer");
-    const rects = imageRectsOnPage(pdfium, ptr, 1, page.size);
+    const rects = imageRectsOnPage(engine, pdfium, ptr, doc, page);
     expect(rects).toHaveLength(1);
     expect(rects[0]?.x).toBeCloseTo(56, 0);
     expect(rects[0]?.width).toBeCloseTo(240, 0);

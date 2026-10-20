@@ -6,8 +6,8 @@
 import type { PdfiumNative } from "@embedpdf/engines/pdfium";
 import type { PdfDocumentObject, PdfPageObject } from "@embedpdf/models";
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
-import { fromPdfBounds, type PageRect } from "./geometry";
-import type { PageObjectInfo, PageObjectKind, PageSize, Point } from "./types";
+import type { PageRect } from "./geometry";
+import type { PageObjectInfo, PageObjectKind, Point } from "./types";
 
 /** FPDF_PAGEOBJ_IMAGE */
 const PAGEOBJ_IMAGE = 3;
@@ -43,28 +43,32 @@ export function documentPointer(engine: PdfiumNative, docId: string): number | n
   return typeof ptr === "number" && ptr !== 0 ? ptr : null;
 }
 
-/** Bounds of every image object on a page (page points, top-left origin). */
-export function imageRectsOnPage(pdf: WrappedPdfiumModule, docPtr: number, index: number, size: PageSize): PageRect[] {
-  const pagePtr = pdf.FPDF_LoadPage(docPtr, index);
+/** Bounds of every image object on a page as the viewer draws it (points, top-left origin, /Rotate applied). */
+export function imageRectsOnPage(engine: PdfiumNative, pdf: WrappedPdfiumModule, docPtr: number, doc: PdfDocumentObject, page: PdfPageObject): PageRect[] {
+  const pagePtr = pdf.FPDF_LoadPage(docPtr, page.index);
   if (!pagePtr) return [];
   const rects: PageRect[] = [];
-  // Emscripten helper; its types come from @types/emscripten, which is not installed.
-  const getValue = pdf.pdfium.getValue as unknown as (ptr: number, type: "float") => number;
-  const bounds = pdf.pdfium.wasmExports.malloc(16);
+  const buf = pdf.pdfium.wasmExports.malloc(16);
   try {
     const count = pdf.FPDFPage_CountObjects(pagePtr);
     for (let i = 0; i < count; i++) {
       const obj = pdf.FPDFPage_GetObject(pagePtr, i);
       if (pdf.FPDFPageObj_GetType(obj) !== PAGEOBJ_IMAGE) continue;
-      if (!pdf.FPDFPageObj_GetBounds(obj, bounds, bounds + 4, bounds + 8, bounds + 12)) continue;
-      const read = (offset: number) => getValue(bounds + offset, "float");
-      rects.push(fromPdfBounds(read(0), read(4), read(8), read(12), size));
+      const b = boundsOf(pdf, obj, buf);
+      if (b) rects.push(shownRect(engine, doc, page, b));
     }
   } finally {
-    pdf.pdfium.wasmExports.free(bounds);
+    pdf.pdfium.wasmExports.free(buf);
     pdf.FPDF_ClosePage(pagePtr);
   }
   return rects;
+}
+
+/** User-space bounds (left, bottom, right, top) as a rect on the page as shown. */
+function shownRect(engine: PdfiumNative, doc: PdfDocumentObject, page: PdfPageObject, b: readonly [number, number, number, number]): PageRect {
+  const a = fromUserSpace(engine, doc, page, { x: b[0], y: b[1] });
+  const c = fromUserSpace(engine, doc, page, { x: b[2], y: b[3] });
+  return { x: Math.min(a.x, c.x), y: Math.min(a.y, c.y), width: Math.abs(c.x - a.x), height: Math.abs(c.y - a.y) };
 }
 
 /** Reads FPDFPageObj_GetBounds into user-space corners, or null. */
@@ -90,10 +94,7 @@ export function pageObjects(engine: PdfiumNative, pdf: WrappedPdfiumModule, docP
       const kind = KINDS[pdf.FPDFPageObj_GetType(obj)];
       const b = kind ? boundsOf(pdf, obj, buf) : null;
       if (!kind || !b) continue;
-      const a = fromUserSpace(engine, doc, page, { x: b[0], y: b[1] });
-      const c = fromUserSpace(engine, doc, page, { x: b[2], y: b[3] });
-      const rect = { x: Math.min(a.x, c.x), y: Math.min(a.y, c.y), width: Math.abs(c.x - a.x), height: Math.abs(c.y - a.y) };
-      out.push({ index: i, kind, rect });
+      out.push({ index: i, kind, rect: shownRect(engine, doc, page, b) });
     }
   } finally {
     pdf.pdfium.wasmExports.free(buf);

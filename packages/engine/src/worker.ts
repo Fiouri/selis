@@ -20,7 +20,6 @@ import {
   PdfErrorCode,
   type PdfErrorReason,
   type PdfLinkTarget,
-  type PdfTextRectObject,
   Rotation,
 } from "@embedpdf/models";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
@@ -35,8 +34,9 @@ import { applyRedactions } from "./redact";
 import { deletePageObject, eraseArea, ringColor } from "./erase";
 import { applyNightMode, type PageRect, rotateRect } from "./geometry";
 import { documentPointer, imageRectsOnPage, pageObjects } from "./pdfium-objects";
+import { pageGlyphs, pageTextBoxes } from "./text-geometry";
 import { clampScale, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
-import type { Annotation, EngineErrorCode, Glyph, OutlineItem, SearchHit, TextRun } from "./types";
+import type { Annotation, EngineErrorCode, OutlineItem, SearchHit, TextRun } from "./types";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -156,7 +156,7 @@ function imageRects(engine: PdfiumNative, doc: PdfDocumentObject, index: number)
   if (!rects) {
     const ptr = documentPointer(engine, doc.id);
     const page = doc.pages[index];
-    rects = wasmModule && ptr !== null && page ? imageRectsOnPage(wasmModule, ptr, index, page.size) : [];
+    rects = wasmModule && ptr !== null && page ? imageRectsOnPage(engine, wasmModule, ptr, doc, page) : [];
     imageRectCache.set(key, rects);
   }
   return rects;
@@ -336,12 +336,14 @@ async function handleText(req: Extract<WorkerRequest, { type: "text" }>): Promis
     return;
   }
   try {
-    const rects = (await (await native()).getPageTextRects(doc, page).toPromise()) as PdfTextRectObject[];
-    // EmbedPDF's `content` can carry stray characters past the run (EmbeddedText.boundedTexts).
-    const boxes = rects.map((r) => ({ x: r.rect.origin.x, y: r.rect.origin.y, width: r.rect.size.width, height: r.rect.size.height }));
-    const texts = textStamps ? textStamps.boundedTexts(doc, page, boxes) : rects.map((r) => r.content);
-    const runs: TextRun[] = rects
-      .map((r, i) => ({ ...(boxes[i] as PageRect), text: texts[i] ?? "", fontSize: r.font.size }))
+    const engine = await native();
+    if (!wasmModule) throw new Error("engine not ready");
+    // Not EmbedPDF's getPageTextRects: its boxes are off on rotated pages (text-geometry.ts),
+    // and its `content` can carry stray characters past the run (EmbeddedText.boundedTexts).
+    const boxes = pageTextBoxes(engine, wasmModule, doc, page);
+    const texts = textStamps ? textStamps.boundedTexts(doc, page, boxes) : [];
+    const runs: TextRun[] = boxes
+      .map((b, i) => ({ x: b.x, y: b.y, width: b.width, height: b.height, text: texts[i] ?? "", fontSize: b.fontSize }))
       .filter((r) => r.text.trim() !== "");
     post({ type: "text", reqId: req.reqId, runs });
   } catch (err) {
@@ -366,15 +368,9 @@ async function handleGlyphs(req: Extract<WorkerRequest, { type: "glyphs" }>): Pr
   const t = target(req, req.index);
   if (!t?.page) return;
   try {
-    const geometry = await (await native()).getPageGeometry(t.doc, t.page).toPromise();
-    const glyphs: Glyph[] = [];
-    geometry.runs.forEach((run, r) => {
-      for (const g of run.glyphs) {
-        // flags: 1 = space, 2 = empty (no box).
-        const empty = g.flags === 2;
-        glyphs.push({ x: g.x, y: g.y, width: empty ? 0 : g.width, height: empty ? 0 : g.height, run: r, space: g.flags === 1 });
-      }
-    });
+    const engine = await native();
+    if (!wasmModule) throw new Error("engine not ready");
+    const glyphs = pageGlyphs(engine, wasmModule, t.doc, t.page);
     post({ type: "glyphs", reqId: req.reqId, glyphs });
   } catch (err) {
     post({ type: "error", reqId: req.reqId, ...toError(err) });
