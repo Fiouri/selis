@@ -19,6 +19,13 @@ short summaries of these sections.
   labelled "erase"; the earlier versions are kept. A signed document warns once that erasing
   invalidates the signature.
 
+### Fixed
+
+- Redaction no longer changes other pages: an image or form drawn on several pages (a logo, a
+  letterhead), or twice on one page, is copied before the redaction changes it, so only the
+  redacted area loses it (ADR 0009 amendment). A second erase on a page could reuse the name an
+  earlier one gave a copied image or form and draw the wrong one; names are now always new.
+
 ### Changed
 
 - English first for new strings (ADR 0030 amendment): Greek is completed in a translation pass

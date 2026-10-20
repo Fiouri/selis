@@ -16,7 +16,8 @@ export type FixtureName =
   | "mixed-sizes"
   | "scanned-greek"
   | "scanned-english"
-  | "erase";
+  | "erase"
+  | "shared-xobjects";
 
 export type Fixture = {
   readonly name: FixtureName;
@@ -751,6 +752,54 @@ function buildErase(): Uint8Array {
   return w.toBytes();
 }
 
+/** Text of the shared-XObjects fixture (ADR 0009 amendment). */
+export const SHARED_TEXT = { form: "Shared Form Heron.", page: (n: number) => `Page ${n} of the shared logo.` } as const;
+
+/**
+ * Copy-on-write for redaction (ADR 0009 amendment), A4 points from the
+ * bottom-left: three pages draw the same 64 × 64 logo image (Im1) at
+ * 56–176 × 680–800 and the same form XObject (Fm1: a line of text over an
+ * orange rect, 300–500 × 680–760); page 2 draws the logo a second time at
+ * 56–176 × 200–320, outside any area a test redacts. Redacting the logo or
+ * the form on page 2 must leave pages 1 and 3, and the second logo, as they were.
+ */
+function buildSharedXObjects(): Uint8Array {
+  const w = new PdfWriter("selis-fixture-shared-xobjects");
+  const resources = helveticaResources(w);
+  const helv = (resources.Font as Record<string, Ref>).F1 as Ref;
+  const size = 64;
+  const data = new Uint8Array(size * size * 3);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 3;
+      const ring = Math.hypot(x - 31.5, y - 31.5) < 26;
+      data[i] = ring ? 30 : 240;
+      data[i + 1] = ring ? 90 + x * 2 : 200;
+      data[i + 2] = ring ? 200 - y : 40;
+    }
+  }
+  const image = w.addStream({ Type: n("XObject"), Subtype: n("Image"), Width: size, Height: size, ColorSpace: n("DeviceRGB"), BitsPerComponent: 8 }, data);
+  const form = w.addStream(
+    { Type: n("XObject"), Subtype: n("Form"), BBox: [0, 0, 200, 80], Resources: { Font: { F1: helv } } },
+    ["q 0.95 0.55 0.1 rg 0 0 200 40 re f Q", `BT /F1 12 Tf 8 56 Td ${lit(SHARED_TEXT.form)} Tj ET`].join("\n"),
+  );
+  const pageResources: PdfDict = { ...resources, XObject: { Im1: image, Fm1: form } };
+  const page = (k: number) =>
+    [
+      `BT /F1 12 Tf 56 820 Td ${lit(SHARED_TEXT.page(k))} Tj ET`,
+      "q 120 0 0 120 56 680 cm /Im1 Do Q",
+      "q 1 0 0 1 300 680 cm /Fm1 Do Q",
+      ...(k === 2 ? ["q 120 0 0 120 56 200 cm /Im1 Do Q"] : []),
+    ].join("\n");
+  finishDocument(
+    w,
+    [1, 2, 3].map((k) => ({ size: A4, content: page(k) })),
+    pageResources,
+  );
+  w.setInfo({ Title: Str.ascii("Shared XObjects fixture") });
+  return w.toBytes();
+}
+
 export const LARGE_PAGE_COUNT = 1000;
 
 export const FIXTURES: readonly Fixture[] = [
@@ -810,5 +859,12 @@ export const FIXTURES: readonly Fixture[] = [
     description: "Text, vector paths, an image and a form shared by two pages, a rotated cropped page, a signature field (content erase).",
     pageCount: 3,
     build: buildErase,
+  },
+  {
+    name: "shared-xobjects",
+    file: "shared-xobjects.pdf",
+    description: "A logo image and a form XObject shared by three pages, the logo drawn twice on page 2 (redaction copy-on-write).",
+    pageCount: 3,
+    build: buildSharedXObjects,
   },
 ];

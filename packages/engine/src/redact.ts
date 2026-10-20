@@ -32,7 +32,10 @@ import {
 } from "@embedpdf/models";
 import { type EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX } from "./annotations";
 import type { PageRect } from "./geometry";
+import type { Box } from "./path-clip";
+import { toUserSpace } from "./pdfium-objects";
 import { sanitizeRedacted } from "./sanitize";
+import { unsharePages } from "./unshare";
 
 /** Replacement text size: fits one line in the whiteout's height, within bounds. */
 const MIN_FONT_PT = 6;
@@ -108,9 +111,17 @@ function fieldText(widget: PdfWidgetAnnoObject): string {
   return typeof field.value === "string" ? field.value : "";
 }
 
+/** A viewer rect as a box in PDF user space. */
+function userBox(engine: PdfiumNative, doc: PdfDocumentObject, page: PdfPageObject, r: PageRect): Box {
+  const a = toUserSpace(engine, doc, page, { x: r.x, y: r.y });
+  const c = toUserSpace(engine, doc, page, { x: r.x + r.width, y: r.y + r.height });
+  return { x0: Math.min(a.x, c.x), y0: Math.min(a.y, c.y), x1: Math.max(a.x, c.x), y1: Math.max(a.y, c.y) };
+}
+
 /**
  * Pass 1: empties the form fields under the marks and collects what goes: the
- * page text under each mark, the emptied values, the covered annotations' text.
+ * page text under each mark, the emptied values, the covered annotations' text,
+ * and the marks' areas in user space (for the copy-on-write of shared XObjects).
  * Returns how many marks the page has.
  */
 async function emptyFields(
@@ -119,9 +130,11 @@ async function emptyFields(
   doc: PdfDocumentObject,
   page: PdfPageObject,
   terms: string[],
+  areas: Map<number, Box[]>,
 ): Promise<number> {
   const annots = await pageAnnotations(engine, doc, page);
   const marks = marksOf(annots);
+  if (marks.areas.length > 0) areas.set(page.index, marks.areas.map((r) => userBox(engine, doc, page, r)));
   for (const r of marks.areas) terms.push(text.boundedText(doc, page, r));
   for (const a of covered(annots, marks.areas)) {
     if (a.contents) terms.push(a.contents);
@@ -176,7 +189,10 @@ async function withScratch<T>(engine: PdfiumNative, bytes: ArrayBuffer, use: (do
  * Applies all redaction marks of the document `current`; returns the new bytes
  * and what was taken out of the rest of the document. Two passes with a save
  * between them: removing a widget makes PDFium drop a field value set in the
- * same session (measured), so the values are emptied and saved first.
+ * same session (measured), so the values are emptied and saved first. Between
+ * them every image or form XObject drawn over a mark gets a copy of its own
+ * (unshare.ts): PDFium blanks image pixels and rewrites forms in place, which
+ * would change every other page (or draw) that shares them.
  */
 export async function applyRedactions(
   engine: PdfiumNative,
@@ -186,15 +202,17 @@ export async function applyRedactions(
   let applied = 0;
   let ownerPassword = false;
   const terms: string[] = [];
+  const areas = new Map<number, Box[]>();
   const emptied = await withScratch(engine, current, async (doc) => {
-    for (const page of doc.pages) applied += await emptyFields(engine, text, doc, page, terms);
+    for (const page of doc.pages) applied += await emptyFields(engine, text, doc, page, terms, areas);
     ownerPassword = text.isEncrypted(doc);
     if (ownerPassword) text.removeEncryption(doc);
     return (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
   });
   if (applied === 0) throw new Error("no redaction marks to apply");
+  const unshared = await unsharePages(new Uint8Array(emptied), areas);
   const stamps = new Set<string>();
-  const redacted = await withScratch(engine, emptied, async (doc) => {
+  const redacted = await withScratch(engine, unshared.slice().buffer, async (doc) => {
     try {
       for (const page of doc.pages) await redactPage(engine, text, doc, page, stamps);
       return (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;

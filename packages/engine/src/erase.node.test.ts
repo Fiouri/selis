@@ -293,6 +293,19 @@ describe("eraseArea", () => {
     expect(await pageImage(erased, 1)).toEqual(await pageImage(fixture, 1));
   });
 
+  it("a second erase does not reuse a name an earlier one gave a copy", async () => {
+    // First a corner of the image (its copy gets the first free name), then the form's green
+    // rect: the form's copy must get another name, or the image draw would show the form.
+    const corner = [fromPdf(56, 240, 90, 270)];
+    const green = [fromPdf(400, 625, 440, 640)];
+    const once = (await eraseArea(engine, text, fixture, { page: 0, rects: corner, fill: "#ffffff" })).bytes;
+    const twice = (await eraseArea(engine, text, once, { page: 0, rects: green, fill: "#ffffff" })).bytes;
+    const a = await pdfjsRender(new Uint8Array(once), 0, SCALE, false);
+    const b = await pdfjsRender(new Uint8Array(twice), 0, SCALE, false);
+    sameOutside(a, b, green, false);
+    expect((await pdfjsText(new Uint8Array(twice))).pages[0]).toContain(ERASE_TEXT.form);
+  });
+
   it("paints a chosen fill colour", async () => {
     const box = [fromPdf(60, 520, 120, 560)];
     const { bytes } = await eraseArea(engine, text, fixture, { page: 0, rects: box, fill: "#336699" });
