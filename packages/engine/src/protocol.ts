@@ -1,15 +1,17 @@
-import type { QuarterTurns } from "./geometry";
+import type { PageRect, QuarterTurns } from "./geometry";
 import type { PageSizeOption } from "./images";
 import type { SheetImage } from "./types";
 import type { PageOp } from "./pages";
 import type {
   Annotation,
   EngineErrorCode,
+  EraseArea,
   FieldChange,
   FormField,
   Glyph,
   ImportLosses,
   OutlineItem,
+  PageObjectInfo,
   PageSize,
   PageTextInfo,
   RedactionPreview,
@@ -53,6 +55,11 @@ export type WorkerRequest =
   | { type: "extract"; reqId: number; docId: string; indices: number[] }
   | { type: "applyRedactions"; reqId: number; docId: string }
   | { type: "redactionPreview"; reqId: number; docId: string }
+  /** Content erase (ADR 0033). */
+  | { type: "erase"; reqId: number; docId: string; area: EraseArea }
+  | { type: "pageObjects"; reqId: number; docId: string; index: number }
+  | { type: "deleteObject"; reqId: number; docId: string; index: number; object: PageObjectInfo }
+  | { type: "sampleColor"; reqId: number; docId: string; index: number; rects: PageRect[] }
   | { type: "importLosses"; reqId: number; docId: string; bytes: ArrayBuffer }
   | { type: "appearance"; reqId: number; docId: string; index: number; id: string }
   /** Images → PDF (P4b): a builder in the worker, fed one image at a time. */
@@ -92,6 +99,10 @@ export type WorkerResponse =
   | { type: "pagesEdited"; reqId: number; pages: PageSize[]; before: ArrayBuffer }
   | { type: "extracted"; reqId: number; bytes: ArrayBuffer }
   | { type: "redacted"; reqId: number; pages: PageSize[]; before: ArrayBuffer; applied: number }
+  /** The document after an erase or a deleted object, and its bytes before (undo). */
+  | { type: "contentErased"; reqId: number; pages: PageSize[]; before: ArrayBuffer }
+  | { type: "pageObjects"; reqId: number; objects: PageObjectInfo[] }
+  | { type: "sampledColor"; reqId: number; color: string }
   | { type: "importLosses"; reqId: number; losses: ImportLosses }
   | { type: "redactionPreview"; reqId: number; preview: RedactionPreview }
   | { type: "appearance"; reqId: number; image: StampImage }
