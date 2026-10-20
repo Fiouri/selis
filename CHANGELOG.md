@@ -41,6 +41,7 @@ short summaries of these sections.
 
 - English first for new strings (ADR 0030 amendment): Greek is completed in a translation pass
   before each release candidate; until then a string not translated yet shows in English.
+- Translation pass for 1.0.0-rc.3: the Erase tool is in Greek.
 
 ## [1.0.0-rc.2] - 2026-10-19
 
