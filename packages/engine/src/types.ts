@@ -124,6 +124,25 @@ export interface DocHandle {
    * whole redaction on a scratch copy; the document does not change).
    */
   redactionPreview(): Promise<RedactionPreview>;
+  /**
+   * Erases page content (ADR 0033): text glyphs, image pixels and the parts of
+   * vector paths inside `area` leave the file, and the area is filled with
+   * `area.fill`. Rebuilds the document like a page operation; resolves to the
+   * bytes from before (undo).
+   */
+  erase(area: EraseArea): Promise<{ before: ArrayBuffer }>;
+  /** The top-level objects of page `index` in drawing order (for "Delete object"). */
+  pageObjects(index: number): Promise<PageObjectInfo[]>;
+  /**
+   * Removes one top-level object from page `index`. Rejects when the page no
+   * longer has that object where it was. Resolves to the bytes from before (undo).
+   */
+  deleteObject(index: number, object: PageObjectInfo): Promise<{ before: ArrayBuffer }>;
+  /**
+   * The page's colour around the rects (median of a thin ring outside them,
+   * page content only), as #rrggbb: "Match background" and the eyedropper.
+   */
+  sampleColor(index: number, rects: readonly PageRect[]): Promise<string>;
   /** What inserting the PDF `bytes` into this document would not carry over (ADR 0008). */
   importLosses(bytes: ArrayBuffer): Promise<ImportLosses>;
   /** The pages `indices` as a new PDF (forms kept fillable). */
@@ -239,6 +258,20 @@ export interface PdfEngine {
 }
 
 export type Point = { readonly x: number; readonly y: number };
+
+/** An area to erase from one page (ADR 0033). */
+export type EraseArea = {
+  readonly page: number;
+  /** Rects on the page (points, top-left origin, as the viewer draws the page). */
+  readonly rects: readonly PageRect[];
+  /** Fill colour, #rrggbb. */
+  readonly fill: string;
+};
+
+export type PageObjectKind = "text" | "path" | "image" | "shading" | "form";
+
+/** A top-level page object: its index in drawing order, kind and bounds (top-left page points). */
+export type PageObjectInfo = { readonly index: number; readonly kind: PageObjectKind; readonly rect: PageRect };
 
 /**
  * An annotation as the editor sees it. Geometry is in page points, top-left

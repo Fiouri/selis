@@ -341,6 +341,49 @@ export class WorkerPdfEngine implements PdfEngine {
         }));
         return msg.preview;
       },
+      erase: async (area) => {
+        ensureOpen();
+        checkIndex(area.page);
+        const msg = await this.request<Extract<WorkerResponse, { type: "contentErased" }>>((reqId) => ({
+          type: "erase",
+          reqId,
+          docId,
+          area: { page: area.page, rects: area.rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })), fill: area.fill },
+        }));
+        restructured(msg.pages);
+        return { before: msg.before };
+      },
+      pageObjects: async (index) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "pageObjects" }>>((reqId) => ({ type: "pageObjects", reqId, docId, index }));
+        return msg.objects;
+      },
+      deleteObject: async (index, object) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "contentErased" }>>((reqId) => ({
+          type: "deleteObject",
+          reqId,
+          docId,
+          index,
+          object: { index: object.index, kind: object.kind, rect: { ...object.rect } },
+        }));
+        restructured(msg.pages);
+        return { before: msg.before };
+      },
+      sampleColor: async (index, rects) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "sampledColor" }>>((reqId) => ({
+          type: "sampleColor",
+          reqId,
+          docId,
+          index,
+          rects: rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })),
+        }));
+        return msg.color;
+      },
       importLosses: async (bytes) => {
         ensureOpen();
         const copy = bytes.slice(0);

@@ -8,7 +8,15 @@ import { parseTrueType, type TrueTypeFont, woffToSfnt } from "./font.ts";
 import { n, type PdfDict, PdfWriter, type PdfValue, type Ref, Str } from "./pdf-writer.ts";
 import { buildScanned, SCANNED_TEXT } from "./scanned.ts";
 
-export type FixtureName = "large-1000" | "acroform" | "greek" | "encrypted" | "mixed-sizes" | "scanned-greek" | "scanned-english";
+export type FixtureName =
+  | "large-1000"
+  | "acroform"
+  | "greek"
+  | "encrypted"
+  | "mixed-sizes"
+  | "scanned-greek"
+  | "scanned-english"
+  | "erase";
 
 export type Fixture = {
   readonly name: FixtureName;
@@ -634,6 +642,115 @@ function buildMixed(): Uint8Array {
   return w.toBytes();
 }
 
+/** Lines of the erase fixture (ADR 0033): what an erase must remove, and its neighbours. */
+export const ERASE_TEXT = {
+  title: "Erase fixture",
+  above: "Public line one.",
+  secret: "Secret Wolfram Quartz.",
+  below: "Public line two.",
+  form: "Form Zebra Nimbus.",
+  page2: "Page two keeps everything.",
+  rotated: "Rotated Kestrel Saffron.",
+  rotatedKeep: "Rotated page keeps this.",
+} as const;
+
+/** A 400 × 400 RGB gradient, drawn 200 pt wide (half a point per pixel). */
+export const ERASE_IMAGE_SIZE = 400;
+
+/**
+ * Text, vector and image content for the content erase (ADR 0033), A4 points
+ * from the bottom-left:
+ * - page 1: title (y 780), three 12 pt lines at baselines 740 / 700 / 660 (the
+ *   middle one is the secret), a blue filled rect (56–256 × 520–600), a red
+ *   3 pt diagonal (300,520 → 540,600), a black stroked circle (centre 450,380,
+ *   r 60), the gradient image (56–256 × 240–440), and a form XObject at
+ *   (300, 620) with its own line and a green rect (310–430 × 630–660);
+ * - page 2 draws the same image and form (shared objects: erasing page 1 must
+ *   leave them whole here) and an unsigned signature field (the "document is
+ *   signed" warning);
+ * - page 3 is /Rotate 90 with a CropBox: a line to erase and one to keep.
+ */
+function buildErase(): Uint8Array {
+  const w = new PdfWriter("selis-fixture-erase");
+  const resources = helveticaResources(w);
+  const helv = (resources.Font as Record<string, Ref>).F1 as Ref;
+  const size = ERASE_IMAGE_SIZE;
+  const data = new Uint8Array(size * size * 3);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 3;
+      data[i] = Math.round((x / (size - 1)) * 220) + 20;
+      data[i + 1] = Math.round((y / (size - 1)) * 160) + 60;
+      data[i + 2] = 200 - Math.round(((x + y) / (2 * size - 2)) * 120);
+    }
+  }
+  const image = w.addStream({ Type: n("XObject"), Subtype: n("Image"), Width: size, Height: size, ColorSpace: n("DeviceRGB"), BitsPerComponent: 8 }, data);
+  const form = w.addStream(
+    { Type: n("XObject"), Subtype: n("Form"), BBox: [0, 0, 300, 100], Resources: { Font: { F1: helv } } },
+    [`BT /F1 12 Tf 10 60 Td ${lit(ERASE_TEXT.form)} Tj ET`, "q 0.1 0.6 0.2 rg 10 10 120 30 re f Q"].join("\n"),
+  );
+  const pageResources: PdfDict = { ...resources, XObject: { Im1: image, Fm1: form } };
+  const circle = (cx: number, cy: number, r: number) => {
+    const k = 0.5523 * r;
+    return [
+      `${cx + r} ${cy} m`,
+      `${cx + r} ${cy + k} ${cx + k} ${cy + r} ${cx} ${cy + r} c`,
+      `${cx - k} ${cy + r} ${cx - r} ${cy + k} ${cx - r} ${cy} c`,
+      `${cx - r} ${cy - k} ${cx - k} ${cy - r} ${cx} ${cy - r} c`,
+      `${cx + k} ${cy - r} ${cx + r} ${cy - k} ${cx + r} ${cy} c`,
+      "h",
+    ].join(" ");
+  };
+  const page1 = [
+    `BT /F2 16 Tf 56 780 Td ${lit(ERASE_TEXT.title)} Tj ET`,
+    `BT /F1 12 Tf 56 740 Td ${lit(ERASE_TEXT.above)} Tj ET`,
+    `BT /F1 12 Tf 56 700 Td ${lit(ERASE_TEXT.secret)} Tj ET`,
+    `BT /F1 12 Tf 56 660 Td ${lit(ERASE_TEXT.below)} Tj ET`,
+    "q 0.2 0.4 0.8 rg 56 520 200 80 re f Q",
+    "q 0.8 0.1 0.1 RG 3 w 300 520 m 540 600 l S Q",
+    `q 0 0 0 RG 2 w ${circle(450, 380, 60)} S Q`,
+    "q 200 0 0 200 56 240 cm /Im1 Do Q",
+    "q 1 0 0 1 300 620 cm /Fm1 Do Q",
+  ].join("\n");
+  const page2 = [
+    `BT /F1 12 Tf 56 760 Td ${lit(ERASE_TEXT.page2)} Tj ET`,
+    "q 200 0 0 200 56 240 cm /Im1 Do Q",
+    "q 1 0 0 1 300 620 cm /Fm1 Do Q",
+  ].join("\n");
+  const page3 = [
+    `BT /F1 12 Tf 80 700 Td ${lit(ERASE_TEXT.rotated)} Tj ET`,
+    `BT /F1 12 Tf 80 640 Td ${lit(ERASE_TEXT.rotatedKeep)} Tj ET`,
+    "q 0.5 0.5 0.5 RG 1 w 80 600 m 400 600 l S Q",
+  ].join("\n");
+
+  const pagesRef = w.reserve();
+  const resRef = w.add(pageResources);
+  const p1 = w.add({ Type: n("Page"), Parent: pagesRef, MediaBox: [0, 0, A4[0], A4[1]], Resources: resRef, Contents: w.addStream({}, page1) });
+  const p2Ref = w.reserve();
+  const signature = w.add({ Type: n("Annot"), Subtype: n("Widget"), FT: n("Sig"), T: Str.ascii("approval"), Rect: [320, 120, 520, 160], F: 4, P: p2Ref });
+  w.set(p2Ref, {
+    Type: n("Page"),
+    Parent: pagesRef,
+    MediaBox: [0, 0, A4[0], A4[1]],
+    Resources: resRef,
+    Contents: w.addStream({}, page2),
+    Annots: [signature],
+  });
+  const p3 = w.add({
+    Type: n("Page"),
+    Parent: pagesRef,
+    MediaBox: [0, 0, A4[0], A4[1]],
+    CropBox: [20, 20, A4[0] - 20, A4[1] - 20],
+    Rotate: 90,
+    Resources: resRef,
+    Contents: w.addStream({}, page3),
+  });
+  w.set(pagesRef, { Type: n("Pages"), Kids: [p1, p2Ref, p3], Count: 3 });
+  w.setRoot(w.add({ Type: n("Catalog"), Pages: pagesRef, AcroForm: { Fields: [signature], SigFlags: 1 } }));
+  w.setInfo({ Title: Str.ascii("Erase fixture") });
+  return w.toBytes();
+}
+
 export const LARGE_PAGE_COUNT = 1000;
 
 export const FIXTURES: readonly Fixture[] = [
@@ -686,5 +803,12 @@ export const FIXTURES: readonly Fixture[] = [
     description: "Two image-only A4 pages of English text (300 dpi JPEG, skewed, noisy): OCR input.",
     pageCount: SCANNED_TEXT.english.length,
     build: () => buildScanned("english"),
+  },
+  {
+    name: "erase",
+    file: "erase.pdf",
+    description: "Text, vector paths, an image and a form shared by two pages, a rotated cropped page, a signature field (content erase).",
+    pageCount: 3,
+    build: buildErase,
   },
 ];

@@ -32,8 +32,9 @@ import { ImageFormatError, type ImageInput, ImagePdfBuilder } from "./images";
 import { applyPageOp, extractPages } from "./pages";
 import { importLosses } from "./import-losses";
 import { applyRedactions } from "./redact";
+import { deletePageObject, eraseArea, ringColor } from "./erase";
 import { applyNightMode, type PageRect, rotateRect } from "./geometry";
-import { documentPointer, imageRectsOnPage } from "./pdfium-objects";
+import { documentPointer, imageRectsOnPage, pageObjects } from "./pdfium-objects";
 import { clampScale, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
 import type { Annotation, EngineErrorCode, Glyph, OutlineItem, SearchHit, TextRun } from "./types";
 
@@ -570,6 +571,68 @@ async function handleRedactionPreview(req: Extract<WorkerRequest, { type: "redac
   }
 }
 
+async function handleErase(req: Extract<WorkerRequest, { type: "erase" }>): Promise<void> {
+  const t = target(req, req.area.page);
+  if (!t) return;
+  try {
+    const engine = await native();
+    if (!textStamps) throw new Error("engine not ready");
+    const before = (await engine.saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
+    const { bytes } = await eraseArea(engine, textStamps, before, req.area);
+    const fresh = await replaceDocument(req.docId, t.doc, bytes);
+    post({ type: "contentErased", reqId: req.reqId, pages: pageSizes(fresh), before }, [before]);
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handlePageObjects(req: Extract<WorkerRequest, { type: "pageObjects" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    const engine = await native();
+    const ptr = documentPointer(engine, t.doc.id);
+    if (!wasmModule || ptr === null) throw new Error("engine not ready");
+    post({ type: "pageObjects", reqId: req.reqId, objects: pageObjects(engine, wasmModule, ptr, t.doc, t.page) });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleDeleteObject(req: Extract<WorkerRequest, { type: "deleteObject" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t) return;
+  try {
+    const engine = await native();
+    if (!wasmModule || !textStamps) throw new Error("engine not ready");
+    const before = (await engine.saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
+    const bytes = await deletePageObject(engine, wasmModule, textStamps, before, req.index, req.object);
+    const fresh = await replaceDocument(req.docId, t.doc, bytes);
+    post({ type: "contentErased", reqId: req.reqId, pages: pageSizes(fresh), before }, [before]);
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+/** Page content only (no annotations), at up to 2 px per point within ~4 M pixels. */
+const SAMPLE_SCALE = 2;
+const SAMPLE_MAX_PIXELS = 4_194_304;
+
+async function handleSampleColor(req: Extract<WorkerRequest, { type: "sampleColor" }>): Promise<void> {
+  const t = target(req, req.index);
+  if (!t?.page) return;
+  try {
+    const engine = await native();
+    const scale = clampScale(t.page.size, SAMPLE_SCALE, SAMPLE_MAX_PIXELS);
+    const raw = await engine
+      .renderPageRaw(t.doc, t.page, { scaleFactor: scale, dpr: 1, withAnnotations: false, withForms: false })
+      .toPromise();
+    post({ type: "sampledColor", reqId: req.reqId, color: ringColor(raw.data, raw.width, raw.height, scale, req.rects) });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
 async function handleImportLosses(req: Extract<WorkerRequest, { type: "importLosses" }>): Promise<void> {
   try {
     const engine = await native();
@@ -878,6 +941,18 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "importLosses":
       void handleImportLosses(req);
+      break;
+    case "erase":
+      void handleErase(req);
+      break;
+    case "pageObjects":
+      void handlePageObjects(req);
+      break;
+    case "deleteObject":
+      void handleDeleteObject(req);
+      break;
+    case "sampleColor":
+      void handleSampleColor(req);
       break;
     case "redactionPreview":
       void handleRedactionPreview(req);

@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 export {
   ENCRYPTED_PASSWORD,
+  ERASE_IMAGE_SIZE,
+  ERASE_TEXT,
   FIXTURES,
   type Fixture,
   type FixtureName,

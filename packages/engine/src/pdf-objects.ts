@@ -3,7 +3,8 @@
  * has no API for: reading and changing the document-level objects of a
  * redacted file (metadata, outline, name trees, form and structure strings)
  * and writing the result as one fresh file with only the objects still in use
- * (ADR 0009, "full rewrite"). Page content is PDFium's business, not this one's.
+ * (ADR 0009, "full rewrite"). Page content is PDFium's business, except for
+ * the erase (ADR 0033), which rewrites the paths and XObject names of one page.
  *
  * Reads classic and stream cross-reference sections (with /Prev chains),
  * object streams and Flate data (PNG predictors included). Encrypted files are
@@ -259,6 +260,12 @@ function lastIndexOf(hay: Uint8Array, needle: Uint8Array): number {
   return -1;
 }
 
+/** FlateDecode (zlib) data for a stream. */
+export async function deflate(data: Uint8Array): Promise<Uint8Array> {
+  const stream = new Blob([data.slice().buffer]).stream().pipeThrough(new CompressionStream("deflate"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
 async function inflate(data: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([data.slice().buffer]).stream().pipeThrough(new DecompressionStream("deflate"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -363,6 +370,32 @@ export class PdfDocumentObjects {
 
   catalog(): PdfDict | null {
     return this.dict(this.trailer.get("Root"));
+  }
+
+  /** Adds an object under a new number; returns a reference to it. */
+  add(o: PdfObj): Extract<PdfObj, { t: "ref" }> {
+    let num = 1;
+    for (const k of this.objects.keys()) if (k >= num) num = k + 1;
+    this.objects.set(num, o);
+    return { t: "ref", num, gen: 0 };
+  }
+
+  /** Page dictionaries in order, with their inherited /Resources. */
+  pages(): { dict: PdfDict; resources: PdfDict | null }[] {
+    const out: { dict: PdfDict; resources: PdfDict | null }[] = [];
+    const seen = new Set<PdfDict>();
+    const visit = (node: PdfObj | undefined, inherited: PdfDict | null) => {
+      const dict = this.dict(node);
+      if (!dict || seen.has(dict)) return;
+      seen.add(dict);
+      const resources = this.dict(dict.get("Resources")) ?? inherited;
+      const kids = this.array(dict.get("Kids"));
+      if (nameOf(dict.get("Type")) === "Pages" || (kids && !dict.has("Contents"))) {
+        for (const kid of kids ?? []) visit(kid, resources);
+      } else out.push({ dict, resources });
+    };
+    visit(this.catalog()?.get("Pages"), null);
+    return out;
   }
 
   static async parse(bytes: Uint8Array): Promise<PdfDocumentObjects> {
@@ -666,5 +699,5 @@ export function textString(text: string): PdfObj {
   return { t: "str", v: out, hex: true };
 }
 
-/** Bytes as Latin-1 text (for searching decoded streams). */
-export { latin1 as bytesToLatin1 };
+/** Bytes as Latin-1 text (for searching decoded streams), and back. */
+export { latin1 as bytesToLatin1, ascii as latin1ToBytes };
