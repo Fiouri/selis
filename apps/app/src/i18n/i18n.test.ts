@@ -1,6 +1,6 @@
 import { IntlMessageFormat } from "intl-messageformat";
 import { describe, expect, it } from "vitest";
-import { resolveLocale } from ".";
+import { i18n, initI18n, resolveLocale } from ".";
 import el from "./el.json";
 import en from "./en.json";
 
@@ -17,10 +17,18 @@ function flatten(messages: Messages, prefix = ""): Map<string, string> {
 }
 
 const catalogs = { el: flatten(el), en: flatten(en) };
+/** English keys el.json does not have yet: shown in English until the translation pass. */
+const untranslated = [...catalogs.en.keys()].filter((key) => !catalogs.el.has(key));
+/** The translation pass before a release candidate (ADR 0030 amendment): el.json must be complete. */
+const translationPass = import.meta.env.SELIS_TRANSLATION_PASS === "1";
 
 describe("i18n catalogs", () => {
-  it("el and en define exactly the same keys", () => {
-    expect([...catalogs.el.keys()].sort()).toEqual([...catalogs.en.keys()].sort());
+  it("el has no key that en lacks", () => {
+    expect([...catalogs.el.keys()].filter((key) => !catalogs.en.has(key))).toEqual([]);
+  });
+
+  it.runIf(translationPass)("translation pass: el translates every en key", () => {
+    expect(untranslated).toEqual([]);
   });
 
   for (const [locale, messages] of Object.entries(catalogs)) {
@@ -46,7 +54,23 @@ describe("i18n catalogs", () => {
     // Argument names: "{name}" or "{name, plural, ...}" (not plural branch text like "{No documents}").
     const vars = (m: string) => [...m.matchAll(/\{(\w+)\s*[,}]/g)].map((x) => x[1]).sort();
     for (const [key, message] of catalogs.en) {
-      expect(vars(catalogs.el.get(key) ?? ""), key).toEqual(vars(message));
+      const greek = catalogs.el.get(key);
+      if (greek !== undefined) expect(vars(greek), key).toEqual(vars(message));
+    }
+  });
+});
+
+describe("missing translations", () => {
+  it("a key absent from el.json shows the English text", async () => {
+    await initI18n("el");
+    expect(i18n.language).toBe("el");
+    i18n.addResource("en", "translation", "fallbackProbe.onlyEnglish", "Only in English");
+    expect(i18n.t("fallbackProbe.onlyEnglish")).toBe("Only in English");
+    // A translated key still shows Greek.
+    expect(i18n.t("library.count", { count: 1 })).toBe("1 έγγραφο");
+    // Every English key Greek does not have yet resolves to its English message.
+    for (const key of untranslated) {
+      expect(i18n.t(key), key).toBe(i18n.t(key, { lng: "en" }));
     }
   });
 });

@@ -35,7 +35,10 @@ compile in CI but get no UI polish until P6.
 - Direct filesystem/network access from the UI. The UI talks to Rust through `lib/api.ts`
   (wrapping `lib/ipc`) and reads library files via the scoped asset protocol.
 - Hardcoded UI strings: every user-visible string goes through `t()` with keys in
-  `apps/app/src/i18n/{el,en}.json` (ESLint `selis-i18n/no-hardcoded-strings` + parity test).
+  `apps/app/src/i18n/en.json` (ESLint `selis-i18n/no-hardcoded-strings`). English first (ADR 0030
+  amendment): new keys go to en.json only; el.json is filled in the `translation-pass` PR before
+  each release candidate (missing Greek keys warn in CI until then, fail there and on tags;
+  Greek Playwright/visual sets run only there).
 - Secrets in the repo: keystores, Apple certificates, signing keys live in CI secrets only.
 
 ## Runtime requirements

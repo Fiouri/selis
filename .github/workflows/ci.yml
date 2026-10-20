@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # labeled / unlabeled: adding the `translation-pass` label reruns the checks in strict mode.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
 
@@ -15,6 +17,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   NDK_VERSION: 27.3.13750724
+  # ADR 0030 amendment: new strings go to en.json only; the PR labelled `translation-pass` (or on a
+  # `translation-pass/*` branch) fills el.json before a release candidate. There, a missing Greek
+  # key fails and the Greek Playwright / visual sets run; elsewhere it is a warning.
+  SELIS_TRANSLATION_PASS: ${{ (contains(github.event.pull_request.labels.*.name, 'translation-pass') || startsWith(github.head_ref, 'translation-pass/')) && '1' || '' }}
 
 jobs:
   checks:
@@ -49,6 +55,8 @@ jobs:
         run: node tools/release/version.ts check
       - name: No proprietary dependencies, permissive npm licences (ADR 0021)
         run: node tools/release/check-dependencies.ts
+      - name: Greek translations (warning between release candidates, failure in the translation pass)
+        run: node tools/i18n/check-el.ts
       - run: npm run fixtures
       - run: npm run typecheck
       - run: npm run lint
