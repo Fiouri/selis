@@ -1,8 +1,9 @@
 /**
  * Screens at the reference phone size (390×844) in every theme, compared with
  * committed baselines (docs/design/p1-ui-brief.md). English is the primary set
- * (`<screen>-<theme>.png`); Greek, the translation, is the second set
- * (`<screen>-el-<theme>.png`): long Greek labels must fit too.
+ * (`<screen>-<theme>.png`), required on every change; Greek, the translation, is the second set
+ * (`<screen>-el-<theme>.png`): long Greek labels must fit too. The Greek set runs in the
+ * translation pass before each release candidate (`./langs.ts`, ADR 0030 amendment).
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -10,13 +11,13 @@ import { expect, type Page, test } from "@playwright/test";
 import { makePhoto } from "@selis/fixtures";
 import el from "../src/i18n/el.json" with { type: "json" };
 import en from "../src/i18n/en.json" with { type: "json" };
+import { UI_LANGS } from "./langs";
 import { addToLibrary, firstPageRendered, importFixture, presetSettings, thumbnailsLoaded } from "./helpers";
 import { useFakeScanCamera } from "./scan-camera";
 
 const LINK = readFileSync(fileURLToPath(import.meta.resolve("@selis/fixtures/transfer/link.txt")), "utf8").trim();
 const THEMES = ["light", "dark", "sepia"] as const;
-const LANGS = ["en", "el"] as const;
-type Lang = (typeof LANGS)[number];
+type Lang = (typeof UI_LANGS)[number];
 
 /** A UI string as the app shows it (simple `{name}` placeholders only). */
 function ui(lang: Lang, key: string, vars: Record<string, string> = {}): string {
@@ -75,7 +76,7 @@ async function stockLibrary(page: Page, lang: Lang): Promise<void> {
   await expect(page.getByTestId("favorite-badge")).toHaveCount(1);
 }
 
-for (const lang of LANGS) {
+for (const lang of UI_LANGS) {
   for (const theme of THEMES) {
     /** English keeps the plain names; Greek adds "-el". */
     const shot = (name: string) => (lang === "en" ? `${name}-${theme}.png` : `${name}-el-${theme}.png`);
@@ -650,7 +651,7 @@ test("viewer night mode keeps the image on page 2", async ({ page }) => {
 // en and el, before and after the first page.
 test.describe("scan header at 360 × 800", () => {
   test.use({ viewport: { width: 360, height: 800 } });
-  for (const lang of ["en", "el"] as const) {
+  for (const lang of UI_LANGS) {
     test(`scan header 360 (${lang})`, async ({ page }) => {
       await presetSettings(page, { theme: "light", locale: lang, scanAuto: false });
       await useFakeScanCamera(page);

@@ -17,8 +17,10 @@ the same terms.
 - **Licenses:** only permissive dependencies (Apache-2.0, MIT, BSD, ISC, Zlib, OFL for fonts).
   No GPL/AGPL. `cargo deny check` enforces this for Rust.
 - **Never overwrite a user's original file.** Writes go through `selis_core::atomic_write`.
-- **i18n:** no hardcoded UI text. Add keys to both `apps/app/src/i18n/en.json` and `el.json`
-  (ICU message format). The linter and tests fail otherwise.
+- **i18n:** no hardcoded UI text. Add new keys to `apps/app/src/i18n/en.json` only (ICU message
+  format); the linter fails otherwise. Greek (`el.json`) is filled in one translation-pass PR
+  before each release candidate (label `translation-pass`), where a missing Greek key fails and
+  the Greek Playwright / visual sets run; until then CI warns and the app shows English (ADR 0030).
 - **Accessibility:** 44×44 pt touch targets, WCAG 2.2 AA contrast, labels for icon buttons.
 - **Boundaries:** only `packages/engine` uses EmbedPDF; the UI calls Rust only through the
   generated bindings in `apps/app/src/lib/ipc/` (via `lib/api.ts`).

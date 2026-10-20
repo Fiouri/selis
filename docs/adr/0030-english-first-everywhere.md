@@ -39,3 +39,29 @@ description and no topics).
   picks it again; accepted for one release, in exchange for every pre-#31 install following the
   English-first rule.
 - The database is backed up before the migration as for every schema change (`<db>.bak-v6`).
+
+## Amendment 2026-10-20 — English first for new strings; Greek in a translation pass
+
+Owner decision (P7b), applying from now on:
+
+- **Build and test in English first.** A new user-visible string goes to `en.json` only.
+  `el.json` (and any later locale) is filled in **one translation-pass PR right before each
+  release candidate**, labelled `translation-pass` (or on a `translation-pass/*` branch).
+- **Runtime:** a key missing from `el.json` shows the English text (i18next `fallbackLng: "en"`).
+  Tested in `apps/app/src/i18n/i18n.test.ts` ("a key absent from el.json shows the English
+  text", plus every key Greek does not have yet resolves to its English message).
+- **Completeness check:** `node tools/i18n/check-el.ts` runs in CI. Between release candidates
+  a missing Greek key is a `::warning`; in the translation pass (`SELIS_TRANSLATION_PASS=1`, set
+  by CI from the label or branch) and on a release tag (`release.yml`, `--strict`) it fails. A
+  key left in `el.json` after its English key is gone always fails. The app's vitest catalogue
+  test follows the same rule (Greek ⊆ English always; Greek = English in the translation pass);
+  placeholders are compared for the keys both have.
+- **Playwright:** English is required on every change. The Greek visual set
+  (`<screen>-el-<theme>.png`) and the Greek layout checks (scan header at 360 dp) run only in
+  the translation pass (`apps/app/e2e/langs.ts`); their baselines stay in the repository and
+  are refreshed there. Functional tests of the language setting itself (switching to Greek,
+  `lang="el"`) keep running: they use long-standing keys.
+- **Maestro** flows run in English (they already do); store screenshots stay English-only.
+
+Consequence: between release candidates a Greek user of a debug or CI build can see new
+features in English; release candidates and releases are complete in Greek.
