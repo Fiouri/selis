@@ -123,7 +123,7 @@ selis/
 | Πίνακας | Βασικά πεδία |
 | --- | --- |
 | documents | id (uuid v7), title, kind (imported/linked), location, blake3, size_bytes, page_count, created_at, modified_at, last_opened_at, favorite, thumbnail_path |
-| versions | id, document_id, seq, blake3, size_bytes, created_at, label (auto/manual/received), file_path |
+| versions | id, document_id, seq, blake3, size_bytes, created_at, label (auto/manual/received/erase), file_path |
 | tags, document_tags | Οργάνωση βιβλιοθήκης |
 | signatures | id, kind (drawn/typed/image), svg_or_png_path, created_at |
 | devices | endpoint_id, display_name, paired_at, last_seen_at, trusted |

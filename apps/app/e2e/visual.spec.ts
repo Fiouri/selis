@@ -320,6 +320,37 @@ for (const lang of UI_LANGS) {
         await expect(page).toHaveScreenshot(shot("redact-confirm"));
       });
 
+      test(`erase: brush and rectangle preview, object picked (${theme})`, async ({ page }) => {
+        await page.goto("/");
+        await importFixture(page, "erase.pdf");
+        await firstPageRendered(page);
+        await page.getByTestId("dock-annotate").click();
+        await page.getByTestId("tool-erase").click();
+        const layer = page.getByTestId("erase-layer-1");
+        const box = await layer.boundingBox();
+        if (!box) throw new Error("layer not laid out");
+        const s = box.width / 595.28;
+        const drag = async (a: [number, number], b: [number, number]) => {
+          await page.mouse.move(box.x + a[0] * s, box.y + a[1] * s);
+          await page.mouse.down();
+          await page.mouse.move(box.x + b[0] * s, box.y + b[1] * s, { steps: 6 });
+          await page.mouse.up();
+        };
+        // A brush stroke across the blue rectangle, a rectangle over the secret line.
+        await drag([150, 282], [240, 282]);
+        await page.getByTestId("erase-mode-rect").click();
+        await drag([50, 130], [200, 148]);
+        await expect(page.getByTestId("erase-stroke")).toHaveCount(2);
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("erase-strokes"));
+
+        await page.getByTestId("erase-mode-object").click();
+        await page.mouse.click(box.x + 150 * s, box.y + 500 * s);
+        await expect(page.getByTestId("erase-selection")).toHaveAttribute("data-kind", "image");
+        await settle(page);
+        await expect(page).toHaveScreenshot(shot("erase-object"));
+      });
+
       test(`settings and transfer (${theme})`, async ({ page }) => {
         await page.goto("/");
         await page.getByRole("navigation").getByRole("button", { name: ui(lang, "tabs.settings") }).click();

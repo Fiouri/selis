@@ -18,6 +18,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0005_transfers.sql"),
     include_str!("../migrations/0006_trusted_devices.sql"),
     include_str!("../migrations/0007_english_first.sql"),
+    include_str!("../migrations/0008_erase_label.sql"),
 ];
 
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -230,6 +231,69 @@ mod tests {
                 r.get(0)
             })?;
         assert_eq!(locale, "\"system\"");
+        Ok(())
+    }
+
+    /// v8 rebuilds `versions` to accept the 'erase' label (ADR 0033): rows, the cascade
+    /// from documents and the (document, seq) uniqueness survive.
+    #[test]
+    fn upgrade_to_v8_keeps_versions_and_accepts_erase() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let path = dir.path().join("selis.db");
+        {
+            let conn = Connection::open(&path)?;
+            configure(&conn)?;
+            for sql in &MIGRATIONS[..7] {
+                conn.execute_batch(sql)?;
+            }
+            conn.pragma_update(None, "user_version", 7)?;
+            conn.execute_batch(
+                "INSERT INTO documents (id, title, kind, location, blake3, size_bytes, created_at, modified_at)
+                     VALUES ('d1', 'Doc', 'imported', 'library/a.pdf', 'b2', 20, 1, 2);
+                 INSERT INTO versions (id, document_id, seq, blake3, size_bytes, created_at, label, file_path)
+                     VALUES ('v1', 'd1', 1, 'b1', 10, 1, 'manual', 'library/a.pdf'),
+                            ('v2', 'd1', 2, 'b2', 20, 2, 'received', 'library/b.pdf');",
+            )?;
+        }
+        let conn = open(&path)?;
+        assert_eq!(user_version(&conn)?, 8);
+        let rows: Vec<(String, i64, String)> = conn
+            .prepare("SELECT id, seq, label FROM versions ORDER BY seq")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<std::result::Result<_, _>>()?;
+        assert_eq!(
+            rows,
+            vec![
+                ("v1".to_owned(), 1, "manual".to_owned()),
+                ("v2".to_owned(), 2, "received".to_owned())
+            ]
+        );
+        conn.execute(
+            "INSERT INTO versions (id, document_id, seq, blake3, size_bytes, created_at, label, file_path)
+                 VALUES ('v3', 'd1', 3, 'b3', 30, 3, 'erase', 'library/c.pdf')",
+            [],
+        )?;
+        assert!(
+            conn.execute(
+                "INSERT INTO versions (id, document_id, seq, blake3, size_bytes, created_at, label, file_path)
+                     VALUES ('v4', 'd1', 3, 'b4', 30, 4, 'erase', 'library/d.pdf')",
+                [],
+            )
+            .is_err(),
+            "(document, seq) stays unique"
+        );
+        assert!(
+            conn.execute(
+                "INSERT INTO versions (id, document_id, seq, blake3, size_bytes, created_at, label, file_path)
+                     VALUES ('v5', 'd1', 5, 'b5', 30, 5, 'other', 'library/e.pdf')",
+                [],
+            )
+            .is_err(),
+            "unknown labels are still refused"
+        );
+        conn.execute("DELETE FROM documents WHERE id = 'd1'", [])?;
+        let left: i64 = conn.query_row("SELECT COUNT(*) FROM versions", [], |r| r.get(0))?;
+        assert_eq!(left, 0, "deleting the document still removes its versions");
         Ok(())
     }
 

@@ -1,0 +1,81 @@
+# Content erase on Android (P7b, ADR 0033): Annotate → Erase, a rectangle over
+# the secret line of erase.pdf, Apply after the "document is signed" warning
+# (the fixture has a signature field), Done → a version labelled "erase"; then
+# Object mode, tap the red diagonal, Delete object → a second "erase" version.
+# Prerequisite: ./push-fixtures.sh <serial>. Run with ./run.sh and
+#   POST_RUN="apps/app/e2e/maestro/erase.sh check"
+# (original + 2 erase versions, the original byte-identical to the fixture, the
+# newest without the line and the diagonal, no working copy, Download/ untouched).
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Erase - rectangle, signed warning, delete object, versions
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "erase.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 3"
+    timeout: 20000
+- tapOn: "Annotate"
+# Erase is the last tool: scroll the row sideways (from "Pen", away from the screen
+# edge, where a swipe is the system back gesture with gesture navigation).
+- swipe:
+    from: "Pen"
+    direction: LEFT
+- runFlow:
+    when:
+      notVisible: "Erase"
+    commands:
+      - swipe:
+          from: "Note"
+          direction: LEFT
+- tapOn: "Erase"
+- extendedWaitUntil:
+    visible: "Paint over page content to erase it, then Apply."
+    timeout: 5000
+- tapOn: "Rectangle"
+
+# Pixel coordinates for the reference AVD (selis-midrange-api36, 1080×2340, 420 dpi).
+# With the Erase sheet the page fits above it: page origin (171, 300) px, 1.242 px/pt.
+# The secret line spans 133–144 pt from the top of the page; its neighbours end at
+# 102 pt and start at 173 pt. erase.sh check verifies what went and what stayed.
+- swipe:
+    start: 227, 459
+    end: 419, 486
+    duration: 1000
+- extendedWaitUntil:
+    visible: "Erase 1 area"
+    timeout: 5000
+- tapOn: "Erase 1 area"
+- extendedWaitUntil:
+    visible: "This document is signed"
+    timeout: 10000
+- tapOn: "Erase anyway"
+- extendedWaitUntil:
+    visible: "Erased. A new version was saved; the earlier ones are kept."
+    timeout: 30000
+
+# Delete object: the red diagonal (300,520 → 540,600 pt in PDF space); its middle
+# is at 420 pt across, 282 pt from the top.
+# The toast sits over the sheet: let it go before tapping the mode row.
+- extendedWaitUntil:
+    notVisible: "Erased. A new version was saved; the earlier ones are kept."
+    timeout: 15000
+- tapOn: "Object"
+- tapOn:
+    point: 693, 650
+- extendedWaitUntil:
+    visible: "Drawing 1 of 1 here. Long-press for the next one."
+    timeout: 10000
+- tapOn: "Delete object"
+- extendedWaitUntil:
+    visible: "Object deleted. A new version was saved; the earlier ones are kept."
+    timeout: 30000
+- tapOn: "Done"
+- extendedWaitUntil:
+    visible: ".*· saved"
+    timeout: 15000

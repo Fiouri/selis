@@ -607,7 +607,9 @@ export type VersionLabel =
 /**  Saved by the user (leaving the editor, "Done"). */
 "manual" | 
 /**  Saved without the user asking (a recovered working copy). */
-"auto";
+"auto" | 
+/**  Page content erased with the Erase tool (ADR 0033). */
+"erase";
 
 /**  Autosaved edits that are not a version yet. */
 export type WorkingCopy = {

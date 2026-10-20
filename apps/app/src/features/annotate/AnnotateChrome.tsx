@@ -6,6 +6,7 @@
 import { IconButton } from "@selis/ui";
 import {
   ArrowUpRight,
+  BrushCleaning,
   Circle,
   Eraser,
   Highlighter,
@@ -22,7 +23,7 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { forwardRef, useId } from "react";
+import { forwardRef, type ReactNode, useId } from "react";
 import { useTranslation } from "react-i18next";
 import {
   COLORS,
@@ -46,6 +47,7 @@ const TOOL_ICONS: Record<Tool, LucideIcon> = {
   text: Type,
   note: StickyNote,
   eraser: Eraser,
+  erase: BrushCleaning,
 };
 
 const TOOL_LABELS: Record<Tool, string> = {
@@ -57,6 +59,7 @@ const TOOL_LABELS: Record<Tool, string> = {
   text: "annotate.toolText",
   note: "annotate.toolNote",
   eraser: "annotate.toolEraser",
+  erase: "annotate.toolErase",
 };
 
 const SHAPE_ICONS: Record<Shape, LucideIcon> = { square: Square, circle: Circle, line: Minus, arrow: ArrowUpRight };
@@ -85,6 +88,7 @@ const HINTS: Record<Tool, string> = {
   text: "annotate.hintTap",
   note: "annotate.hintTap",
   eraser: "annotate.hintEraser",
+  erase: "erase.hintBrush",
 };
 
 type BarProps = {
@@ -156,8 +160,11 @@ export const AnnotateBar = forwardRef<HTMLElement, BarProps>(function AnnotateBa
   );
 });
 
-/** Docked bottom sheet: radius 20 20 0 0, raised surface, grab handle 36×4. */
-export const ToolSheet = forwardRef<HTMLElement>(function ToolSheet(_props, ref) {
+/**
+ * Docked bottom sheet: radius 20 20 0 0, raised surface, grab handle 36×4.
+ * The Erase tool brings its own rows (`eraseOptions`).
+ */
+export const ToolSheet = forwardRef<HTMLElement, { eraseOptions?: ReactNode }>(function ToolSheet({ eraseOptions }, ref) {
   const { t } = useTranslation();
   const tool = useTools((s) => s.tool);
   const collapsed = useTools((s) => s.collapsed);
@@ -207,7 +214,9 @@ export const ToolSheet = forwardRef<HTMLElement>(function ToolSheet(_props, ref)
           );
         })}
       </div>
-      {collapsed ? null : (
+      {collapsed ? null : tool === "erase" ? (
+        eraseOptions
+      ) : (
         <div className="flex flex-col gap-1 px-4 pb-1">
           {tool === "shapes" ? <ShapeRow /> : null}
           <ColorRow />

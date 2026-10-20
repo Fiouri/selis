@@ -7,7 +7,11 @@ import { DocumentGlyph } from "../components/Illustrations";
 import { useToast } from "../components/Toast";
 import { AnnotateBar, ToolSheet } from "../features/annotate/AnnotateChrome";
 import { AnnotationLayer } from "../features/annotate/AnnotationLayer";
-import type { EditSession, SaveStatus, SessionState } from "../features/annotate/session";
+import type { Command, EditSession, SaveStatus, SessionState } from "../features/annotate/session";
+import { useTools as useAnnotateTools } from "../features/annotate/tools";
+import { EraseLayer } from "../features/erase/EraseLayer";
+import { EraseOptions } from "../features/erase/EraseOptions";
+import { applyEraseCommand, deleteObjectCommand, selectedObject, useEraseState } from "../features/erase/eraseState";
 import { FormBanner, FormSheet } from "../features/forms/FormChrome";
 import { FormLayer } from "../features/forms/FormLayer";
 import { flattenCommand, useFormState } from "../features/forms/formState";
@@ -128,6 +132,7 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
 
   const doc = state.status === "ready" ? state.doc : null;
   const session = state.status === "ready" ? state.session : null;
+  const annotateTool = useAnnotateTools((s) => s.tool);
   const sessionState = useSessionState(session);
   // Any editing mode (annotate, sign, form, pages): its own top bar and bottom sheet / bar.
   const editing = mode !== "view" && doc !== null && session !== null;
@@ -233,6 +238,10 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     setDockHidden(false);
     useSignState.getState().activate(null);
     useFormState.getState().setActive(null);
+    // Erase strokes are a preview: nothing of them is in the document to save.
+    const strokes = useEraseState.getState().strokes.length;
+    useEraseState.getState().reset();
+    if (strokes > 0) showToast(t("erase.discarded", { count: strokes }));
     if (!session || !doc) return;
     const pending = [...useRedactState.getState().marks.values()];
     void (async () => {
@@ -354,6 +363,67 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     }
   };
 
+  // Erase (ADR 0033): every apply is its own version labelled "erase"; a signed
+  // document warns once per opening that erasing invalidates the signature.
+  const [erasing, setErasing] = useState(false);
+  const [signedAsk, setSignedAsk] = useState<(() => void) | null>(null);
+  const signedWarned = useRef(false);
+  const eraseSelection = useEraseState((s) => s.selection);
+  useEffect(() => {
+    signedWarned.current = false;
+    return () => useEraseState.getState().reset();
+  }, [docId]);
+  // A rebuilt document has new page objects: a picked one no longer applies.
+  useEffect(() => {
+    useEraseState.getState().select(null);
+  }, [structure]);
+
+  const runErase = async (command: Command, done: string) => {
+    if (!session) return;
+    setErasing(true);
+    try {
+      // Pending annotation edits become their own version first.
+      await session.commit();
+      await session.run(command);
+      await session.commit("erase");
+      showToast(t(done));
+    } catch (err) {
+      console.warn("selis: erase failed", err);
+      showToast(t("erase.failed"), "error");
+    } finally {
+      setErasing(false);
+    }
+  };
+  const afterSignatureCheck = async (action: () => void) => {
+    if (!doc) return;
+    if (!signedWarned.current) {
+      let signed = false;
+      try {
+        signed = (await doc.documentFields()).some((f) => f.kind === "signature");
+      } catch (err) {
+        console.warn("selis: signature check failed", err);
+      }
+      if (signed) {
+        setSignedAsk(() => () => {
+          signedWarned.current = true;
+          action();
+        });
+        return;
+      }
+    }
+    action();
+  };
+  const applyErase = () => {
+    if (!doc) return;
+    void afterSignatureCheck(() => void runErase(applyEraseCommand(doc), "erase.applied"));
+  };
+  const deleteObject = () => {
+    const object = selectedObject(eraseSelection);
+    if (!doc || !object || !eraseSelection) return;
+    const { page: objectPage } = eraseSelection;
+    void afterSignatureCheck(() => void runErase(deleteObjectCommand(doc, objectPage, object), "erase.deleted"));
+  };
+
   const flatten = async () => {
     if (!doc || !session) return;
     try {
@@ -378,9 +448,10 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
       if (mode === "sign") return <SignatureLayer doc={doc} index={index} scale={scale} session={session} />;
       if (mode === "form") return <FormLayer doc={doc} index={index} scale={scale} session={session} />;
       if (mode === "redact") return <RedactLayer doc={doc} index={index} scale={scale} session={session} />;
+      if (annotateTool === "erase") return <EraseLayer doc={doc} index={index} scale={scale} session={session} />;
       return <AnnotationLayer doc={doc} index={index} scale={scale} session={session} />;
     },
-    [doc, session, mode],
+    [doc, session, mode, annotateTool],
   );
 
   // Remember the reading position (debounced), and once more when leaving.
@@ -601,7 +672,10 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
             ) : mode === "form" ? (
               <FormSheet ref={sheetRef} onJump={(index, y) => mainRef.current?.scrollToPage(index, y)} onFlatten={() => void flatten()} />
             ) : (
-              <ToolSheet ref={sheetRef} />
+              <ToolSheet
+                ref={sheetRef}
+                eraseOptions={<EraseOptions busy={erasing} onApply={applyErase} onDelete={deleteObject} />}
+              />
             )
           ) : (
             <ViewerDock
@@ -654,6 +728,21 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
         onConfirm={() => void applyRedactions()}
         onCancel={() => setConfirmRedact(null)}
         testId="redact-dialog"
+      />
+      <ConfirmDialog
+        open={signedAsk !== null}
+        danger
+        title={t("erase.signedTitle")}
+        message={t("erase.signedBody")}
+        confirmLabel={t("erase.signedContinue")}
+        cancelLabel={t("erase.cancel")}
+        onConfirm={() => {
+          const go = signedAsk;
+          setSignedAsk(null);
+          go?.();
+        }}
+        onCancel={() => setSignedAsk(null)}
+        testId="erase-signed-dialog"
       />
       <ConfirmDialog
         open={confirmDeleteEarlier}

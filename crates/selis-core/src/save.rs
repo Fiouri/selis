@@ -61,6 +61,8 @@ pub enum VersionLabel {
     Manual,
     /// Saved without the user asking (a recovered working copy).
     Auto,
+    /// Page content erased with the Erase tool (ADR 0033).
+    Erase,
 }
 
 impl VersionLabel {
@@ -68,6 +70,7 @@ impl VersionLabel {
         match self {
             Self::Manual => "manual",
             Self::Auto => "auto",
+            Self::Erase => "erase",
         }
     }
 }
