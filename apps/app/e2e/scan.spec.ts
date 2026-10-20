@@ -8,6 +8,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { pdfjsPageCount, pdfjsRender } from "@selis/fixtures/oracle";
 import { firstPageRendered, presetSettings } from "./helpers";
+import { UI_LANGS } from "./langs";
 import { useFakeScanCamera } from "./scan-camera";
 
 type Hooks = { inspect: { ids: () => string[]; documentBytes: (id: string) => Promise<number[]> } };
@@ -325,7 +326,7 @@ test("auto: with reduced motion the kept page does not fly into the strip", asyn
   await expect(page.getByTestId("scan-count")).toHaveText("2 pages");
 });
 
-for (const locale of ["en", "el"] as const) {
+for (const locale of UI_LANGS) {
   test(`header at 360 dp (${locale}): no text reaches the screen edges`, async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await presetSettings(page, { locale, theme: "light", scanAuto: false });

@@ -28,6 +28,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+      - name: Greek translations complete on a release tag (ADR 0030 amendment)
+        if: github.ref_type == 'tag'
+        run: node tools/i18n/check-el.ts --strict
       - id: v
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then node tools/release/version.ts check "${GITHUB_REF_NAME}"; else node tools/release/version.ts check; fi
