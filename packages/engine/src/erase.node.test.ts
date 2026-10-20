@@ -16,18 +16,19 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
-import type { PdfDocumentObject, PdfTextRectObject } from "@embedpdf/models";
+import type { PdfAnnotationObject, PdfDocumentObject, PdfTextRectObject } from "@embedpdf/models";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { ERASE_IMAGE_SIZE, ERASE_TEXT, FIXTURES } from "@selis/fixtures";
-import { findInFile, pdfjsRender, pdfjsText, qpdfCheck, type Raster } from "@selis/fixtures/oracle";
+import { findInFile, pdfjsAnnotations, pdfjsDocumentParts, pdfjsRender, pdfjsText, qpdfCheck, type Raster } from "@selis/fixtures/oracle";
 import { beforeAll, describe, expect, it } from "vitest";
-import { EmbeddedText } from "./annotations";
+import { EmbeddedText, fromPdfAnnotation, toPdfAnnotation } from "./annotations";
 import { apply, IDENTITY, type Matrix, multiply, operations, walk } from "./content-stream";
 import { deletePageObject, EraseError, eraseArea, ringColor } from "./erase";
 import type { PageRect } from "./geometry";
 import { type Box, type Subpath } from "./path-clip";
 import { bytesToLatin1, decodeStream, nameOf, type PdfDict, PdfDocumentObjects, type PdfObj } from "./pdf-objects";
 import { documentPointer, fromUserSpace, pageObjects, toUserSpace } from "./pdfium-objects";
+import type { Annotation } from "./types";
 
 const require = createRequire(import.meta.url);
 const FONT = new Uint8Array(readFileSync(new URL("../assets/SelisSans-LatinGreek.ttf", import.meta.url)));
@@ -351,6 +352,83 @@ describe("eraseArea", () => {
 
   it("refuses an empty area", async () => {
     await expect(eraseArea(engine, text, fixture, { page: 0, rects: [{ x: 10, y: 10, width: 0, height: 5 }], fill: "#ffffff" })).rejects.toBeInstanceOf(EraseError);
+  });
+});
+
+/**
+ * Annotations over the area (ADR 0033 amendment): ink and text markup are
+ * clipped to what lies outside it, every other kind meeting it is removed, a
+ * form widget with its field.
+ */
+describe("eraseArea: annotations over the area", () => {
+  // An empty stretch of page 1 (PDF x 300–420, y 100–200), in viewer coordinates.
+  const area = fromPdf(300, 100, 420, 200);
+
+  async function annotated(): Promise<ArrayBuffer> {
+    return withDoc(fixture, async (doc) => {
+      const page = doc.pages[0];
+      if (!page) throw new Error("no page");
+      const y = area.y + 50;
+      const add = (a: Annotation) => engine.createPageAnnotation(doc, page, toPdfAnnotation(a as Parameters<typeof toPdfAnnotation>[0])).toPromise();
+      await add({ id: "ink-1", page: 0, kind: "ink", rect: { x: 270, y: y - 2, width: 200, height: 4 }, color: "#c00000", opacity: 1, width: 2, strokes: [[{ x: 270, y }, { x: 360, y }, { x: 470, y }]] });
+      await add({
+        id: "hl-1",
+        page: 0,
+        kind: "highlight",
+        rect: { x: 310, y: area.y + 10, width: 180, height: 12 },
+        color: "#f4c430",
+        opacity: 0.5,
+        segments: [
+          { x: 310, y: area.y + 10, width: 40, height: 12 },
+          { x: 440, y: area.y + 10, width: 50, height: 12 },
+        ],
+      });
+      await add({ id: "note-1", page: 0, kind: "note", rect: { x: 350, y: area.y + 70, width: 20, height: 20 }, color: "#f4c430", opacity: 1, text: "under the area" });
+      await add({ id: "note-2", page: 0, kind: "note", rect: { x: 500, y: area.y + 70, width: 20, height: 20 }, color: "#f4c430", opacity: 1, text: "beside it" });
+      return (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
+    });
+  }
+
+  it("clips ink and highlights to outside the area, removes the note under it, keeps the one beside it", async () => {
+    const bytes = await annotated();
+    const out = await eraseArea(engine, text, bytes, { page: 0, rects: [area], fill: "#ffffff" });
+    expect(out.annotations).toEqual({ removed: 1, clipped: 2 });
+    const left = await withDoc(out.bytes, async (doc) => {
+      const page = doc.pages[0];
+      if (!page) throw new Error("no page");
+      return ((await engine.getPageAnnotations(doc, page).toPromise()) as PdfAnnotationObject[]).map((a) => fromPdfAnnotation(a));
+    });
+    expect(left.map((a) => a.id).sort()).toEqual(["hl-1", "ink-1", "note-2"]);
+    const ink = left.find((a) => a.id === "ink-1");
+    if (ink?.kind !== "ink") throw new Error("no ink");
+    const points = ink.strokes.flat();
+    expect(points.length).toBeGreaterThanOrEqual(4);
+    // Nothing of the stroke (half its width included) inside the area.
+    for (const p of points) {
+      const inside = p.x > area.x - 1 + 1e-3 && p.x < area.x + area.width + 1 - 1e-3 && p.y > area.y && p.y < area.y + area.height;
+      expect(inside, `${p.x},${p.y}`).toBe(false);
+    }
+    expect(Math.min(...points.map((p) => p.x))).toBeCloseTo(270, 3);
+    expect(Math.max(...points.map((p) => p.x))).toBeCloseTo(470, 3);
+    const hl = left.find((a) => a.id === "hl-1");
+    if (hl?.kind !== "highlight") throw new Error("no highlight");
+    expect(hl.segments).toHaveLength(1);
+    expect(hl.segments[0]?.x).toBeCloseTo(440, 1);
+    // pdf.js sees the same on page 1 (page 2 keeps its signature widget).
+    const subtypes = (await pdfjsAnnotations(new Uint8Array(out.bytes)))
+      .filter((a) => a.page === 0 && a.subtype !== "Popup")
+      .map((a) => a.subtype)
+      .sort();
+    expect(subtypes, JSON.stringify(subtypes)).toEqual(["Highlight", "Ink", "Text"]);
+  });
+
+  it("removes a form widget under the area, and its field", async () => {
+    // Page 2's signature field, Rect 320–520 × 120–160.
+    const out = await eraseArea(engine, text, fixture, { page: 1, rects: [fromPdf(300, 110, 540, 170)], fill: "#ffffff" });
+    expect(out.annotations).toEqual({ removed: 1, clipped: 0 });
+    expect(findInFile(new Uint8Array(fixture), ["approval"])).toEqual(["approval"]);
+    expect(findInFile(new Uint8Array(out.bytes), ["approval"])).toEqual([]);
+    expect((await pdfjsDocumentParts(new Uint8Array(out.bytes))).fields).toEqual([]);
   });
 });
 

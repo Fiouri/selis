@@ -121,13 +121,14 @@ pub async fn save_version(
     request_id: String,
     document_id: String,
     label: VersionLabel,
+    note: Option<String>,
 ) -> CommandResult<SavedVersion> {
     let library = Arc::clone(&library);
     results
         .run_once(&request_id, "save_version", async move {
             let retention = super::settings::load(&library)?.retention();
             blocking("save", move || {
-                library.save_version(&document_id, label, &retention)
+                library.save_version_with_note(&document_id, label, note.as_deref(), &retention)
             })
             .await
         })

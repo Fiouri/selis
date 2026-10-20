@@ -48,14 +48,14 @@ export type SessionState = {
 
 type Deps = {
   saveWorkingCopy: typeof saveWorkingCopy;
-  saveVersion: (documentId: string, label: VersionLabel) => Promise<SavedVersion>;
+  saveVersion: (documentId: string, label: VersionLabel, note: string | null) => Promise<SavedVersion>;
   setTimer: (fn: () => void, ms: number) => number;
   clearTimer: (id: number) => void;
 };
 
 const defaultDeps: Deps = {
   saveWorkingCopy,
-  saveVersion: (documentId, label) => api.saveVersion(documentId, label),
+  saveVersion: (documentId, label, note) => api.saveVersion(documentId, label, note),
   setTimer: (fn, ms) => window.setTimeout(fn, ms),
   clearTimer: (id) => window.clearTimeout(id),
 };
@@ -210,10 +210,10 @@ export class EditSession {
 
   /**
    * Makes the edits so far a version (autosaving first), labelled `label`
-   * ("erase" after the Erase tool, ADR 0033). Resolves null when there was
-   * nothing new to save.
+   * ("erase" after the Erase tool, ADR 0033), with an optional `note` on it.
+   * Resolves null when there was nothing new to save.
    */
-  async commit(label: VersionLabel = "manual"): Promise<SavedVersion | null> {
+  async commit(label: VersionLabel = "manual", note: string | null = null): Promise<SavedVersion | null> {
     await this.autosave();
     return this.enqueue(async () => {
       if (!this.pendingVersion) {
@@ -222,7 +222,7 @@ export class EditSession {
       }
       this.setStatus("saving");
       try {
-        const saved = await this.deps.saveVersion(this.documentId, label);
+        const saved = await this.deps.saveVersion(this.documentId, label, note);
         this.pendingVersion = false;
         this.base = saved.document.blake3;
         this.setStatus(this.dirty ? "saving" : "saved");

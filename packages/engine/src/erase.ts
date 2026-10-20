@@ -21,8 +21,9 @@
  * as for redaction (its streams must be readable to be rewritten).
  */
 import type { PdfiumNative } from "@embedpdf/engines/pdfium";
-import type { PdfDocumentObject } from "@embedpdf/models";
+import type { PdfDocumentObject, PdfPageObject } from "@embedpdf/models";
 import type { EmbeddedText } from "./annotations";
+import { type AnnotationChanges, clearAnnotations } from "./area-annotations";
 import {
   ContentSyntaxError,
   fmt,
@@ -39,11 +40,26 @@ import {
 } from "./content-stream";
 import type { PageRect } from "./geometry";
 import { type Box, boxesMeet, clipFill, clipStroke, pathMeets, shrinkBoxes, type Subpath } from "./path-clip";
-import { bytesToLatin1, decodeStream, type PdfDict, PdfDocumentObjects, type PdfObj } from "./pdf-objects";
+import { flattenPage, type Rasterizer } from "./flatten";
+import { bytesToLatin1, decodeStream, type PdfDict, PdfDocumentObjects } from "./pdf-objects";
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { documentPointer, removePageObject, toUserSpace } from "./pdfium-objects";
 import type { EraseArea, PageObjectInfo } from "./types";
-import { ContentRewriteError, contentOf, type Ctx, finish, num, setStreamText, unsharePage, type XObject, xobject, writeContents } from "./unshare";
+import { pruneOrphanFields } from "./sanitize";
+import {
+  ContentRewriteError,
+  contentOf,
+  type Ctx,
+  finish,
+  num,
+  ownResources,
+  setStreamText,
+  type Stream,
+  unsharePages,
+  writeContents,
+  type XObject,
+  xobject,
+} from "./unshare";
 
 export class EraseError extends Error {
   override readonly name = "EraseError";
@@ -132,71 +148,132 @@ export function rgbOf(hex: string): [number, number, number] {
   return [1, 2, 3].map((k) => Number.parseInt(m[k] as string, 16) / 255) as [number, number, number];
 }
 
-function pageOf(doc: PdfDocumentObjects, index: number): { dict: PdfDict; resources: PdfDict | null } {
-  const page = doc.pages()[index];
-  if (!page) throw new EraseError(`no page ${index + 1}`);
-  return page;
+/** A page's MediaBox (inherited from the page tree if need be), or US Letter. */
+function mediaBox(doc: PdfDocumentObjects, page: PdfDict): Box {
+  let node: PdfDict | null = page;
+  for (let depth = 0; node && depth < 32; depth++) {
+    const box = doc.array(node.get("MediaBox"))?.map((x) => num(doc.get(x)) ?? 0);
+    if (box && box.length === 4) {
+      const [a, b, c, d] = box as [number, number, number, number];
+      return { x0: Math.min(a, c), y0: Math.min(b, d), x1: Math.max(a, c), y1: Math.max(b, d) };
+    }
+    node = doc.dict(node.get("Parent"));
+  }
+  return { x0: 0, y0: 0, x1: 612, y1: 792 };
+}
+
+/** Viewer rects (points, top-left origin, /Rotate applied) as PDF user-space boxes. */
+export function userBoxes(engine: PdfiumNative, doc: PdfDocumentObject, page: PdfPageObject, rects: readonly PageRect[]): Box[] {
+  return rects.map((rect) => {
+    const a = toUserSpace(engine, doc, page, { x: rect.x, y: rect.y });
+    const c = toUserSpace(engine, doc, page, { x: rect.x + rect.width, y: rect.y + rect.height });
+    return { x0: Math.min(a.x, c.x), y0: Math.min(a.y, c.y), x1: Math.max(a.x, c.x), y1: Math.max(a.y, c.y) };
+  });
+}
+
+/** What one page loses: the boxes (user space) and the colour painted over each. */
+export type PageArea = { readonly boxes: readonly Box[]; readonly fills: readonly (readonly [number, number, number])[] };
+
+/** Comment before the boxes painted over the areas (a test takes them away to look under them). */
+export const FILL_MARK = "%SelisFill";
+
+function rewriteError(err: unknown): unknown {
+  if (err instanceof ContentSyntaxError) return new EraseError(`cannot read the page content: ${err.message}`);
+  if (err instanceof ContentRewriteError) return new EraseError(err.message);
+  return err;
+}
+
+/**
+ * Steps 3–4 on the bytes PDFium wrote: per page, flattens what cannot be cut
+ * (redaction only), cuts the paths, paints each box last; then drops form
+ * fields left without a widget and writes the file anew.
+ */
+export async function rewritePages(
+  bytes: Uint8Array,
+  areas: ReadonlyMap<number, PageArea>,
+  flatten: Rasterizer | null,
+): Promise<{ bytes: Uint8Array; paths: number; flattened: number }> {
+  try {
+    const doc = await PdfDocumentObjects.parse(bytes);
+    const changed = new Set<Stream>();
+    const pages = doc.pages();
+    let paths = 0;
+    let flattened = 0;
+    for (const [index, area] of areas) {
+      const page = pages[index];
+      if (!page) throw new EraseError(`no page ${index + 1}`);
+      const ctx: Ctx = { doc, boxes: area.boxes, changed };
+      const resources = ownResources(doc, page.resources);
+      page.dict.set("Resources", { t: "dict", v: resources });
+      let content = await contentOf(doc, page.dict.get("Contents"));
+      if (flatten) {
+        const flat = await flattenPage(ctx, page.dict, index, content, resources, mediaBox(doc, page.dict), flatten);
+        if (flat.text !== null) content = flat.text;
+        flattened += flat.flattened;
+      }
+      const cut = await cutContent(ctx, content, resources, IDENTITY);
+      paths += cut.paths;
+      const fills = area.boxes.map((box, k) => {
+        const [r, g, b] = area.fills[k] ?? [1, 1, 1];
+        return `q ${fmt(r)} ${fmt(g)} ${fmt(b)} rg ${fmt(box.x0)} ${fmt(box.y0)} ${fmt(box.x1 - box.x0)} ${fmt(box.y1 - box.y0)} re f Q`;
+      });
+      writeContents(ctx, page.dict, `q\n${cut.text ?? content}\nQ\n${FILL_MARK}\n${fills.join("\n")}\n`);
+    }
+    pruneOrphanFields(doc);
+    return { bytes: await finish({ doc, boxes: [], changed }), paths, flattened };
+  } catch (err) {
+    throw rewriteError(err);
+  }
 }
 
 /**
  * Erases `area` from the document `current` and returns the new bytes: the
- * text, image pixels and paths under it are gone and the area is filled.
+ * text, image pixels and paths under it are gone, annotations over it are
+ * clipped or removed, and the area is filled.
  */
 export async function eraseArea(
   engine: PdfiumNative,
   text: EmbeddedText,
   current: ArrayBuffer,
   area: EraseArea,
-): Promise<{ bytes: ArrayBuffer; paths: number; ownerPassword: boolean }> {
+): Promise<{ bytes: ArrayBuffer; paths: number; ownerPassword: boolean; annotations: AnnotationChanges }> {
   const rects = area.rects.filter((r) => r.width > 0 && r.height > 0);
   if (rects.length === 0) throw new EraseError("nothing to erase");
-  const [r, g, b] = rgbOf(area.fill);
+  const fill = rgbOf(area.fill);
   let ownerPassword = false;
   let boxes: Box[] = [];
   const plain = await withScratch(engine, current, async (doc) => {
     const page = doc.pages[area.page];
     if (!page) throw new EraseError(`no page ${area.page + 1}`);
-    boxes = rects.map((rect) => {
-      const a = toUserSpace(engine, doc, page, { x: rect.x, y: rect.y });
-      const c = toUserSpace(engine, doc, page, { x: rect.x + rect.width, y: rect.y + rect.height });
-      return { x0: Math.min(a.x, c.x), y0: Math.min(a.y, c.y), x1: Math.max(a.x, c.x), y1: Math.max(a.y, c.y) };
-    });
+    boxes = userBoxes(engine, doc, page, rects);
     ownerPassword = text.isEncrypted(doc);
     if (ownerPassword) text.removeEncryption(doc);
     return (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
   });
 
+  // 1. Un-share what the page draws over the area.
+  let unshared: Uint8Array;
   try {
-    // 1. Un-share what the page draws over the area.
-    const ctx1: Ctx = { doc: await PdfDocumentObjects.parse(new Uint8Array(plain)), boxes, changed: new Set() };
-    await unsharePage(ctx1, area.page);
-    const unshared = await finish(ctx1);
-
-    // 2. PDFium: glyphs and image pixels.
-    const redacted = await withScratch(engine, unshared.slice().buffer, async (doc) => {
-      const page = doc.pages[area.page];
-      if (!page) throw new EraseError(`no page ${area.page + 1}`);
-      const quads = rects.map((rect) => ({ origin: { x: rect.x, y: rect.y }, size: { width: rect.width, height: rect.height } }));
-      // False when there was nothing to remove: the paths and the fill still apply.
-      await engine.redactTextInRects(doc, page, quads, { recurseForms: true, drawBlackBoxes: false }).toPromise();
-      return (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
-    });
-
-    // 3. Paths, then the fill on top; 4. a fresh file.
-    const last = await PdfDocumentObjects.parse(new Uint8Array(redacted));
-    const ctx3: Ctx = { doc: last, boxes, changed: new Set() };
-    const page3 = pageOf(last, area.page);
-    const content = await contentOf(last, page3.dict.get("Contents"));
-    const cut = await cutContent(ctx3, content, page3.resources ?? new Map<string, PdfObj>(), IDENTITY);
-    const fill = boxes.map((box) => `${fmt(box.x0)} ${fmt(box.y0)} ${fmt(box.x1 - box.x0)} ${fmt(box.y1 - box.y0)} re`).join("\n");
-    writeContents(ctx3, page3.dict, `q\n${cut.text ?? content}\nQ\nq ${fmt(r)} ${fmt(g)} ${fmt(b)} rg\n${fill}\nf\nQ\n`);
-    const bytes = await finish(ctx3);
-    return { bytes: bytes.slice().buffer, paths: cut.paths, ownerPassword };
+    unshared = await unsharePages(new Uint8Array(plain), new Map([[area.page, boxes]]));
   } catch (err) {
-    if (err instanceof ContentSyntaxError) throw new EraseError(`cannot read the page content: ${err.message}`);
-    if (err instanceof ContentRewriteError) throw new EraseError(err.message);
-    throw err;
+    throw rewriteError(err);
   }
+
+  // 2. PDFium: annotations over the area, glyphs and image pixels.
+  let annotations: AnnotationChanges = { removed: 0, clipped: 0 };
+  const redacted = await withScratch(engine, unshared.slice().buffer, async (doc) => {
+    const page = doc.pages[area.page];
+    if (!page) throw new EraseError(`no page ${area.page + 1}`);
+    annotations = await clearAnnotations(engine, doc, page, rects);
+    const quads = rects.map((rect) => ({ origin: { x: rect.x, y: rect.y }, size: { width: rect.width, height: rect.height } }));
+    // False when there was nothing to remove: the paths and the fill still apply.
+    await engine.redactTextInRects(doc, page, quads, { recurseForms: true, drawBlackBoxes: false }).toPromise();
+    return (await engine.saveAsCopy(doc).toPromise()) as ArrayBuffer;
+  });
+
+  // 3. Paths, then the fill on top; 4. a fresh file.
+  const out = await rewritePages(new Uint8Array(redacted), new Map([[area.page, { boxes, fills: boxes.map(() => fill) }]]), null);
+  return { bytes: out.bytes.slice().buffer, paths: out.paths, ownerPassword, annotations };
 }
 
 /**

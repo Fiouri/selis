@@ -29,6 +29,13 @@ short summaries of these sections.
   sat beside the words; the engine now reads text and glyph boxes itself and maps them as the
   page is shown, for every feature (ADR 0034). Night mode no longer inverts images on rotated or
   cropped pages.
+- Redaction removes everything under the box, not only text and image pixels. Vector drawings
+  are cut. Shadings, pattern fills, soft-masked content and masked images are replaced by a
+  raster of themselves with the redacted area left empty. PDFium's own redaction had left them
+  whole under the black box (ADR 0009 update).
+- Erase also clears the annotations over the area: ink and highlights are cut to fit, notes,
+  stamps, shapes and form fields there are removed. The toast says how many, and the version
+  keeps a note of it (ADR 0033 update).
 
 ### Changed
 

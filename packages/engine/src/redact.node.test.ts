@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import { PdfiumNative } from "@embedpdf/engines/pdfium";
 import { type PdfAnnotationObject, PdfAnnotationSubtype, type PdfDocumentObject } from "@embedpdf/models";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
-import { FIXTURES, type FixtureName, GREEK_TEXT, greekGlyphHex, SHARED_TEXT } from "@selis/fixtures";
+import { FIXTURES, type FixtureName, FLATTEN, GREEK_TEXT, greekGlyphHex, SHARED_TEXT } from "@selis/fixtures";
 import {
   type Box,
   boxDistance,
@@ -29,6 +29,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { EmbeddedText, fromPdfAnnotation, TEXT_STAMP_PREFIX, toPdfAnnotation } from "./annotations";
 import { documentFields } from "./forms";
 import type { PageRect } from "./geometry";
+import { FILL_MARK } from "./erase";
+import { bytesToLatin1, decodeStream, latin1ToBytes, PdfDocumentObjects } from "./pdf-objects";
 import { applyRedactions } from "./redact";
 import type { Annotation } from "./types";
 
@@ -440,5 +442,101 @@ describe("redacting a shared image or form", () => {
     // The logos of page 2 are not under the mark: unchanged.
     const width = Math.round(595.28);
     expect(crop(after[1] as Uint8Array, width, LOGO)).toEqual(crop(before[1] as Uint8Array, width, LOGO));
+  });
+});
+
+/**
+ * Content that cannot be cut geometrically (ADR 0009 amendment): the
+ * redact-flatten fixture draws a plain rect, a shading, a pattern fill with
+ * text in its cell, a soft-masked image and soft-masked paint across one band.
+ * With the redaction boxes taken out of the result, nothing is drawn in the
+ * band and no text is found there.
+ */
+describe("redacting over shadings, patterns and soft masks", () => {
+  const H = 841.89;
+  const [ax0, ay0, ax1, ay1] = FLATTEN.area;
+  const area: PageRect = { x: ax0, y: H - ay1, width: ax1 - ax0, height: ay1 - ay0 };
+  let original: Uint8Array;
+  let redacted: Uint8Array;
+  let flattened = 0;
+
+  /** The result without the redaction boxes (everything after the fill mark in the page content). */
+  async function withoutBoxes(bytes: Uint8Array): Promise<Uint8Array> {
+    const doc = await PdfDocumentObjects.parse(bytes);
+    const page = doc.pages()[0];
+    const contents = doc.get(page?.dict.get("Contents"));
+    if (contents.t !== "stream") throw new Error("one content stream expected");
+    const text = bytesToLatin1((await decodeStream(contents)) ?? new Uint8Array());
+    const at = text.indexOf(FILL_MARK);
+    expect(at).toBeGreaterThan(0);
+    contents.data = latin1ToBytes(text.slice(0, at));
+    contents.dict.delete("Filter");
+    return doc.write();
+  }
+
+  beforeAll(async () => {
+    original = new Uint8Array(fixture("redact-flatten"));
+    const pending = await withMarks(original.slice().buffer, [mark(0, area)]);
+    const out = await applyRedactions(engine, text, pending);
+    redacted = new Uint8Array(out.bytes);
+    flattened = out.flattened;
+    await checkSample("redacted-flatten.pdf", redacted);
+  });
+
+  it("flattens the shading, the pattern fill, the masked image and the soft-masked paint", () => {
+    expect(flattened).toBe(4);
+  });
+
+  it("with the boxes hidden, the area is uniform: nothing of any object is drawn there", async () => {
+    const inside = grow(area, -1);
+    const bare = await withoutBoxes(redacted);
+    for (const img of [await pdfjsRender(bare, 0, 2, false)]) {
+      expect(countPixels(img, inside, (r, g, b) => r !== 255 || g !== 255 || b !== 255)).toBe(0);
+    }
+    const doc = await open(bare.slice().buffer);
+    const page = doc.pages[0];
+    if (!page) throw new Error("no page");
+    const raw = await engine.renderPageRaw(doc, page, { scaleFactor: 2 }).toPromise();
+    let off = 0;
+    for (let y = Math.ceil((inside.y) * 2); y < Math.floor((inside.y + inside.height) * 2); y++) {
+      for (let x = Math.ceil(inside.x * 2); x < Math.floor((inside.x + inside.width) * 2); x++) {
+        const o = (y * raw.width + x) * 4;
+        if (raw.data[o] !== 255 || raw.data[o + 1] !== 255 || raw.data[o + 2] !== 255) off++;
+      }
+    }
+    expect(off).toBe(0);
+    // Control: the fixture does draw in the area.
+    const before = await pdfjsRender(original, 0, 2, false);
+    expect(countPixels(before, inside, (r, g, b) => r !== 255 || g !== 255 || b !== 255)).toBeGreaterThan(10_000);
+  });
+
+  it("finds no text in the area, keeps the text outside it", async () => {
+    const { pages, items } = await pdfjsText(redacted);
+    expect(pages[0]).not.toContain(FLATTEN.inside);
+    expect(pages[0]).toContain(FLATTEN.outside);
+    expect(items.filter((i) => i.str.trim() !== "" && intersects(i, area))).toEqual([]);
+    expect(await extract(await open(redacted.slice().buffer), [0])).not.toContain(FLATTEN.inside);
+  });
+
+  it("keeps each object outside the area, and the box painted over it", async () => {
+    const before = await pdfjsRender(original, 0, 2, false);
+    const after = await pdfjsRender(redacted, 0, 2, false);
+    // A sample left of the band in each object's row (pattern: a spot in its cell's square).
+    for (const [x, y] of [
+      [150, 650],
+      [150, 550],
+      [104, 427],
+      [200, 340],
+      [150, 220],
+    ] as const) {
+      const at = (img: Raster) => {
+        const o = (Math.round((H - y) * 2) * img.width + Math.round(x * 2)) * 4;
+        return [img.data[o] ?? 0, img.data[o + 1] ?? 0, img.data[o + 2] ?? 0];
+      };
+      const a = at(before);
+      const b = at(after);
+      expect(Math.max(...a.map((v, k) => Math.abs(v - (b[k] ?? 0)))), `${x},${y}: ${a.join(",")} → ${b.join(",")}`).toBeLessThanOrEqual(24);
+    }
+    expect(solidBox(after, grow(area, 6), isDark)).not.toBeNull();
   });
 });

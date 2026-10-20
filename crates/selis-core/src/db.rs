@@ -19,6 +19,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0006_trusted_devices.sql"),
     include_str!("../migrations/0007_english_first.sql"),
     include_str!("../migrations/0008_erase_label.sql"),
+    include_str!("../migrations/0009_version_note.sql"),
 ];
 
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -256,7 +257,7 @@ mod tests {
             )?;
         }
         let conn = open(&path)?;
-        assert_eq!(user_version(&conn)?, 8);
+        assert_eq!(user_version(&conn)?, SCHEMA_VERSION);
         let rows: Vec<(String, i64, String)> = conn
             .prepare("SELECT id, seq, label FROM versions ORDER BY seq")?
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?

@@ -330,7 +330,7 @@ export class WorkerPdfEngine implements PdfEngine {
           docId,
         }));
         restructured(msg.pages);
-        return { before: msg.before, applied: msg.applied };
+        return { before: msg.before, applied: msg.applied, annotations: msg.annotations };
       },
       redactionPreview: async () => {
         ensureOpen();
@@ -351,7 +351,7 @@ export class WorkerPdfEngine implements PdfEngine {
           area: { page: area.page, rects: area.rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })), fill: area.fill },
         }));
         restructured(msg.pages);
-        return { before: msg.before };
+        return { before: msg.before, annotations: msg.annotations };
       },
       pageObjects: async (index) => {
         ensureOpen();

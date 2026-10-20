@@ -134,13 +134,13 @@ describe("EditSession", () => {
     expect(saved?.seq).toBe(2);
     expect(deps.saveWorkingCopy).toHaveBeenCalledTimes(1);
     expect(deps.saveVersion).toHaveBeenCalledTimes(1);
-    expect(deps.saveVersion).toHaveBeenLastCalledWith("d", "manual");
+    expect(deps.saveVersion).toHaveBeenLastCalledWith("d", "manual", null);
     expect(onVersion).toHaveBeenCalledWith(saved);
     expect(session.state.status).toBe("saved");
     // The next edit autosaves against the new version; a label names how it came to be.
     await session.run(edit([], "c"));
     await session.commit("erase");
-    expect(deps.saveVersion).toHaveBeenLastCalledWith("d", "erase");
+    expect(deps.saveVersion).toHaveBeenLastCalledWith("d", "erase", null);
     expect(working).toEqual(["hash-v1", "hash-v2"]);
   });
 

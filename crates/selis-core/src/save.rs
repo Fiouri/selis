@@ -38,6 +38,8 @@ pub const MAX_CHUNK_BYTES: usize = 8 * 1024 * 1024;
 /// Largest document accepted for saving (offsets travel over IPC as `u32`).
 pub const MAX_UPLOAD_BYTES: u64 = u32::MAX as u64;
 const MAX_UPLOAD_ID_LEN: usize = 64;
+/// Longest note on a version (characters; the database allows 200).
+pub const MAX_VERSION_NOTE_LEN: usize = 200;
 /// Largest picked image accepted for images → PDF.
 pub const MAX_STAGED_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 
@@ -361,6 +363,25 @@ impl Library {
         label: VersionLabel,
         retention: &RetentionPolicy,
     ) -> Result<SavedVersion> {
+        self.save_version_with_note(document_id, label, None, retention)
+    }
+
+    /// `save_version` with a short note on the new version (at most
+    /// [`MAX_VERSION_NOTE_LEN`] characters, no control characters).
+    pub fn save_version_with_note(
+        &self,
+        document_id: &str,
+        label: VersionLabel,
+        note: Option<&str>,
+        retention: &RetentionPolicy,
+    ) -> Result<SavedVersion> {
+        if let Some(note) = note
+            && (note.chars().count() > MAX_VERSION_NOTE_LEN || note.chars().any(char::is_control))
+        {
+            return Err(Error::InvalidArgument(
+                "version note too long or not plain text",
+            ));
+        }
         let copy = self
             .working_copy(document_id)?
             .ok_or_else(|| Error::NotFound(format!("working copy of {document_id}")))?;
@@ -405,8 +426,8 @@ impl Library {
                 |r| r.get(0),
             )?;
             tx.execute(
-                "INSERT INTO versions (id, document_id, seq, blake3, size_bytes, created_at, label, file_path)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO versions (id, document_id, seq, blake3, size_bytes, created_at, label, file_path, note)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     Uuid::now_v7().to_string(),
                     document_id,
@@ -415,7 +436,8 @@ impl Library {
                     size,
                     now,
                     label.as_str(),
-                    location
+                    location,
+                    note
                 ],
             )?;
             // A linked document keeps pointing at its external original; its
@@ -492,6 +514,50 @@ mod tests {
             .query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
+    }
+
+    #[test]
+    fn a_version_keeps_its_note_and_a_bad_note_is_refused() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        let doc = lib.import_reader(pdf("original").as_slice(), "a")?.document;
+        autosave(&lib, &doc, &pdf("erased"), 7)?;
+        let too_long = "x".repeat(MAX_VERSION_NOTE_LEN + 1);
+        for bad in [
+            too_long.as_str(),
+            "line
+break",
+        ] {
+            assert!(matches!(
+                lib.save_version_with_note(
+                    &doc.id,
+                    VersionLabel::Erase,
+                    Some(bad),
+                    &RetentionPolicy::default()
+                ),
+                Err(Error::InvalidArgument(_))
+            ));
+        }
+        let note = r#"{"annotationsRemoved":1,"annotationsClipped":2}"#;
+        let saved = lib.save_version_with_note(
+            &doc.id,
+            VersionLabel::Erase,
+            Some(note),
+            &RetentionPolicy::default(),
+        )?;
+        assert_eq!(saved.seq, 2);
+        let notes: Vec<(String, Option<String>)> = lib
+            .conn()
+            .prepare("SELECT label, note FROM versions WHERE document_id = ?1 ORDER BY seq")?
+            .query_map([&doc.id], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<std::result::Result<_, _>>()?;
+        assert_eq!(
+            notes,
+            vec![
+                ("auto".to_owned(), None),
+                ("erase".to_owned(), Some(note.to_owned()))
+            ]
+        );
+        Ok(())
     }
 
     #[test]

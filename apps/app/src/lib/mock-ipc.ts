@@ -56,6 +56,7 @@ const uploads = new Map<string, Uint8Array[]>();
 const workingCopies = new Map<string, { copy: WorkingCopy; bytes: Uint8Array }>();
 /** Saved versions per document (v1 = the import), labels in order. */
 const versions = new Map<string, VersionLabel[]>();
+const versionNotes = new Map<string, (string | null)[]>();
 /** Versions removed by "Delete earlier versions", per document. */
 const dropped = new Map<string, number>();
 const versionCount = (id: string) => (versions.get(id) ?? []).length + 1 - (dropped.get(id) ?? 0);
@@ -120,6 +121,8 @@ type MockInspect = {
   /** Number of versions of a document (1 after import). */
   versions: (id: string) => number;
   versionLabels: (id: string) => VersionLabel[];
+  /** The note of each saved version (null: none). */
+  versionNotes: (id: string) => (string | null)[];
   hasWorkingCopy: (id: string) => boolean;
   /** Current bytes of a document, as latin1 text (PDF structure checks). */
   documentText: (id: string) => Promise<string>;
@@ -140,6 +143,7 @@ function installTestOpenWith(): void {
     ids: () => listDocuments({ search: "", filter: "all", tagId: null, sort: "recent" }).map((d) => d.id),
     versions: (id) => versionCount(id),
     versionLabels: (id) => [...(versions.get(id) ?? [])],
+    versionNotes: (id) => [...(versionNotes.get(id) ?? [])],
     hasWorkingCopy: (id) => workingCopies.has(id),
     documentText: async (id) => {
       const response = await fetch(entryOf(id).url);
@@ -336,7 +340,7 @@ function commitWorkingCopy(uploadId: string, documentId: string, baseBlake3: str
   return copy;
 }
 
-async function saveVersion(documentId: string, label: VersionLabel): Promise<SavedVersion> {
+async function saveVersion(documentId: string, label: VersionLabel, note: string | null): Promise<SavedVersion> {
   const working = workingCopies.get(documentId) ?? fail("notFound", `working copy of ${documentId}`);
   const entry = entryOf(documentId);
   if (entry.doc.blake3 !== working.copy.baseBlake3) fail("conflict", "document changed since the edit started");
@@ -346,6 +350,9 @@ async function saveVersion(documentId: string, label: VersionLabel): Promise<Sav
   versions.set(documentId, list);
   if (hash === entry.doc.blake3) return { document: entry.doc, seq: list.length + 1, created: false };
   list.push(label);
+  const notes = versionNotes.get(documentId) ?? [];
+  notes.push(note);
+  versionNotes.set(documentId, notes);
   entry.url = URL.createObjectURL(new Blob([working.bytes.slice()], { type: "application/pdf" }));
   const document = update(documentId, { blake3: hash, sizeBytes: working.bytes.length, modifiedAt: Date.now() });
   return { document, seq: list.length + 1, created: true };
@@ -403,6 +410,7 @@ function deleteDocument(id: string): DeleteReport {
   docs.delete(id);
   workingCopies.delete(id);
   versions.delete(id);
+  versionNotes.delete(id);
   dropped.delete(id);
   if (entry.doc.thumbnailPath?.startsWith("blob:")) URL.revokeObjectURL(entry.doc.thumbnailPath);
   return { removedFiles: entry.doc.kind === "imported" ? 1 + (entry.doc.thumbnailPath ? 1 : 0) : 0 };
@@ -628,7 +636,9 @@ export function installMockIpc(): void {
         workingCopies.delete(String(args.documentId));
         return null;
       case "save_version":
-        return runOnce(cmd, String(args.requestId), () => saveVersion(String(args.documentId), args.label as VersionLabel));
+        return runOnce(cmd, String(args.requestId), () =>
+          saveVersion(String(args.documentId), args.label as VersionLabel, typeof args.note === "string" ? args.note : null),
+        );
       case "import_upload":
         return runOnce(cmd, String(args.requestId), () => importUpload(String(args.uploadId), String(args.title)));
       case "stage_pdf":

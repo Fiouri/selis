@@ -5,7 +5,7 @@
  * would have to load each page to count them). Every change goes through a
  * command that keeps the list in step, undo / redo included.
  */
-import type { Annotation, DocHandle } from "@selis/engine";
+import type { Annotation, AreaAnnotations, DocHandle } from "@selis/engine";
 import { create } from "zustand";
 import type { Command } from "../annotate/session";
 
@@ -101,7 +101,7 @@ export function discardCommand(doc: DocHandle, marks: readonly Mark[]): Command 
  * the document from before (marks included) while it is open; the version
  * saved afterwards no longer has the content.
  */
-export function applyCommand(doc: DocHandle, onApplied?: (count: number) => void): Command {
+export function applyCommand(doc: DocHandle, onApplied?: (count: number, annotations: AreaAnnotations) => void): Command {
   let before: ArrayBuffer | null = null;
   let applied: ReadonlyMap<string, Mark> = new Map();
   return {
@@ -112,7 +112,7 @@ export function applyCommand(doc: DocHandle, onApplied?: (count: number) => void
       before ??= result.before;
       useRedactState.getState().setMarks(new Map());
       useRedactState.getState().addApplied(1);
-      onApplied?.(result.applied);
+      onApplied?.(result.applied, result.annotations);
     },
     revert: async () => {
       if (!before) return;

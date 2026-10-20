@@ -101,3 +101,29 @@ once per open document that erasing invalidates the signature.
 - ADR 0009's redaction has the shared-object exposure measured above (a redacted area over an
   image or form drawn on several pages changes it on all of them); the un-share step here is
   the fix to reuse there (follow-up).
+
+## Update 2026-10-20 (annotations over the area, version note)
+
+- **Annotations** whose box meets an erased area no longer stay over the blank fill
+  (`area-annotations.ts`, in the PDFium step):
+  - **Ink** strokes are clipped: the parts outside the area grown by half the stroke width stay.
+  - **Text markup** (highlight, underline, strike-out, squiggly) is clipped: its quads are cut to
+    the complement of the area.
+  - **Every other kind is removed:** notes, stamps (typed text and signatures too), shapes, links
+    and form widgets. A field left without a widget leaves `/AcroForm /Fields`.
+  - Pop-ups go with their parent.
+  - The engine returns how many were removed and clipped. The toast says so, and the `erase`
+    version carries the note `{"annotationsRemoved":n,"annotationsClipped":m}` in
+    `versions.note` (migration 0009).
+- **Erase still covers** shadings, pattern fills and soft-masked content with the fill instead of
+  flattening them. Only redaction flattens (ADR 0009 update): erase is for appearance, and a raster
+  would change how those objects look outside the area for no privacy gain. The fill sits on top,
+  and the parts under it stay in the file.
+- ADR 0009 now uses the same rewrite (`rewritePages`): un-share, PDFium, cut, then the fill. The
+  shared-object exposure noted in Consequences is fixed there too.
+- Verified (`erase.node.test.ts`), for an ink stroke and a two-span highlight across an area,
+  and one note inside and one beside it:
+  - the ink is clipped, with no point inside the area and its ends kept;
+  - the highlight keeps only the span outside;
+  - the inside note goes and the outside one stays (PDFium and pdf.js agree);
+  - an erase over page 2's signature widget removes it and its field.

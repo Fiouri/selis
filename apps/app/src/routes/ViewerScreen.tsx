@@ -1,4 +1,4 @@
-import { nextTurn, type QuarterTurns } from "@selis/engine";
+import { type AreaAnnotations, nextTurn, type QuarterTurns } from "@selis/engine";
 import { Button, EmptyState, Skeleton } from "@selis/ui";
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,7 +11,14 @@ import type { Command, EditSession, SaveStatus, SessionState } from "../features
 import { useTools as useAnnotateTools } from "../features/annotate/tools";
 import { EraseLayer } from "../features/erase/EraseLayer";
 import { EraseOptions } from "../features/erase/EraseOptions";
-import { applyEraseCommand, deleteObjectCommand, selectedObject, useEraseState } from "../features/erase/eraseState";
+import {
+  addAnnotations,
+  applyEraseCommand,
+  deleteObjectCommand,
+  selectedObject,
+  useEraseState,
+  versionNote,
+} from "../features/erase/eraseState";
 import { FormBanner, FormSheet } from "../features/forms/FormChrome";
 import { FormLayer } from "../features/forms/FormLayer";
 import { flattenCommand, useFormState } from "../features/forms/formState";
@@ -86,6 +93,7 @@ const MODE_TITLES: Record<Exclude<Mode, "view" | "pages">, { title: string; clos
 
 const NO_SESSION: SessionState = { status: "saved", canUndo: false, canRedo: false, undoTool: null };
 const noop = () => () => undefined;
+const NO_ANNOTATIONS: AreaAnnotations = { removed: 0, clipped: 0 };
 
 function useSessionState(session: EditSession | null): SessionState {
   return useSyncExternalStore(session?.subscribe ?? noop, session?.getState ?? (() => NO_SESSION));
@@ -226,6 +234,8 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   const [earlierVersions, setEarlierVersions] = useState(false);
   const [confirmDeleteEarlier, setConfirmDeleteEarlier] = useState(false);
   const [deletingEarlier, setDeletingEarlier] = useState(false);
+  /** Annotations over the marks that the redactions since the last version removed (its note). */
+  const redactedAnnotations = useRef<AreaAnnotations>(NO_ANNOTATIONS);
 
   /**
    * Leaves the editing mode; the session's edits become a version. Redaction
@@ -250,9 +260,11 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
           await session.run(discardCommand(doc, pending));
           showToast(t("redact.discarded", { count: pending.length }));
         }
-        const saved = await session.commit();
-        // A redacted version: the earlier ones still have the removed content (ADR 0009).
+        // A redacted version notes the annotations it removed over the marks.
         const redacted = useRedactState.getState().applied > 0;
+        const saved = await session.commit("manual", redacted ? versionNote(redactedAnnotations.current) : null);
+        redactedAnnotations.current = NO_ANNOTATIONS;
+        // A redacted version: the earlier ones still have the removed content (ADR 0009).
         useRedactState.getState().resetApplied();
         if (redacted && saved && saved.seq > 1) setEarlierVersions(true);
       } catch (err) {
@@ -354,7 +366,12 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     if (!doc || !session) return;
     setRedacting(true);
     try {
-      await session.run(applyCommand(doc, (count) => showToast(t("redact.applied", { count }))));
+      await session.run(
+        applyCommand(doc, (count, annotations) => {
+          redactedAnnotations.current = addAnnotations(redactedAnnotations.current, annotations);
+          showToast(t("redact.applied", { count }));
+        }),
+      );
     } catch (err) {
       console.warn("selis: redaction failed", err);
       showToast(t("redact.failed"), "error");
@@ -378,15 +395,16 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
     useEraseState.getState().select(null);
   }, [structure]);
 
-  const runErase = async (command: Command, done: string) => {
+  const runErase = async (command: Command, done: string, touched: () => AreaAnnotations) => {
     if (!session) return;
     setErasing(true);
     try {
       // Pending annotation edits become their own version first.
       await session.commit();
       await session.run(command);
-      await session.commit("erase");
-      showToast(t(done));
+      const annotations = touched();
+      await session.commit("erase", versionNote(annotations));
+      showToast(versionNote(annotations) ? t("erase.appliedAnnotations", { ...annotations }) : t(done));
     } catch (err) {
       console.warn("selis: erase failed", err);
       showToast(t("erase.failed"), "error");
@@ -415,13 +433,17 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
   };
   const applyErase = () => {
     if (!doc) return;
-    void afterSignatureCheck(() => void runErase(applyEraseCommand(doc), "erase.applied"));
+    let touched: AreaAnnotations = { removed: 0, clipped: 0 };
+    const command = applyEraseCommand(doc, (annotations) => {
+      touched = annotations;
+    });
+    void afterSignatureCheck(() => void runErase(command, "erase.applied", () => touched));
   };
   const deleteObject = () => {
     const object = selectedObject(eraseSelection);
     if (!doc || !object || !eraseSelection) return;
     const { page: objectPage } = eraseSelection;
-    void afterSignatureCheck(() => void runErase(deleteObjectCommand(doc, objectPage, object), "erase.deleted"));
+    void afterSignatureCheck(() => void runErase(deleteObjectCommand(doc, objectPage, object), "erase.deleted", () => NO_ANNOTATIONS));
   };
 
   const flatten = async () => {
