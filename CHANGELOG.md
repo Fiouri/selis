@@ -8,6 +8,22 @@ short summaries of these sections.
 
 ## [Unreleased]
 
+### Added
+
+- Erase page content (ADR 0033): a new "Erase" tool in the annotate dock, separate from the
+  annotation eraser. Brush (three sizes) or rectangle over anything on the page, preview and
+  undo per stroke, then Apply: the text, the image pixels and the parts of drawings under the
+  area are removed from the file, and the area is filled white, with the background colour
+  around it, or with a colour picked from the page. "Object" mode deletes one image, text run
+  or drawing (a long press steps through overlapping ones). Every apply is a new version
+  labelled "erase"; the earlier versions are kept. A signed document warns once that erasing
+  invalidates the signature.
+
+### Changed
+
+- English first for new strings (ADR 0030 amendment): Greek is completed in a translation pass
+  before each release candidate; until then a string not translated yet shows in English.
+
 ## [1.0.0-rc.2] - 2026-10-19
 
 Second release candidate: Scan 2.0.

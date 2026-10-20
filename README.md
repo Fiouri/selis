@@ -27,6 +27,8 @@ Developed with AI assistance (Claude Code); every change is reviewed and tested 
 - **Sign and fill forms**: draw, type or pick a picture of your signature; fill AcroForm fields.
 - **Pages**: reorder, rotate, delete, insert, extract.
 - **Redact** for real: the text under a box is removed from the file, not just covered.
+- **Erase** page content with a brush, a box or by picking one object: text, images and
+  drawings under it leave the file; filled white, with the background colour or a picked one.
 - **Tools**: password protection, make the file smaller, optimise, repair, save a page as an image.
 - **Scan** paper with the camera (or from a photo): captures by itself when the page is steady
   and sharp, an Enhance filter that removes shadows, many pages in one go (reorder, rotate,
@@ -149,8 +151,9 @@ Security issues: please follow [SECURITY.md](SECURITY.md).
 
 ## Translations
 
-Selis ships in Greek and English. Strings live in `apps/app/src/i18n/*.json` (ICU message
-format). New languages are welcome once the UI stabilizes.
+Selis ships in English and Greek. Strings live in `apps/app/src/i18n/*.json` (ICU message
+format). New strings are written in English first; Greek is completed before each release
+candidate. New languages are welcome once the UI stabilizes.
 
 ## License
 

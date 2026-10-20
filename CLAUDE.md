@@ -126,7 +126,11 @@ Tier 2 — end of every feature:
   one saved signature, original untouched). And `pages.yaml` with `POST_RUN="…/pages.sh check"`
   (original + version + extracted page, both carrying the inserted form, stage empty, originals
   untouched), then `pages.sh drag <serial>` with the grid open (long-press reorder by adb
-  `draganddrop`; inspect `.tmp/p2c/drag-*.png`). And `redact.yaml` with `POST_RUN="…/redact.sh check"`
+  `draganddrop`; inspect `.tmp/p2c/drag-*.png`). And `erase.yaml` with `POST_RUN="…/erase.sh check"`
+  (ADR 0033: rectangle over a line of `erase.pdf`, the signed warning, delete object; the
+  database lists the import + two `erase` versions, the original's file byte-identical to the
+  fixture, the newest read by pdf.js without the line and the diagonal, page 2 unchanged; AVD
+  coordinates). And `redact.yaml` with `POST_RUN="…/redact.sh check"`
   (earlier versions deleted from the sheet: only the redacted version left; read by pdf.js: redacted
   lines not extracted and their glyph codes nowhere in the file, each box on its own line, no marks
   left; original untouched). `pages.yaml` inserts the form through the "Insert anyway" sheet. And `transfer.yaml` with

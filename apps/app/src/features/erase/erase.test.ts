@@ -68,7 +68,7 @@ describe("geometry helpers", () => {
 
 function fakeDoc() {
   const erase = vi.fn((area: EraseArea) => Promise.resolve({ before: new Uint8Array([area.page]).buffer }));
-  const reload = vi.fn(() => Promise.resolve());
+  const reload = vi.fn((_bytes: ArrayBuffer) => Promise.resolve());
   const deleteObject = vi.fn(() => Promise.resolve({ before: new ArrayBuffer(3) }));
   return { doc: { erase, reload, deleteObject } as unknown as DocHandle, erase, reload, deleteObject };
 }
@@ -109,7 +109,7 @@ describe("erase commands", () => {
     expect(useEraseState.getState().strokes).toEqual([]);
     await command.revert();
     // The bytes from before the first erase (page 0's group goes first).
-    expect(new Uint8Array(reload.mock.calls[0]?.[0] as unknown as ArrayBuffer)).toEqual(new Uint8Array([0]));
+    expect(new Uint8Array(reload.mock.calls[0]?.[0] as ArrayBuffer)).toEqual(new Uint8Array([0]));
     expect(useEraseState.getState().strokes.map((s) => s.id)).toEqual(["a", "b"]);
   });
 
@@ -118,7 +118,7 @@ describe("erase commands", () => {
     erase.mockImplementationOnce(() => Promise.resolve({ before: new Uint8Array([7]).buffer })).mockRejectedValueOnce(new Error("nope"));
     useEraseState.getState().setStrokes([stroke("a", 0, "#ffffff"), stroke("b", 1, "#ffffff")]);
     await expect(applyEraseCommand(doc).apply()).rejects.toThrow("nope");
-    expect(new Uint8Array(reload.mock.calls[0]?.[0] as unknown as ArrayBuffer)).toEqual(new Uint8Array([7]));
+    expect(new Uint8Array(reload.mock.calls[0]?.[0] as ArrayBuffer)).toEqual(new Uint8Array([7]));
     expect(useEraseState.getState().strokes).toHaveLength(2);
   });
 

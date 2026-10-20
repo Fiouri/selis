@@ -627,7 +627,9 @@ async function handleSampleColor(req: Extract<WorkerRequest, { type: "sampleColo
     const raw = await engine
       .renderPageRaw(t.doc, t.page, { scaleFactor: scale, dpr: 1, withAnnotations: false, withForms: false })
       .toPromise();
-    post({ type: "sampledColor", reqId: req.reqId, color: ringColor(raw.data, raw.width, raw.height, scale, req.rects) });
+    // A spot (the eyedropper) samples 1.5 pt around it; an area, a 4 pt ring (ADR 0033).
+    const spot = req.rects.every((r) => r.width === 0 && r.height === 0);
+    post({ type: "sampledColor", reqId: req.reqId, color: ringColor(raw.data, raw.width, raw.height, scale, req.rects, spot ? 1.5 : 4) });
   } catch (err) {
     post({ type: "error", reqId: req.reqId, ...toError(err) });
   }
