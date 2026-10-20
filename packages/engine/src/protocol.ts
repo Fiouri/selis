@@ -1,6 +1,9 @@
 import type { PageRect, QuarterTurns } from "./geometry";
 import type { PageSizeOption } from "./images";
-import type { SheetImage } from "./types";
+import type {
+  AreaAnnotations,
+  SheetImage,
+} from "./types";
 import type { PageOp } from "./pages";
 import type {
   Annotation,
@@ -98,9 +101,9 @@ export type WorkerResponse =
   /** The document after a page operation, and its bytes before (the undo snapshot). */
   | { type: "pagesEdited"; reqId: number; pages: PageSize[]; before: ArrayBuffer }
   | { type: "extracted"; reqId: number; bytes: ArrayBuffer }
-  | { type: "redacted"; reqId: number; pages: PageSize[]; before: ArrayBuffer; applied: number }
+  | { type: "redacted"; reqId: number; pages: PageSize[]; before: ArrayBuffer; applied: number; annotations: AreaAnnotations }
   /** The document after an erase or a deleted object, and its bytes before (undo). */
-  | { type: "contentErased"; reqId: number; pages: PageSize[]; before: ArrayBuffer }
+  | { type: "contentErased"; reqId: number; pages: PageSize[]; before: ArrayBuffer; annotations: AreaAnnotations }
   | { type: "pageObjects"; reqId: number; objects: PageObjectInfo[] }
   | { type: "sampledColor"; reqId: number; color: string }
   | { type: "importLosses"; reqId: number; losses: ImportLosses }

@@ -1,6 +1,6 @@
 import type { DocHandle, EraseArea, PageObjectInfo } from "@selis/engine";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { applyEraseCommand, deleteObjectCommand, eraseGroups, strokeCommand, useEraseState } from "./eraseState";
+import { applyEraseCommand, deleteObjectCommand, eraseGroups, strokeCommand, useEraseState, versionNote } from "./eraseState";
 import { boxOf, brushRects, clipRect, objectsAt, rectsPath } from "./geometry";
 
 const PAGE = { width: 600, height: 800 };
@@ -67,7 +67,9 @@ describe("geometry helpers", () => {
 });
 
 function fakeDoc() {
-  const erase = vi.fn((area: EraseArea) => Promise.resolve({ before: new Uint8Array([area.page]).buffer }));
+  const erase = vi.fn((area: EraseArea) =>
+    Promise.resolve({ before: new Uint8Array([area.page]).buffer, annotations: { removed: area.page, clipped: 1 } }),
+  );
   const reload = vi.fn((_bytes: ArrayBuffer) => Promise.resolve());
   const deleteObject = vi.fn(() => Promise.resolve({ before: new ArrayBuffer(3) }));
   return { doc: { erase, reload, deleteObject } as unknown as DocHandle, erase, reload, deleteObject };
@@ -103,9 +105,14 @@ describe("erase commands", () => {
   it("applies every group, and undo reloads the bytes from before and brings the strokes back", async () => {
     const { doc, erase, reload } = fakeDoc();
     useEraseState.getState().setStrokes([stroke("a", 1, "#ffffff"), stroke("b", 0, "#ffffff")]);
-    const command = applyEraseCommand(doc);
+    const touched = vi.fn();
+    const command = applyEraseCommand(doc, touched);
     await command.apply();
     expect(erase).toHaveBeenCalledTimes(2);
+    // What the two erases did to annotations over their areas, added up (the version's note).
+    expect(touched).toHaveBeenCalledWith({ removed: 1, clipped: 2 });
+    expect(versionNote({ removed: 1, clipped: 2 })).toBe('{"annotationsRemoved":1,"annotationsClipped":2}');
+    expect(versionNote({ removed: 0, clipped: 0 })).toBeNull();
     expect(useEraseState.getState().strokes).toEqual([]);
     await command.revert();
     // The bytes from before the first erase (page 0's group goes first).
@@ -115,7 +122,9 @@ describe("erase commands", () => {
 
   it("is all or nothing: a group that fails takes back the ones before it", async () => {
     const { doc, erase, reload } = fakeDoc();
-    erase.mockImplementationOnce(() => Promise.resolve({ before: new Uint8Array([7]).buffer })).mockRejectedValueOnce(new Error("nope"));
+    erase
+      .mockImplementationOnce(() => Promise.resolve({ before: new Uint8Array([7]).buffer, annotations: { removed: 0, clipped: 0 } }))
+      .mockRejectedValueOnce(new Error("nope"));
     useEraseState.getState().setStrokes([stroke("a", 0, "#ffffff"), stroke("b", 1, "#ffffff")]);
     await expect(applyEraseCommand(doc).apply()).rejects.toThrow("nope");
     expect(new Uint8Array(reload.mock.calls[0]?.[0] as ArrayBuffer)).toEqual(new Uint8Array([7]));

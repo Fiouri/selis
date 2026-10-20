@@ -118,7 +118,7 @@ export interface DocHandle {
    * their text. Resolves to the bytes from before (undo) and the number of marks
    * applied. Like a page operation, it rebuilds the document (`onStructureChange`).
    */
-  applyRedactions(): Promise<{ before: ArrayBuffer; applied: number }>;
+  applyRedactions(): Promise<{ before: ArrayBuffer; applied: number; annotations: AreaAnnotations }>;
   /**
    * What applying the marks would also do beyond the page content (runs the
    * whole redaction on a scratch copy; the document does not change).
@@ -130,7 +130,7 @@ export interface DocHandle {
    * `area.fill`. Rebuilds the document like a page operation; resolves to the
    * bytes from before (undo).
    */
-  erase(area: EraseArea): Promise<{ before: ArrayBuffer }>;
+  erase(area: EraseArea): Promise<{ before: ArrayBuffer; annotations: AreaAnnotations }>;
   /** The top-level objects of page `index` in drawing order (for "Delete object"). */
   pageObjects(index: number): Promise<PageObjectInfo[]>;
   /**
@@ -258,6 +258,9 @@ export interface PdfEngine {
 }
 
 export type Point = { readonly x: number; readonly y: number };
+
+/** Annotations over an erased or redacted area: removed, or clipped to outside it (ink, text markup). */
+export type AreaAnnotations = { readonly removed: number; readonly clipped: number };
 
 /** An area to erase from one page (ADR 0033). */
 export type EraseArea = {

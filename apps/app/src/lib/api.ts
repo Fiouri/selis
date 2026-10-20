@@ -116,8 +116,9 @@ export const api = {
   workingCopy: (documentId: string) => unwrap(ipc().short("working_copy", () => commands.workingCopy(documentId), READ)),
   discardWorkingCopy: (documentId: string) =>
     unwrap(ipc().short("discard_working_copy", () => commands.discardWorkingCopy(documentId), READ)),
-  saveVersion: (documentId: string, label: VersionLabel) =>
-    unwrap(ipc().long("save_version", (requestId) => commands.saveVersion(requestId, documentId, label), SAVE)),
+  /** `note`: what an erase or a redaction did besides the page content (ADR 0033 amendment). */
+  saveVersion: (documentId: string, label: VersionLabel, note: string | null = null) =>
+    unwrap(ipc().long("save_version", (requestId) => commands.saveVersion(requestId, documentId, label, note), SAVE)),
   importUpload: (uploadId: string, title: string) =>
     unwrap(ipc().long("import_upload", (requestId) => commands.importUpload(requestId, uploadId, title), IMPORT)),
   stagePdf: (source: string) => unwrap(ipc().long("stage_pdf", (requestId) => commands.stagePdf(requestId, source), IMPORT)),

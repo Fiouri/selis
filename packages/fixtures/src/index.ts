@@ -5,6 +5,7 @@ export {
   ENCRYPTED_PASSWORD,
   ERASE_IMAGE_SIZE,
   ERASE_TEXT,
+  FLATTEN,
   FIXTURES,
   type Fixture,
   type FixtureName,

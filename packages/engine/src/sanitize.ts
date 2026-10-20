@@ -368,6 +368,15 @@ function removeOrphanFields(ctx: Ctx, catalog: PdfDict): void {
   fields.splice(0, fields.length, ...kept);
 }
 
+/** Removes the form fields left without a widget on any page; returns how many went. */
+export function pruneOrphanFields(doc: PdfDocumentObjects): number {
+  const catalog = doc.catalog();
+  if (!catalog) return 0;
+  const ctx: Ctx = { doc, match: () => false, removed: [], annotations: [], kept: new Set() };
+  removeOrphanFields(ctx, catalog);
+  return ctx.removed.length;
+}
+
 function pagesOf(ctx: Ctx, catalog: PdfDict): PdfDict[] {
   const pages: PdfDict[] = [];
   const seen = new Set<PdfDict>();

@@ -544,9 +544,9 @@ async function handleRedact(req: Extract<WorkerRequest, { type: "applyRedactions
     const engine = await native();
     if (!wasmModule || !textStamps) throw new Error("engine not ready");
     const before = (await engine.saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
-    const { bytes, applied } = await applyRedactions(engine, textStamps, before);
+    const { bytes, applied, covered } = await applyRedactions(engine, textStamps, before);
     const fresh = await replaceDocument(req.docId, t.doc, bytes);
-    post({ type: "redacted", reqId: req.reqId, pages: pageSizes(fresh), before, applied }, [before]);
+    post({ type: "redacted", reqId: req.reqId, pages: pageSizes(fresh), before, applied, annotations: { removed: covered, clipped: 0 } }, [before]);
   } catch (err) {
     post({ type: "error", reqId: req.reqId, ...toError(err) });
   }
@@ -574,9 +574,9 @@ async function handleErase(req: Extract<WorkerRequest, { type: "erase" }>): Prom
     const engine = await native();
     if (!textStamps) throw new Error("engine not ready");
     const before = (await engine.saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
-    const { bytes } = await eraseArea(engine, textStamps, before, req.area);
+    const { bytes, annotations } = await eraseArea(engine, textStamps, before, req.area);
     const fresh = await replaceDocument(req.docId, t.doc, bytes);
-    post({ type: "contentErased", reqId: req.reqId, pages: pageSizes(fresh), before }, [before]);
+    post({ type: "contentErased", reqId: req.reqId, pages: pageSizes(fresh), before, annotations }, [before]);
   } catch (err) {
     post({ type: "error", reqId: req.reqId, ...toError(err) });
   }
@@ -604,7 +604,7 @@ async function handleDeleteObject(req: Extract<WorkerRequest, { type: "deleteObj
     const before = (await engine.saveAsCopy(t.doc).toPromise()) as ArrayBuffer;
     const bytes = await deletePageObject(engine, wasmModule, textStamps, before, req.index, req.object);
     const fresh = await replaceDocument(req.docId, t.doc, bytes);
-    post({ type: "contentErased", reqId: req.reqId, pages: pageSizes(fresh), before }, [before]);
+    post({ type: "contentErased", reqId: req.reqId, pages: pageSizes(fresh), before, annotations: { removed: 0, clipped: 0 } }, [before]);
   } catch (err) {
     post({ type: "error", reqId: req.reqId, ...toError(err) });
   }

@@ -84,7 +84,7 @@ export const commands = {
 	 *  for large files), then applies the retention settings. Runs once per
 	 *  `request_id` (see `take_result`).
 	 */
-	saveVersion: (requestId: string, documentId: string, label: VersionLabel) => typedError<SavedVersion, CommandError>(__TAURI_INVOKE("save_version", { requestId, documentId, label })),
+	saveVersion: (requestId: string, documentId: string, label: VersionLabel, note: string | null) => typedError<SavedVersion, CommandError>(__TAURI_INVOKE("save_version", { requestId, documentId, label, note })),
 	/**
 	 *  Imports a finished upload (pages extracted or split off in the UI) as a new
 	 *  library document. Runs once per `request_id`.

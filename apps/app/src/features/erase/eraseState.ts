@@ -4,7 +4,7 @@
  * for "Delete". Strokes are previews: they are session commands (undo / redo
  * one by one) that never touch the document until applied.
  */
-import type { DocHandle, PageObjectInfo, PageRect } from "@selis/engine";
+import type { AreaAnnotations, DocHandle, PageObjectInfo, PageRect } from "@selis/engine";
 import { create } from "zustand";
 import type { Command } from "../annotate/session";
 import type { BrushSize } from "./geometry";
@@ -108,11 +108,23 @@ export function eraseGroups(strokes: readonly Stroke[]): { page: number; fill: s
   return [...groups.values()].sort((a, b) => a.page - b.page);
 }
 
+/** Adds up what erases or redactions did to the annotations over their areas. */
+export function addAnnotations(a: AreaAnnotations, b: AreaAnnotations): AreaAnnotations {
+  return { removed: a.removed + b.removed, clipped: a.clipped + b.clipped };
+}
+
+/** The note saved on the version (ADR 0033 amendment): null when no annotation was touched. */
+export function versionNote(a: AreaAnnotations): string | null {
+  if (a.removed === 0 && a.clipped === 0) return null;
+  return JSON.stringify({ annotationsRemoved: a.removed, annotationsClipped: a.clipped });
+}
+
 /**
  * Erases every pending stroke from the document (one page / colour at a time).
  * Undo reloads the document from before and brings the strokes back.
+ * `onErased` gets what happened to the annotations over the areas.
  */
-export function applyEraseCommand(doc: DocHandle): Command {
+export function applyEraseCommand(doc: DocHandle, onErased?: (annotations: AreaAnnotations) => void): Command {
   let before: ArrayBuffer | null = null;
   let strokes: readonly Stroke[] = [];
   return {
@@ -120,10 +132,12 @@ export function applyEraseCommand(doc: DocHandle): Command {
     apply: async () => {
       strokes = useEraseState.getState().strokes;
       let first: ArrayBuffer | null = null;
+      let annotations: AreaAnnotations = { removed: 0, clipped: 0 };
       try {
         for (const g of eraseGroups(strokes)) {
           const result = await doc.erase({ page: g.page, rects: g.rects, fill: g.fill });
           first ??= result.before;
+          annotations = addAnnotations(annotations, result.annotations);
         }
       } catch (err) {
         // All or nothing: a group that failed undoes the ones before it.
@@ -132,6 +146,7 @@ export function applyEraseCommand(doc: DocHandle): Command {
       }
       before ??= first;
       useEraseState.getState().setStrokes([]);
+      onErased?.(annotations);
     },
     revert: async () => {
       if (!before) return;

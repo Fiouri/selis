@@ -309,7 +309,7 @@ describe("content erase", () => {
     const before = new ArrayBuffer(4);
     const object = { index: 3, kind: "path", rect: { x: 1, y: 2, width: 3, height: 4 } } as const;
     worker.autoReply = (req) => {
-      if (req.type === "erase" || req.type === "deleteObject") return { type: "contentErased", reqId: req.reqId, pages: [{ width: 100, height: 200 }], before };
+      if (req.type === "erase" || req.type === "deleteObject") return { type: "contentErased", reqId: req.reqId, pages: [{ width: 100, height: 200 }], before, annotations: { removed: 0, clipped: 0 } };
       if (req.type === "pageObjects") return { type: "pageObjects", reqId: req.reqId, objects: [object] };
       if (req.type === "sampleColor") return { type: "sampledColor", reqId: req.reqId, color: "#f0e6c8" };
       return null;
@@ -317,7 +317,7 @@ describe("content erase", () => {
     let rebuilt = 0;
     doc.onStructureChange(() => rebuilt++);
     const area = { page: 0, rects: [{ x: 1, y: 1, width: 10, height: 10 }], fill: "#ffffff" };
-    await expect(doc.erase(area)).resolves.toEqual({ before });
+    await expect(doc.erase(area)).resolves.toEqual({ before, annotations: { removed: 0, clipped: 0 } });
     expect(worker.sent.at(-1)).toMatchObject({ type: "erase", docId: "doc-1", area });
     await expect(doc.pageObjects(0)).resolves.toEqual([object]);
     await expect(doc.deleteObject(0, object)).resolves.toEqual({ before });

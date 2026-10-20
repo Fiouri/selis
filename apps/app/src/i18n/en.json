@@ -601,6 +601,7 @@
     "deleteObject": "Delete object",
     "working": "Erasing…",
     "applied": "Erased. A new version was saved; the earlier ones are kept.",
+    "appliedAnnotations": "Erased. Annotations over the area: {removed} removed, {clipped} cut to fit. A new version was saved; the earlier ones are kept.",
     "deleted": "Object deleted. A new version was saved; the earlier ones are kept.",
     "failed": "Could not erase here.",
     "pickFailed": "Could not pick a color here.",

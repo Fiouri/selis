@@ -138,3 +138,50 @@ EmbedPDF 2.15.1 ships PDFium's redaction (`/Redact` annotations, `applyAllRedact
   byte-identical when rendered (PDFium raster and pdf.js raster) and the second logo on page 2
   unchanged; the same for the form, whose text pdf.js still extracts on pages 1 and 3 and no
   longer on page 2. Without the step both tests fail.
+
+## Update 2026-10-20 (redaction on the content-erase path; flattening)
+
+- **Measured.** `EPDFPage_ApplyRedactions` keeps four kinds of content whole under its box. On
+  the `redact-flatten` fixture these were:
+  - a plain filled path;
+  - an axial shading (`sh`);
+  - a rect filled with a tiling pattern whose cell holds text;
+  - a rect painted under an ExtGState soft mask.
+
+  It only blanks the pixels of a soft-masked image, so the image's soft mask keeps its shape.
+  "Removes the paths" above was wrong for this PDFium build: a vector drawing under a black box
+  stayed in the file.
+- **Decision.** Redaction now runs on the Erase tool's path (ADR 0033), step by step:
+  1. Fields under the marks are emptied, as before.
+  2. Shared XObjects are copied (copy-on-write, above).
+  3. PDFium removes the covered annotations and the marks themselves.
+     `EPDFText_RedactInQuads` (`recurseForms`) removes the glyphs and blanks the image pixels.
+     The whiteout stamps are written.
+  4. The content stream is rewritten:
+     - **Paths** are cut geometrically.
+     - **Everything that cannot be cut and meets a mark** is flattened (`flatten.ts`): a
+       shading, a path painted with a pattern, anything painted under a soft mask, an image with
+       a soft or stencil mask, an inline image. Each object is rendered on its own (every other
+       painting operator turned into `n` or dropped, so clips, transforms and state are kept) to
+       a transparent raster of its page box, at up to 3 px/pt. The redacted area is cleared to
+       transparent black in the raster. The raster goes back where the object was, as an image
+       with a soft mask, under a graphics state that resets the soft mask, alpha and blend mode.
+     - **The boxes** are painted last, black or white as each mark says (after a
+       `%SelisFill` comment).
+  5. Sanitising and the full rewrite run as before.
+- **Not touched.** A pattern cell, shading function or soft-mask group that other content still
+  uses stays in the file. Only what was drawn under the box is gone, and that object's drawing
+  elsewhere is now a raster. An ExtGState soft mask is no longer applied to the flattened object,
+  because the raster already has it.
+- **Version note.** The version saved after a redaction carries a note in `versions.note`
+  (schema 9): `{"annotationsRemoved":n,"annotationsClipped":0}` when annotations over the marks
+  were removed. A redaction removes them whole; it does not clip them.
+- **Verified** (`redact.node.test.ts`):
+  - The four objects are flattened.
+  - With the boxes taken out of the result (everything after `%SelisFill`), every pixel of the
+    area (1 pt inset) is white in pdf.js and in PDFium. Control: the fixture draws > 10 000 pixels
+    there, and without flattening 23 716 remain.
+  - pdf.js and PDFium find no text there.
+  - Each object still shows outside the area (≤ 24/255 per channel at a sample point).
+  - Every earlier redaction test passes unchanged: black boxes ±2 pt, whiteout text, form values,
+    glyph codes gone from the bytes, qpdf.

@@ -18,7 +18,8 @@ export type FixtureName =
   | "scanned-english"
   | "erase"
   | "shared-xobjects"
-  | "rotated-text";
+  | "rotated-text"
+  | "redact-flatten";
 
 export type Fixture = {
   readonly name: FixtureName;
@@ -850,6 +851,80 @@ function buildRotatedText(): Uint8Array {
   return w.toBytes();
 }
 
+/** The redact-flatten fixture (ADR 0009): the area every test redacts, and the words in it. */
+export const FLATTEN = {
+  /** User space, x0 y0 x1 y1: a band across all the objects. */
+  area: [250, 150, 350, 700],
+  inside: "Falcon",
+  outside: "Visible Heron",
+  pattern: "Osprey",
+} as const;
+
+/**
+ * One A4 page of content that cannot be cut geometrically, each object
+ * crossing the band FLATTEN.area (x 250–350): a plain blue rect (cuttable, the
+ * control), an axial shading, a rect filled with a tiling pattern whose cell
+ * holds the word "Osprey" and a square, an image with a soft mask (a ring of
+ * alpha), and a green rect painted under an ExtGState luminosity soft mask.
+ * "Falcon" is drawn inside the band, "Visible Heron" outside it.
+ */
+function buildRedactFlatten(): Uint8Array {
+  const w = new PdfWriter("selis-fixture-redact-flatten");
+  const resources = helveticaResources(w);
+  const helv = (resources.Font as Record<string, Ref>).F1 as Ref;
+  const shading = w.add({
+    ShadingType: 2,
+    ColorSpace: n("DeviceRGB"),
+    Coords: [100, 0, 500, 0],
+    Function: { FunctionType: 2, Domain: [0, 1], C0: [0.9, 0.1, 0.1], C1: [0.1, 0.8, 0.2], N: 1 },
+    Extend: [true, true],
+  });
+  const cell = w.addStream(
+    { Type: n("Pattern"), PatternType: 1, PaintType: 1, TilingType: 1, BBox: [0, 0, 100, 30], XStep: 100, YStep: 30, Resources: { Font: { F1: helv } } },
+    ["0.6 0.2 0.7 rg 2 2 10 10 re f", `BT /F1 11 Tf 0.1 0.1 0.1 rg 16 10 Td ${lit(FLATTEN.pattern)} Tj ET`].join("\n"),
+  );
+  const size = 80;
+  const rgb = new Uint8Array(size * size * 3);
+  const alpha = new Uint8Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      rgb.set([40 + x * 2, 120, 220 - y * 2], i * 3);
+      const r = Math.hypot(x - 39.5, y - 39.5);
+      alpha[i] = r > 12 && r < 36 ? 255 : 0;
+    }
+  }
+  const smask = w.addStream({ Type: n("XObject"), Subtype: n("Image"), Width: size, Height: size, ColorSpace: n("DeviceGray"), BitsPerComponent: 8 }, alpha);
+  const image = w.addStream(
+    { Type: n("XObject"), Subtype: n("Image"), Width: size, Height: size, ColorSpace: n("DeviceRGB"), BitsPerComponent: 8, SMask: smask },
+    rgb,
+  );
+  const maskGroup = w.addStream(
+    { Type: n("XObject"), Subtype: n("Form"), BBox: [0, 0, 595.28, 841.89], Group: { S: n("Transparency"), CS: n("DeviceGray") } },
+    ["1 g 100 180 400 80 re f", "0 g 100 200 400 10 re f", "0 g 100 230 400 10 re f"].join("\n"),
+  );
+  const soft = w.add({ Type: n("ExtGState"), SMask: { Type: n("Mask"), S: n("Luminosity"), G: maskGroup } });
+  const pageResources: PdfDict = {
+    ...resources,
+    Shading: { Sh1: shading },
+    Pattern: { P1: cell },
+    XObject: { Im1: image },
+    ExtGState: { Soft: soft },
+  };
+  const content = [
+    `BT /F1 14 Tf 100 760 Td ${lit(FLATTEN.outside)} Tj ET`,
+    `BT /F1 14 Tf 270 600 Td ${lit(FLATTEN.inside)} Tj ET`,
+    "q 0.2 0.4 0.8 rg 100 620 400 60 re f Q",
+    "q 100 520 400 60 re W n /Sh1 sh Q",
+    "q /Pattern cs /P1 scn 100 420 400 60 re f Q",
+    "q 400 0 0 80 100 300 cm /Im1 Do Q",
+    "q /Soft gs 0.1 0.6 0.3 rg 100 180 400 80 re f Q",
+  ].join("\n");
+  finishDocument(w, [{ size: A4, content }], pageResources);
+  w.setInfo({ Title: Str.ascii("Redact flatten fixture") });
+  return w.toBytes();
+}
+
 export const LARGE_PAGE_COUNT = 1000;
 
 export const FIXTURES: readonly Fixture[] = [
@@ -923,5 +998,12 @@ export const FIXTURES: readonly Fixture[] = [
     description: "One page at /Rotate 0, 90, 180 and 270 with a CropBox: upright words and a word turned by its text matrix.",
     pageCount: ROTATED_PAGES.length,
     build: buildRotatedText,
+  },
+  {
+    name: "redact-flatten",
+    file: "redact-flatten.pdf",
+    description: "A shading, a tiling pattern with text in its cell, a soft-masked image and soft-masked paint across one band (redaction flattening).",
+    pageCount: 1,
+    build: buildRedactFlatten,
   },
 ];

@@ -139,3 +139,52 @@ export function removePageObject(
     pdf.FPDF_ClosePage(pagePtr);
   }
 }
+
+/** FPDF_REVERSE_BYTE_ORDER: RGBA instead of BGRA. */
+const RENDER_RGBA = 0x10;
+
+/** The PDFium module behind an EmbedPDF engine (its internal field), or null. */
+export function pdfiumOf(engine: PdfiumNative): WrappedPdfiumModule | null {
+  const module = (engine as unknown as { pdfiumModule?: WrappedPdfiumModule }).pdfiumModule;
+  return module ?? null;
+}
+
+let rasterId = 0;
+
+/**
+ * Page `index` of `bytes` rendered whole at `scale` pixels per point on a
+ * transparent background (RGBA, not premultiplied), without annotations:
+ * the flattening of redaction (flatten.ts).
+ */
+export async function renderTransparent(engine: PdfiumNative, bytes: Uint8Array, index: number, scale: number): Promise<{ width: number; height: number; data: Uint8Array }> {
+  const pdf = pdfiumOf(engine);
+  if (!pdf) throw new Error("engine internals unavailable");
+  const doc = await engine.openDocumentBuffer({ id: `raster-${rasterId++}`, content: bytes.slice().buffer }).toPromise();
+  try {
+    const docPtr = documentPointer(engine, doc.id);
+    const pagePtr = docPtr === null ? 0 : pdf.FPDF_LoadPage(docPtr, index);
+    if (!pagePtr) throw new Error(`cannot load page ${index + 1}`);
+    try {
+      const width = Math.max(1, Math.round(pdf.FPDF_GetPageWidthF(pagePtr) * scale));
+      const height = Math.max(1, Math.round(pdf.FPDF_GetPageHeightF(pagePtr) * scale));
+      const bitmap = pdf.FPDFBitmap_Create(width, height, 1);
+      if (!bitmap) throw new Error("no memory for the raster");
+      try {
+        pdf.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0);
+        pdf.FPDF_RenderPageBitmap(bitmap, pagePtr, 0, 0, width, height, 0, RENDER_RGBA);
+        const stride = pdf.FPDFBitmap_GetStride(bitmap);
+        const buffer = pdf.FPDFBitmap_GetBuffer(bitmap);
+        const heap = (pdf.pdfium as unknown as { HEAPU8: Uint8Array }).HEAPU8;
+        const data = new Uint8Array(width * height * 4);
+        for (let y = 0; y < height; y++) data.set(heap.subarray(buffer + y * stride, buffer + y * stride + width * 4), y * width * 4);
+        return { width, height, data };
+      } finally {
+        pdf.FPDFBitmap_Destroy(bitmap);
+      }
+    } finally {
+      pdf.FPDF_ClosePage(pagePtr);
+    }
+  } finally {
+    await engine.closeDocument(doc).toPromise();
+  }
+}

@@ -26,6 +26,7 @@ export { annotationAt, glyphAt, selectionRects, simplifyStroke, strokesBounds, u
 export {
   type Annotation,
   type AnnotationKind,
+  type AreaAnnotations,
   type DocHandle,
   EngineError,
   type EngineErrorCode,

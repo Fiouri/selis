@@ -1,14 +1,15 @@
 /**
- * A page content stream read operator by operator (ADR 0033), for the erase:
- * the current transformation matrix and line width through q / Q / cm / w /
- * gs, the paths as they are built and painted, and the XObjects drawn. Each
- * operation keeps its byte range, so a caller can replace one path or one
- * operand and leave every other byte as it was.
+ * A page content stream read operator by operator (ADR 0033), for the erase
+ * and the redaction: the current transformation matrix, line width, clip
+ * bounds, pattern colours and soft mask through q / Q / cm / w / gs / cs / scn,
+ * the paths as they are built and painted, the shadings, inline images and
+ * XObjects drawn. Each operation keeps its byte range, so a caller can replace
+ * one path or one operand and leave every other byte as it was.
  *
  * Content is handled as Latin-1 text (one character per byte), which keeps
  * strings and inline image data intact.
  */
-import type { Pt, Seg, Subpath } from "./path-clip";
+import { type Box, type Pt, type Seg, type Subpath, subpathBounds } from "./path-clip";
 
 /** PDF matrix [a b c d e f]: x' = a x + c y + e, y' = b x + d y + f. */
 export type Matrix = readonly [number, number, number, number, number, number];
@@ -195,7 +196,18 @@ const nums = (op: Operation): number[] => op.operands.filter((o): o is Extract<O
 export type PaintOp = "S" | "s" | "f" | "F" | "f*" | "B" | "B*" | "b" | "b*" | "n";
 const PAINT = new Set<string>(["S", "s", "f", "F", "f*", "B", "B*", "b", "b*", "n"]);
 
-export type PaintEvent = {
+/** What the painting depends on besides its geometry (ADR 0009: content that cannot be cut). */
+export type PaintState = {
+  /** The fill / stroke colour is a pattern (`scn` / `SCN` with a pattern name). */
+  readonly fillPattern: boolean;
+  readonly strokePattern: boolean;
+  /** An ExtGState soft mask is in effect. */
+  readonly softMask: boolean;
+  /** Page-space bounds of the clipping paths set so far (null: the whole page). */
+  readonly clipBox: Box | null;
+};
+
+export type PaintEvent = PaintState & {
   readonly op: PaintOp;
   /** The path as built, in the user space of `ctm`. */
   readonly subpaths: readonly Subpath[];
@@ -208,22 +220,56 @@ export type PaintEvent = {
   readonly end: number;
 };
 
-export type DoEvent = { readonly name: string; readonly ctm: Matrix; readonly nameStart: number; readonly nameEnd: number };
+export type DoEvent = PaintState & {
+  readonly name: string;
+  readonly ctm: Matrix;
+  readonly nameStart: number;
+  readonly nameEnd: number;
+  /** The whole operation (operand and operator). */
+  readonly start: number;
+  readonly end: number;
+};
+
+/** A `sh` (shading over the clip) or an inline image (`BI … EI`, drawn in the unit square). */
+export type OpEvent = PaintState & { readonly ctm: Matrix; readonly start: number; readonly end: number };
 
 export type WalkHandlers = {
   /** Line width of an ExtGState resource (`/LW`), if it sets one. */
   lineWidthOf?: (gsName: string) => number | undefined;
+  /** Whether an ExtGState resource sets a soft mask (true), clears it (`/None`: false) or leaves it (undefined). */
+  softMaskOf?: (gsName: string) => boolean | undefined;
   onPaint?: (e: PaintEvent) => void;
   onDo?: (e: DoEvent) => void;
+  onShading?: (e: OpEvent) => void;
+  onInlineImage?: (e: OpEvent) => void;
 };
+
+const meet = (a: Box | null, b: Box): Box =>
+  a ? { x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1) } : b;
+
+/** Page-space bounds of user-space subpaths drawn with `m`. */
+export function pageBounds(subpaths: readonly Subpath[], m: Matrix): Box | null {
+  const boxes = mapSubpaths(subpaths, m).map(subpathBounds);
+  if (boxes.length === 0) return null;
+  return {
+    x0: Math.min(...boxes.map((b) => b.x0)),
+    y0: Math.min(...boxes.map((b) => b.y0)),
+    x1: Math.max(...boxes.map((b) => b.x1)),
+    y1: Math.max(...boxes.map((b) => b.y1)),
+  };
+}
 
 type Building = { start: Pt; segs: Seg[]; closed: boolean };
 
-/** Runs through the operations with the graphics state the erase needs. */
+const COLOUR_FILL = new Set(["g", "rg", "k", "sc", "cs"]);
+const COLOUR_STROKE = new Set(["G", "RG", "K", "SC", "CS"]);
+
+/** Runs through the operations with the graphics state the erase and the redaction need. */
 export function walk(ops: readonly Operation[], base: Matrix, handlers: WalkHandlers): void {
   let ctm = base;
   let lineWidth = 1;
-  const stack: { ctm: Matrix; lineWidth: number }[] = [];
+  let state: PaintState = { fillPattern: false, strokePattern: false, softMask: false, clipBox: null };
+  const stack: { ctm: Matrix; lineWidth: number; state: PaintState }[] = [];
   let subpaths: Building[] = [];
   let current = null as Building | null;
   let point: Pt = { x: 0, y: 0 };
@@ -250,13 +296,25 @@ export function walk(ops: readonly Operation[], base: Matrix, handlers: WalkHand
     const v = nums(op);
     switch (op.op) {
       case "q":
-        stack.push({ ctm, lineWidth });
+        stack.push({ ctm, lineWidth, state });
         break;
       case "Q": {
         const top = stack.pop();
-        if (top) ({ ctm, lineWidth } = top);
+        if (top) ({ ctm, lineWidth, state } = top);
         break;
       }
+      case "scn":
+      case "SCN": {
+        const pattern = op.operands.some((o) => o.t === "name");
+        state = op.op === "scn" ? { ...state, fillPattern: pattern } : { ...state, strokePattern: pattern };
+        break;
+      }
+      case "sh":
+        handlers.onShading?.({ ...state, ctm, start: op.start, end: op.end });
+        break;
+      case "BI":
+        handlers.onInlineImage?.({ ...state, ctm, start: op.start, end: op.end });
+        break;
       case "cm":
         if (v.length === 6) ctm = multiply(v as unknown as Matrix, ctm);
         break;
@@ -267,6 +325,8 @@ export function walk(ops: readonly Operation[], base: Matrix, handlers: WalkHand
         const name = op.operands.find((o) => o.t === "name");
         const lw = name?.t === "name" ? handlers.lineWidthOf?.(name.v) : undefined;
         if (lw !== undefined) lineWidth = lw;
+        const soft = name?.t === "name" ? handlers.softMaskOf?.(name.v) : undefined;
+        if (soft !== undefined) state = { ...state, softMask: soft };
         break;
       }
       case "m":
@@ -320,12 +380,19 @@ export function walk(ops: readonly Operation[], base: Matrix, handlers: WalkHand
         break;
       case "Do": {
         const name = op.operands.find((o) => o.t === "name");
-        if (name?.t === "name") handlers.onDo?.({ name: name.v, ctm, nameStart: name.start, nameEnd: name.end });
+        if (name?.t === "name") handlers.onDo?.({ ...state, name: name.v, ctm, nameStart: name.start, nameEnd: name.end, start: op.start, end: op.end });
         break;
       }
       default:
-        if (PAINT.has(op.op)) {
-          if (pathStart >= 0) handlers.onPaint?.({ op: op.op as PaintOp, subpaths, ctm, lineWidth, clip, start: pathStart, end: op.end });
+        if (COLOUR_FILL.has(op.op)) state = { ...state, fillPattern: false };
+        else if (COLOUR_STROKE.has(op.op)) state = { ...state, strokePattern: false };
+        else if (PAINT.has(op.op)) {
+          if (pathStart >= 0) handlers.onPaint?.({ ...state, op: op.op as PaintOp, subpaths, ctm, lineWidth, clip, start: pathStart, end: op.end });
+          // The clip applies to what is painted after this operator.
+          if (clip) {
+            const bounds = pageBounds(subpaths, ctm);
+            if (bounds) state = { ...state, clipBox: meet(state.clipBox, bounds) };
+          }
           subpaths = [];
           current = null;
           pathStart = -1;
