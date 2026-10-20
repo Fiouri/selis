@@ -1,0 +1,1 @@
+Erase page content: brush or box over text, pictures or drawings and they are removed from the file, not just covered, filled white, with the background colour or a colour you pick; or delete one object. Redaction now also removes drawings and shaded areas under the box, and text selection works on rotated pages.

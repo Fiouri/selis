@@ -8,6 +8,10 @@ short summaries of these sections.
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] - 2026-10-21
+
+Third release candidate: Erase page content, and redaction fixes.
+
 ### Added
 
 - Erase page content (ADR 0033): a new "Erase" tool in the annotate dock, separate from the
@@ -42,6 +46,12 @@ short summaries of these sections.
 - English first for new strings (ADR 0030 amendment): Greek is completed in a translation pass
   before each release candidate; until then a string not translated yet shows in English.
 - Translation pass for 1.0.0-rc.3: the Erase tool is in Greek.
+
+### Security
+
+- rustls-webpki 0.103.16 and webpki-roots 1.0.10 (RUSTSEC-2026-0382, RUSTSEC-2026-0381:
+  certificate verification could accept distrusted intermediates). Used by Transfer's relay
+  connections.
 
 ## [1.0.0-rc.2] - 2026-10-19
 
@@ -102,6 +112,7 @@ desktop shell (P6).
 - No analytics, crash reporting, advertising or account; nothing is collected
   ([PRIVACY.md](docs/PRIVACY.md)).
 
-[Unreleased]: https://github.com/Fiouri/selis/compare/v1.0.0-rc.2...HEAD
+[Unreleased]: https://github.com/Fiouri/selis/compare/v1.0.0-rc.3...HEAD
+[1.0.0-rc.3]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.1
