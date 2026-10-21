@@ -1,6 +1,6 @@
-**Current:** P7b content erase — merged to main (#72 English first, #73 engine, #74 app); no tag
-**Next step:** owner: "go" for rc.3 → first the translation-pass PR (37 Greek keys + Greek visual baselines, incl. the stale annotate-note-el), then the rc.3 release PR and tag; S23 checks after the Play build
-**Last session:** 2026-10-20 — P7b Erase (brush, rectangle, delete object, fills, signed warning, 'erase' versions) + ADR 0033 + ADR 0030 amendment; Tier 1 local + CI, Playwright en (erase 8/8 + new baselines), Maestro 25/25 on AVD 36 (2 passed on retry: host ANR / Maestro error)
+**Current:** v1.0.0-rc.3 — tagged on 3289b36; draft pre-release built, signed and verified (run 39520602012)
+**Next step:** owner: review and publish the draft pre-release; upload selis-1.0.0-rc.3.aab to Play Internal testing and check the Erase/redaction screens on the S23
+**Last session:** 2026-10-21 — pre-rc.3 fixes (#75 copy-on-write, #77 rotated text geometry, #78 redaction flattening + erase annotations), RustSec #76, translation pass #79, release #80; Tier 1 + CI green, Playwright en + el, Maestro 25/25 on AVD 36
 
 
 ## P7b (2026-10-20)
@@ -123,3 +123,46 @@ SBOMs npm 72 / Rust 714 components. No TestFlight (App Store Connect secrets not
 Open: the release is a draft until the owner publishes it; Play upload manual; S23 test of Scan
 2.0 on the Play build.
 
+## v1.0.0-rc.3 (2026-10-21)
+
+Done:
+- #75 — redaction copies a shared image or form before changing it (ADR 0009 update). A logo on
+  three pages used to lose its pixels on all three.
+- #77 — text geometry on /Rotate 90/180/270 pages, read and mapped at the engine boundary
+  (ADR 0034, upstream embedpdf/embed-pdf-viewer#892). Night-mode image bounds follow the same
+  mapping.
+- #78 — redaction runs on the Erase rewrite. PDFium's own redaction had left paths, shadings,
+  patterns and soft-masked paint whole under the box. Now paths are cut, the rest is flattened
+  to rasters with the area cleared, and the boxes are painted last.
+- #78 — Erase clips ink and markup over the area and removes the other annotations there.
+  `versions.note` (schema 9) records what was done.
+- #76 — rustls-webpki / webpki-roots, RUSTSEC-2026-0382 and -0381 (published 2026-10-20).
+- #79 — translation pass: 38 Greek keys, the Greek erase and annotate-note baselines, shorter
+  Greek erase hints.
+- #80 — version 1.0.0-rc.3: versionCode 10000030 (10000031–34 per ABI), CHANGELOG, Play
+  "What's new" en-US and el-GR. Annotated tag `v1.0.0-rc.3` on 3289b36.
+
+Verified:
+- Tier 1, local and CI: vitest 470 + 1 skipped, Rust fmt/clippy/test/deny.
+- Playwright en + el: 286 passed in the translation-pass run. `pack-export` is a known flaky
+  shot that passes on retry.
+- Engine tests:
+  - Shared logo: pages 1 and 3 byte-identical, PDFium and pdf.js. The test fails without the fix.
+  - Rotated pages: text-layer and search IoU ≥ 0.9 on every rotation; redact and erase remove
+    exactly the chosen word.
+  - redact-flatten, with the boxes hidden: the area is uniform white. Without flattening,
+    23 716 pixels remain.
+- Maestro, full suite on AVD 36: 25/25. Retries: scan and transfer-recover passed on their 2nd
+  attempt; transfer-background passed alone after clearing my leftover samplers.
+- Release run: SHA256SUMS OK; APKs signed with the app key 2b9682e1…af1598, AAB with the upload
+  key d7dee4ae…9d0762; AAB and universal APK versionCode 10000030; reproducible build and SBOMs
+  OK. The S23 was not used.
+
+Open:
+- The release is a draft until the owner publishes it. The Play upload is manual.
+- S23 screens to check on the Play build: Erase in each mode and fill; the signed warning; undo
+  after Apply; a rotated page (selection and search highlights); redaction over a drawing or a
+  shaded area (nothing under the box); the Erase strings in Greek.
+- Known limits:
+  - Erase still covers shadings and patterns (ADR 0033).
+  - A redaction removes annotations over the area whole; it does not clip them.
