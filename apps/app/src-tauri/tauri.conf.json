@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Selis",
-  "version": "1.0.0-rc.3",
+  "version": "1.0.0-rc.4",
   "identifier": "com.anywecon.selis",
   "build": {
     "beforeDevCommand": "npm run dev:web",
@@ -87,10 +87,10 @@
       "icons/icon.ico"
     ],
     "android": {
-      "versionCode": 10000030
+      "versionCode": 10000040
     },
     "iOS": {
-      "bundleVersion": "1000003"
+      "bundleVersion": "1000004"
     }
   },
   "plugins": {}
