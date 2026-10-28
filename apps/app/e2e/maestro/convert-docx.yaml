@@ -1,0 +1,29 @@
+# File conversion on Android (P7c, ADR 0035). PRE_RUN="…/convert.sh pre" opens a Word file
+# "with" Selis on a cold start: the preview shows the layout note, Save adds the PDF and opens
+# it. Then "Convert to PDF" in the library picks another Word file in the system picker, and
+# Cancel leaves nothing. POST_RUN="…/convert.sh check" reads the saved PDF on the host.
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis convert docx
+---
+- extendedWaitUntil:
+    visible: "Layout may differ from Word/Excel"
+    timeout: 120000
+- assertVisible: '.*report-headings\.pdf.*'
+- tapOn: "Save to library"
+- extendedWaitUntil:
+    visible: 'Page 1 of \d+'
+    timeout: 30000
+- back
+- extendedWaitUntil:
+    visible: "Convert to PDF"
+    timeout: 15000
+- tapOn: "Convert to PDF"
+- tapOn: "letter-a4.docx"
+- extendedWaitUntil:
+    visible: "Layout may differ from Word/Excel"
+    timeout: 120000
+- tapOn: "Cancel"
+- extendedWaitUntil:
+    notVisible: "Layout may differ from Word/Excel"
+    timeout: 10000

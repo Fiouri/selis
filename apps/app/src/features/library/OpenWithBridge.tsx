@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "../../components/Toast";
 import { api } from "../../lib/api";
 import { retryOnStartup } from "../../lib/startupRetry";
+import { isConvertibleName } from "../convert/convertible";
+import { useConvert } from "../convert/convertStore";
 import { usePack } from "../transfer/packStore";
 import { transferStore } from "../transfer/transferStore";
 import { useNavigation } from "../../state/navigation";
@@ -42,6 +44,11 @@ export function OpenWithBridge() {
         useNavigation.getState().selectTab("transfer");
         transferStore().getState().setTab("receive");
         void usePack.getState().openPack(item.source, item.name);
+      },
+      isConvertible: isConvertibleName,
+      onConvert: (item) => {
+        useNavigation.getState().selectTab("library");
+        void useConvert.getState().start(item.source, item.name ?? "Document");
       },
       log: (message, error) => {
         console.warn(message, error);

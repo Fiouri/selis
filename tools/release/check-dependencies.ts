@@ -29,10 +29,13 @@ export const FORBIDDEN: ReadonlyArray<[RegExp, string]> = [
   [/^pdf-lib$|^@pdf-lib\/|mupdf/i, "forbidden PDF library (CLAUDE.md)"],
 ];
 
-/** Whether an SPDX expression (`A`, `A OR B`, `(A OR B)`) allows a permissive choice. */
+/**
+ * Whether an SPDX expression allows a permissive choice: `A`, `A OR B` (one of them allowed),
+ * `A AND B` (all of them allowed, e.g. pako's `(MIT AND Zlib)`), AND binding tighter than OR.
+ */
 export function licenseAllowed(expression: string): boolean {
-  const ids = expression.replace(/[()]/g, "").split(/\s+OR\s+/);
-  return ids.some((id) => ALLOWED_LICENSES.has(id.trim()));
+  const choices = expression.replace(/[()]/g, "").split(/\s+OR\s+/);
+  return choices.some((choice) => choice.split(/\s+AND\s+/).every((id) => ALLOWED_LICENSES.has(id.trim())));
 }
 
 export function forbiddenReason(name: string): string | null {

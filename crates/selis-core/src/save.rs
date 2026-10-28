@@ -42,6 +42,8 @@ const MAX_UPLOAD_ID_LEN: usize = 64;
 pub const MAX_VERSION_NOTE_LEN: usize = 200;
 /// Largest picked image accepted for images → PDF.
 pub const MAX_STAGED_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
+/// Largest document accepted for conversion to PDF.
+pub const MAX_STAGED_SOURCE_BYTES: u64 = 50 * 1024 * 1024;
 
 /// JPEG, PNG, WebP, GIF, HEIF/HEIC/AVIF (ISO BMFF `ftyp`), BMP.
 pub(crate) fn looks_like_image(head: &[u8]) -> bool {
@@ -163,12 +165,81 @@ impl Library {
         Ok(dest)
     }
 
+    /// Copies a document picked for conversion (ADR 0035: Word, Excel, CSV, text, Markdown,
+    /// HTML) into the stage and returns its path (`.src`, read by the WebView through the
+    /// asset protocol, then `unstage`d). The UI decides what it is; up to
+    /// `MAX_STAGED_SOURCE_BYTES`.
+    pub fn stage_document(&self, reader: impl Read) -> Result<PathBuf> {
+        let dir = self.root.join(STAGE_DIR);
+        let tmp = HashedTempFile::from_reader(&dir, reader.take(MAX_STAGED_SOURCE_BYTES + 1))?;
+        if tmp.size_bytes == 0 {
+            return Err(Error::EmptyFile);
+        }
+        if tmp.size_bytes > MAX_STAGED_SOURCE_BYTES {
+            return Err(Error::InvalidArgument("document too large to convert"));
+        }
+        let dest = dir.join(format!("{}.src", Uuid::now_v7()));
+        tmp.persist(&dest)?;
+        Ok(dest)
+    }
+
+    /// Moves a finished upload of converted HTML into the stage and returns it with the
+    /// path its PDF should be printed to (both in the stage).
+    pub fn stage_conversion(&self, upload_id: &str) -> Result<(PathBuf, PathBuf)> {
+        let dir = self.root.join(STAGE_DIR);
+        std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+        let id = Uuid::now_v7();
+        let html = dir.join(format!("{id}.html"));
+        self.move_upload(upload_id, &html)?;
+        Ok((html, dir.join(format!("{id}.pdf"))))
+    }
+
+    /// Whether a printed PDF in the stage is a non-empty PDF.
+    pub fn check_staged_pdf(&self, path: &Path) -> Result<()> {
+        let mut head = [0u8; 1024];
+        let mut file = File::open(path).map_err(|e| Error::io(path, e))?;
+        let read = file.read(&mut head).map_err(|e| Error::io(path, e))?;
+        if read == 0 {
+            return Err(Error::EmptyFile);
+        }
+        if !looks_like_pdf(&head[..read]) {
+            return Err(Error::NotPdf);
+        }
+        Ok(())
+    }
+
+    /// Imports a staged PDF (a saved conversion) as a new document, then removes it.
+    pub fn import_staged(&self, path: &str, title: &str) -> Result<ImportOutcome> {
+        let staged = self.staged(path, &["pdf"])?;
+        let file = File::open(&staged).map_err(|e| Error::io(&staged, e))?;
+        let outcome = self.import_reader(file, title);
+        let _ = std::fs::remove_file(&staged);
+        outcome
+    }
+
+    /// `path` if it names a file directly in the stage with one of `extensions`.
+    fn staged(&self, path: &str, extensions: &[&str]) -> Result<PathBuf> {
+        let path = Path::new(path);
+        let dir = self.root.join(STAGE_DIR);
+        let inside = path.parent().is_some_and(|p| p == dir)
+            && path
+                .extension()
+                .is_some_and(|e| extensions.iter().any(|x| e == *x));
+        if inside {
+            Ok(path.to_path_buf())
+        } else {
+            Err(Error::InvalidArgument("not a staged file"))
+        }
+    }
+
     /// Removes a staged file once it has been read. Only files in the stage go. Idempotent.
     pub fn unstage(&self, path: &str) -> Result<()> {
         let path = Path::new(path);
         let dir = self.root.join(STAGE_DIR);
         let inside = path.parent().is_some_and(|p| p == dir)
-            && path.extension().is_some_and(|e| e == "pdf" || e == "img");
+            && path
+                .extension()
+                .is_some_and(|e| e == "pdf" || e == "img" || e == "src" || e == "html");
         if !inside {
             return Err(Error::InvalidArgument("not a staged file"));
         }
@@ -828,6 +899,58 @@ break",
         assert!(!staged.exists());
         // Only stage files go.
         assert!(lib.unstage("/etc/passwd").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn a_conversion_stages_its_source_prints_into_the_stage_and_imports_on_save() -> Result<()> {
+        let (_dir, lib) = lib()?;
+        // The source: any file (the UI decides what it is), up to the size limit.
+        let source = lib.stage_document(&b"PK a docx"[..])?;
+        assert_eq!(source.extension().and_then(|e| e.to_str()), Some("src"));
+        assert!(matches!(
+            lib.stage_document(&b""[..]),
+            Err(Error::EmptyFile)
+        ));
+        lib.unstage(&source.to_string_lossy())?;
+        assert!(!source.exists());
+
+        // The HTML arrives as an upload and moves into the stage next to its PDF's path.
+        let upload = Uuid::now_v7().to_string();
+        lib.write_upload_chunk(&upload, 0, b"<!doctype html><p>Hello</p>")?;
+        let (html, pdf_path) = lib.stage_conversion(&upload)?;
+        assert_eq!(html.parent(), pdf_path.parent());
+        assert_eq!(html.extension().and_then(|e| e.to_str()), Some("html"));
+        assert_eq!(pdf_path.extension().and_then(|e| e.to_str()), Some("pdf"));
+        assert!(html.exists());
+        lib.unstage(&html.to_string_lossy())?;
+
+        // The printer's output is checked, then imported under the title the user saw.
+        std::fs::write(&pdf_path, b"").map_err(|e| Error::io(&pdf_path, e))?;
+        assert!(matches!(
+            lib.check_staged_pdf(&pdf_path),
+            Err(Error::EmptyFile)
+        ));
+        std::fs::write(&pdf_path, b"<html>").map_err(|e| Error::io(&pdf_path, e))?;
+        assert!(matches!(
+            lib.check_staged_pdf(&pdf_path),
+            Err(Error::NotPdf)
+        ));
+        std::fs::write(&pdf_path, pdf("converted")).map_err(|e| Error::io(&pdf_path, e))?;
+        lib.check_staged_pdf(&pdf_path)?;
+        let outcome = lib.import_staged(&pdf_path.to_string_lossy(), "Quarterly report")?;
+        assert_eq!(outcome.document.title, "Quarterly report");
+        assert!(!pdf_path.exists());
+
+        // Only PDFs directly in the stage are imported.
+        assert!(matches!(
+            lib.import_staged(&lib.files_dir().join("x.pdf").to_string_lossy(), "x"),
+            Err(Error::InvalidArgument(_))
+        ));
+        assert!(matches!(
+            lib.import_staged(&html.with_extension("src").to_string_lossy(), "x"),
+            Err(Error::InvalidArgument(_))
+        ));
         Ok(())
     }
 }

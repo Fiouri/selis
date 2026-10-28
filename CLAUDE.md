@@ -179,6 +179,16 @@ Tier 2 — end of every feature:
   `PRE_RUN="…/upgrade-locale.sh pre"` and `POST_RUN="…/upgrade-locale.sh post"` (ADR 0030: the
   previous build on a Greek-locale app with "Same as the device" is updated; it opens in English;
   the database is at schema 7 with locale "en"; the app's locale is reset).
+  And `convert-docx.yaml` with `PRE_RUN="…/convert.sh pre"` and `POST_RUN="…/convert.sh check"`
+  (ADR 0035:
+  - a Word file opened "with" Selis is previewed and saved, and a second one picked through
+    "Convert to PDF" is cancelled;
+  - the library holds one PDF: ≥ 98 % of the words and LibreOffice's page count ± 1;
+  - the originals are untouched and the stage is empty.)
+  And `export-word.yaml` with `PRE_RUN="…/export.sh pre"` and `POST_RUN="…/export.sh check"`:
+  - `erase.pdf` exported as Word: every word in order, and its pictures;
+  - the scanned English fixture exported as Word through OCR: ≥ 90 % of its words.
+  The corpus files come from `npm run convert-corpus -w @selis/fixtures`.
   run.sh fails a run on
   "ANR in com.anywecon.selis" in logcat (the emulator hides ANR dialogs). Flows read the WebView
   with `androidWebViewHierarchy: devtools` (the UiAutomator snapshot lags behind the DOM). Maestro

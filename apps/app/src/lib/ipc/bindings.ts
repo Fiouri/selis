@@ -238,10 +238,34 @@ export const commands = {
 	 */
 	stagePhoto: (requestId: string, source: string) => typedError<string, CommandError>(__TAURI_INVOKE("stage_photo", { requestId, source })),
 	/**
-	 *  Shares (Android) or saves (desktop: save dialog) a finished upload — an exported page image
-	 *  — under `name`. `false` when the save dialog was cancelled. The upload is consumed.
+	 *  Shares (Android) or saves (desktop: save dialog) a finished upload — an exported page image,
+	 *  or a Word / text / Markdown / ZIP export (ADR 0035) — under `name`. `false` when the save
+	 *  dialog was cancelled. The upload is consumed.
 	 */
 	shareExport: (requestId: string, uploadId: string, name: string, mime: string) => typedError<boolean, CommandError>(__TAURI_INVOKE("share_export", { requestId, uploadId, name, mime })),
+	/**  Whether this platform can print HTML to PDF without a dialog. */
+	convertAvailable: () => typedError<boolean, CommandError>(__TAURI_INVOKE("convert_available")),
+	/**
+	 *  Opens the system picker for one document to convert to PDF (Word, Excel, CSV, text,
+	 *  Markdown, HTML). Cancel yields `Cancelled`. Runs once per `request_id`.
+	 */
+	pickDocument: (requestId: string) => typedError<PickOutcome, CommandError>(__TAURI_INVOKE("pick_document", { requestId })),
+	/**
+	 *  Copies a document picked for conversion (a path, or a content:// URI on Android) into the
+	 *  stage, read-only, and returns its path for the asset protocol. Runs once per `request_id`.
+	 */
+	stageSource: (requestId: string, source: string) => typedError<string, CommandError>(__TAURI_INVOKE("stage_source", { requestId, source })),
+	/**
+	 *  Prints a finished upload of sanitised HTML to a staged PDF of `width_pt` × `height_pt`
+	 *  pages and returns the PDF's path (previewed through the asset protocol, then
+	 *  `import_staged` or `unstage`). The HTML is deleted either way. Runs once per `request_id`.
+	 */
+	convertHtmlToPdf: (requestId: string, uploadId: string, widthPt: number | null, heightPt: number | null) => typedError<string, CommandError>(__TAURI_INVOKE("convert_html_to_pdf", { requestId, uploadId, widthPt, heightPt })),
+	/**
+	 *  Imports a staged PDF (a conversion the user saved) as a new library document under
+	 *  `title`, then removes it from the stage. Runs once per `request_id`.
+	 */
+	importStaged: (requestId: string, path: string, title: string) => typedError<ImportOutcome, CommandError>(__TAURI_INVOKE("import_staged", { requestId, path, title })),
 	/**  Opens this app's page in the system settings (permissions). */
 	openAppSettings: () => typedError<null, CommandError>(__TAURI_INVOKE("open_app_settings")),
 	/**

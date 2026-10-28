@@ -40,6 +40,7 @@ export default defineConfig(
           "./packages/engine/tsconfig.worker.json",
           "./packages/fixtures/tsconfig.json",
           "./packages/ocr/tsconfig.json",
+          "./packages/convert/tsconfig.json",
           "./packages/scan/tsconfig.json",
           "./packages/scan/tsconfig.worker.json",
           "./packages/ui/tsconfig.json",

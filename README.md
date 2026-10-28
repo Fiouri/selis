@@ -31,6 +31,9 @@ Developed with AI assistance (Claude Code); every change is reviewed and tested 
 - **Erase** page content with a brush, a box or by picking one object: text, images and
   drawings under it leave the file; filled white, with the background colour or a picked one.
 - **Tools**: password protection, make the file smaller, optimise, repair, save a page as an image.
+- **Convert** Word, Excel, CSV, text, Markdown and HTML files to PDF on the device (Android),
+  with a preview before saving; **export** a PDF as an editable Word file, as text or Markdown,
+  or every page as an image.
 - **Scan** paper with the camera (or from a photo): captures by itself when the page is steady
   and sharp, an Enhance filter that removes shadows, many pages in one go (reorder, rotate,
   retake, touch up a mark), ID cards front and back on one A4 page; photos to PDF, and **OCR**

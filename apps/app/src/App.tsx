@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import { I18nextProvider } from "react-i18next";
 import { OpenWithBridge } from "./features/library/OpenWithBridge";
 import { ToolsSheets } from "./features/tools/ToolsSheets";
+import { ExportSheets } from "./features/convert/ExportSheets";
 import { TransferBridge } from "./features/transfer/TransferBridge";
 import { i18n } from "./i18n";
 import { DesktopShell } from "./layouts/DesktopShell";
@@ -35,6 +36,7 @@ export function App() {
         <OpenWithBridge />
         <TransferBridge />
         <ToolsSheets />
+        <ExportSheets />
         {shell === "phone" ? <PhoneShell /> : shell === "tablet" ? <TabletShell /> : <DesktopShell />}
       </I18nextProvider>
     </QueryClientProvider>

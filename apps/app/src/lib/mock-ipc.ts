@@ -7,6 +7,7 @@
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { createMockPack, PACK_COMMANDS } from "./mock-pack";
+import { CONVERT_COMMANDS, createMockConvert } from "./mock-convert";
 import { createMockPhotos, PHOTO_COMMANDS } from "./mock-photos";
 import { createMockTools, TOOL_COMMANDS } from "./mock-tools";
 import { createMockTransfer, TRANSFER_COMMANDS } from "./mock-transfer";
@@ -358,6 +359,19 @@ async function saveVersion(documentId: string, label: VersionLabel, note: string
   return { document, seq: list.length + 1, created: true };
 }
 
+/** A finished upload's bytes (consumed). */
+function takeUpload(uploadId: string): Uint8Array {
+  const chunks = uploads.get(uploadId) ?? fail("notFound", uploadId);
+  uploads.delete(uploadId);
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+}
+
 /** New library document from an upload (pages extracted in the UI). */
 async function importUpload(uploadId: string, title: string): Promise<ImportOutcome> {
   const chunks = uploads.get(uploadId) ?? fail("notFound", uploadId);
@@ -540,19 +554,18 @@ export function installMockIpc(): void {
     runOnce,
     file: (token) => files.get(token),
     register: registerMockFile,
-    takeUpload: (uploadId) => {
-      const chunks = uploads.get(uploadId) ?? fail("notFound", uploadId);
-      uploads.delete(uploadId);
-      const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-      let at = 0;
-      for (const c of chunks) {
-        out.set(c, at);
-        at += c.length;
-      }
-      return out;
-    },
+    takeUpload,
   });
   (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.photos = photos.hooks;
+  const convert = createMockConvert({
+    fail,
+    runOnce,
+    file: (token) => files.get(token),
+    register: registerMockFile,
+    takeUpload,
+    importDocument,
+  });
+  (window as unknown as { __selisTest: Record<string, unknown> }).__selisTest.convert = convert.hooks;
   mockIPC(async (cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     const id = String(args.id);
@@ -561,6 +574,7 @@ export function installMockIpc(): void {
     if (PACK_COMMANDS.has(cmd)) return pack.handle(cmd, args);
     if (TOOL_COMMANDS.has(cmd)) return tools.handle(cmd, args);
     if (PHOTO_COMMANDS.has(cmd)) return photos.handle(cmd, args);
+    if (CONVERT_COMMANDS.has(cmd)) return convert.handle(cmd, args);
     switch (cmd) {
       case "import_document":
         return runOnce(cmd, String(args.requestId), () =>
@@ -644,6 +658,7 @@ export function installMockIpc(): void {
       case "stage_pdf":
         return runOnce(cmd, String(args.requestId), () => stagePdf(String(args.source)));
       case "unstage":
+        convert.unstage(String(args.path));
         if (String(args.path).startsWith("blob:")) URL.revokeObjectURL(String(args.path));
         return null;
       case "list_signatures":

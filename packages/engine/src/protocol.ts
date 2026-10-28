@@ -15,6 +15,7 @@ import type {
   Glyph,
   ImportLosses,
   OutlineItem,
+  PageContent,
   PageObjectInfo,
   PageSize,
   PageTextInfo,
@@ -46,6 +47,7 @@ export type WorkerRequest =
   | { type: "outline"; reqId: number; docId: string }
   | { type: "search"; reqId: number; docId: string; query: string }
   | { type: "text"; reqId: number; docId: string; index: number }
+  | { type: "content"; reqId: number; docId: string; index: number }
   | { type: "thumbnail"; reqId: number; docId: string; index: number; maxWidth: number; maxHeight: number }
   | { type: "glyphs"; reqId: number; docId: string; index: number }
   | { type: "annotations"; reqId: number; docId: string; index: number }
@@ -93,6 +95,7 @@ export type WorkerResponse =
   | { type: "searchHits"; reqId: number; page: number; hits: SearchHit[] }
   | { type: "searchDone"; reqId: number; total: number }
   | { type: "text"; reqId: number; runs: TextRun[] }
+  | { type: "content"; reqId: number; content: PageContent }
   | { type: "glyphs"; reqId: number; glyphs: Glyph[] }
   | { type: "annotations"; reqId: number; items: Annotation[] }
   | { type: "annotation"; reqId: number; annotation: Annotation }

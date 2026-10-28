@@ -77,8 +77,9 @@ pub async fn stage_photo<R: Runtime>(
         .await
 }
 
-/// Shares (Android) or saves (desktop: save dialog) a finished upload — an exported page image
-/// — under `name`. `false` when the save dialog was cancelled. The upload is consumed.
+/// Shares (Android) or saves (desktop: save dialog) a finished upload — an exported page image,
+/// or a Word / text / Markdown / ZIP export (ADR 0035) — under `name`. `false` when the save
+/// dialog was cancelled. The upload is consumed.
 #[tauri::command]
 #[specta::specta]
 pub async fn share_export<R: Runtime>(
@@ -93,12 +94,18 @@ pub async fn share_export<R: Runtime>(
     let library = Arc::clone(&library);
     results
         .run_once(&request_id, "share_export", async move {
+            // Page images (P4b) and the exports of P7c (ADR 0035): Word, text, Markdown, a ZIP of pages.
             let mime = match mime.as_str() {
-                "image/png" | "image/jpeg" => mime,
+                "image/png"
+                | "image/jpeg"
+                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                | "text/plain"
+                | "text/markdown"
+                | "application/zip" => mime,
                 _ => {
                     return Err(CommandError::new(
                         ErrorCode::InvalidArgument,
-                        "not an image type",
+                        "not an export type",
                     ));
                 }
             };

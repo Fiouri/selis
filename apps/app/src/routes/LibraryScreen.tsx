@@ -1,10 +1,12 @@
 import { Button, Chip, EmptyState, IconButton } from "@selis/ui";
-import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDownUp, ChevronDown, FilePlus2, ImagePlus, Plus, ScanLine, Search, SearchX, X } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowDownUp, ChevronDown, FileOutput, FilePlus2, ImagePlus, Plus, ScanLine, Search, SearchX, X } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LibraryIllustration } from "../components/Illustrations";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { ConvertScreen } from "../features/convert/ConvertScreen";
+import { useConvert } from "../features/convert/convertStore";
 import { ImagesScreen, usePickImages } from "../features/images/ImagesScreen";
 import { ScanScreen } from "../features/scan/ScanScreen";
 import { useScan } from "../features/scan/scanStore";
@@ -16,7 +18,8 @@ import { useDocuments, useTags } from "../features/library/queries";
 import { SortSheet } from "../features/library/SortSheet";
 import { TagsSheet } from "../features/library/TagsSheet";
 import { importController, useImportState } from "../features/library/useImport";
-import { errorMessageKey } from "../lib/api";
+import { api, errorMessageKey } from "../lib/api";
+import { pickConvertible } from "../lib/files";
 import { useOverlay } from "../state/navigation";
 import { useSettings } from "../state/settings";
 
@@ -128,6 +131,39 @@ function ImagesFab({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** Above the scan FAB: Word, Excel, CSV, text, Markdown or HTML → PDF (P7c, ADR 0035). */
+function ConvertFab({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={t("convert.open")}
+      data-testid="convert-fab"
+      className="selis-focus fixed z-10 inline-flex size-12 items-center justify-center rounded-[16px] border border-control-line bg-surface-raised text-neutral-12 shadow-2 active:bg-neutral-3"
+      style={{ right: "calc(var(--safe-right) + 24px)", bottom: "calc(var(--fab-bottom, calc(var(--safe-bottom) + 20px)) + 188px)" }}
+    >
+      <FileOutput size={22} strokeWidth={1.75} aria-hidden="true" />
+    </button>
+  );
+}
+
+/** Whether this platform prints HTML to PDF without a dialog (Android); asked once. */
+function useConvertAvailable(): boolean {
+  const { data } = useQuery({ queryKey: ["convert-available"], queryFn: api.convertAvailable, staleTime: Infinity, retry: false });
+  return data === true;
+}
+
+/** Picks a document and starts its conversion (the preview screen takes over). */
+async function startConvert(): Promise<void> {
+  try {
+    const picked = await pickConvertible();
+    if (picked) await useConvert.getState().start(picked.source, picked.name);
+  } catch (err) {
+    console.warn("selis: picking a document to convert failed", err);
+  }
+}
+
 /** Above the images FAB: document scan (P4c; docs/design/p4-ui-brief.md §0). */
 function ScanFab({ onClick }: { onClick: () => void }) {
   const { t } = useTranslation();
@@ -180,6 +216,7 @@ export function LibraryScreen() {
   const [sheet, setSheet] = useState<"sort" | "tags" | null>(null);
   const importState = useImportState();
   const startImport = useStartImport();
+  const convertAvailable = useConvertAvailable();
 
   useOverlay(searching, closeSearch);
 
@@ -225,6 +262,11 @@ export function LibraryScreen() {
             <Button variant="ghost" icon={<ImagePlus size={20} strokeWidth={1.75} />} onClick={pickImages} data-testid="images-empty">
               {t("images.open")}
             </Button>
+            {convertAvailable ? (
+              <Button variant="ghost" icon={<FileOutput size={20} strokeWidth={1.75} />} onClick={() => void startConvert()} data-testid="convert-empty">
+                {t("convert.open")}
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -281,6 +323,7 @@ export function LibraryScreen() {
       {body}
       {libraryEmpty || searching ? null : (
         <>
+          {convertAvailable ? <ConvertFab onClick={() => void startConvert()} /> : null}
           <ScanFab onClick={() => void openScan()} />
           <ImagesFab onClick={pickImages} />
           <ImportFab busy={busy} importing={importState.status === "importing"} onClick={startImport} />
@@ -289,6 +332,7 @@ export function LibraryScreen() {
       {imagesInput}
       <ImagesScreen />
       <ScanScreen onChoosePhotos={pickImages} />
+      <ConvertScreen />
       <SortSheet open={sheet === "sort"} onClose={() => setSheet(null)} />
       <TagsSheet open={sheet === "tags"} onClose={() => setSheet(null)} />
     </section>

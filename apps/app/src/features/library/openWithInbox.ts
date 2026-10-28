@@ -20,6 +20,9 @@ export type OpenWithDeps = {
   onFailed: (state: ImportErrorState) => void;
   /** A `.selispack` (Rust read its magic bytes): the pack import takes it. */
   onPack: (item: PendingOpen) => void;
+  /** A Word, Excel, CSV, text or Markdown file (by its name): "Convert to PDF" takes it. */
+  isConvertible: (name: string) => boolean;
+  onConvert: (item: PendingOpen) => void;
   log: (message: string, error: unknown) => void;
 };
 
@@ -72,6 +75,14 @@ export class OpenWithInbox {
       if (!pack) break;
       void this.deps.dismiss(pack.id);
       this.deps.onPack(pack);
+    }
+    // A document to convert opens the conversion preview (one at a time: it waits for Save).
+    const first = this.queue[0];
+    if (first && !first.pack && first.name && this.deps.isConvertible(first.name)) {
+      this.queue.shift();
+      void this.deps.dismiss(first.id);
+      this.deps.onConvert(first);
+      return;
     }
     const next = this.queue[0];
     if (!next) return;

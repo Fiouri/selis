@@ -38,6 +38,7 @@ import { PageChip, Scrubber, ViewerDock, ViewerSearchBar, ViewerTopBar } from ".
 import { OcrCard } from "../features/ocr/OcrCard";
 import { useOcr } from "../features/ocr/ocrStore";
 import { useTools } from "../features/tools/toolsStore";
+import { useExport } from "../features/convert/exportStore";
 import { UnlockSheet } from "../features/tools/UnlockSheet";
 import { OutlineSheet, ThumbnailsSheet, ViewerMoreSheet } from "../features/viewer/ViewerSheets";
 import { api } from "../lib/api";
@@ -722,6 +723,10 @@ export function ViewerScreen({ docId, variant }: { docId: string; variant: Varia
             onNight={(on) => void setNight(on)}
             onRedact={() => startEditing("redact")}
             onTools={() => void openTools()}
+            onExport={() => {
+              setSheet(null);
+              useExport.getState().open(doc, title || t("library.untitled"));
+            }}
           />
           <OutlineSheet open={sheet === "outline"} onClose={() => setSheet(null)} doc={doc} onJump={jumpFromSheet} />
           <ThumbnailsSheet

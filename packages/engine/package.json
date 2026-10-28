@@ -18,7 +18,9 @@
   },
   "devDependencies": {
     "@napi-rs/canvas": "1.0.11",
+    "@selis/convert": "0.1.0",
     "@selis/fixtures": "0.1.0",
-    "@selis/ocr": "0.1.0"
+    "@selis/ocr": "0.1.0",
+    "jszip": "3.10.2"
   }
 }
