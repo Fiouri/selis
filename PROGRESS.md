@@ -1,7 +1,66 @@
-**Current:** v1.0.0-rc.3 — tagged on 3289b36; draft pre-release built, signed and verified (run 39520602012)
-**Next step:** owner: review and publish the draft pre-release; upload selis-1.0.0-rc.3.aab to Play Internal testing and check the Erase/redaction screens on the S23
-**Last session:** 2026-10-21 — pre-rc.3 fixes (#75 copy-on-write, #77 rotated text geometry, #78 redaction flattening + erase annotations), RustSec #76, translation pass #79, release #80; Tier 1 + CI green, Playwright en + el, Maestro 25/25 on AVD 36
+**Current:** v1.0.0-rc.4 tagged on d2c9d48. The draft pre-release is built, signed and verified (run 40640409688). P7c file conversion (#92) is on main and not in rc.4.
+**Next step:** owner:
+- review and publish the draft pre-release;
+- upload selis-1.0.0-rc.4.aab to Play Internal testing;
+- on the S23, check text sharpness at fit-width and 100 %, and Convert/Export on a main build.
+**Last session:** 2026-10-28. #85 RUSTSEC-2026-0385, #86 sharp pages (ADR 0002 amendment), #89 translation pass, #91 release rc.4, #92 P7c conversion (ADR 0035). CI green on every PR and on main. Maestro on AVD 36: 25/25 flows, plus convert-docx and export-word.
 
+
+## v1.0.0-rc.4 (2026-10-28)
+
+Done:
+- #86 — sharp page text at every zoom (ADR 0002 amendment):
+  - Pages are drawn at CSS size × devicePixelRatio on whole device pixels.
+  - Above the tier's bitmap cap, the page keeps a base image and gets 256 px tiles, drawn into pooled 512 px cells once scrolling pauses.
+  - Tiles are rendered pixel-identical to the whole page (`FPDF_RenderPageBitmap` at whole-pixel offsets).
+  - The worker yields through a `MessageChannel`.
+  - Also in #86: the `small-text` fixture, `scripts/measure-sharpness.ts`, and push-fixtures ordering for the picker's Recent list.
+- #85 — ctutils 0.4.4 (RUSTSEC-2026-0385).
+- #89 — translation pass: no missing Greek key; 69 Greek baselines redone.
+- #91 — version 1.0.0-rc.4: versionCode 10000040 (10000041–44 per ABI), CHANGELOG, Play "What's new" en-US and el-GR. Annotated tag `v1.0.0-rc.4` on d2c9d48.
+
+Verified:
+- AVD `selis-midrange-api36`, cold boot, rc.3 and #86 interleaved (docs/spike-p0.md):
+  - Bitmap vs CSS × DPR, before → after: 0.48 → 1.00 on the Pixel 7 profile (DPR 2.625); 0.42 → 1.00 on the S23 profile (DPR 3).
+  - SSIM against PDFium (9 pt), before → after: 0.62–0.85 → 0.998–1.000.
+  - Full resolution 70–209 ms after a zoom, ≤ 123 ms after a scroll.
+  - Fit-width fps unchanged. At 100 %, 1–4 fps lower.
+  - Memory peak 440–470 MB against 371–425 MB before; the gate is < 600 MB.
+- Tier 1 local and CI. Playwright en 155 + visual baselines; 70 en and 69 el baselines reviewed.
+- Maestro, full suite on AVD 36: 25/25. The 7 picker flows passed after #86's fixture-order fix.
+- Release run 40640409688:
+  - SHA256SUMS, SBOMs, TestFlight upload.
+  - APKs signed with the app key 2b9682e1…af1598; the AAB with the upload key d7dee4ae…9d0762.
+  - 16 KB LOAD, reproducible build. The S23 was not used.
+
+Open:
+- The draft is unpublished; the Play upload is manual.
+- Scroll fps at 100 % zoom is 1–4 fps below rc.3 on the AVD.
+- Fit-width memory is +50–70 MB.
+
+## P7c file conversion (2026-10-28, on main after rc.4)
+
+Done (#92, ADR 0035):
+- "Convert to PDF": DOCX via docx-preview; XLSX/CSV with our own JSZip reader; TXT, Markdown, HTML.
+  - Everything passes through one sanitiser and a CSP.
+  - Android prints with an off-screen WebView and no dialog (android.print callbacks).
+  - Preview, then Save as a new document.
+  - Entry points: the library button, VIEW/SEND intents.
+- Viewer ⋮ → Export: Word (headings, bold/italic, images, page breaks, OCR for scans), text, Markdown, page images in a ZIP.
+
+Verified:
+- Corpus of 20 English files (12 DOCX, 8 XLSX), Linux CI:
+  - all within ±1 page of LibreOffice 26.8.1;
+  - 98.9–100 % of words kept;
+  - 0 network requests while converting.
+- AVD:
+  - convert-docx: 2 pages (LibreOffice 2), 99.8 % of 920 words.
+  - export-word: erase.pdf words in order with 2 pictures; scan via OCR 100 % of 136 words.
+
+Open:
+- iOS (`WKWebView.createPDF`) is not built: no iOS plugin infrastructure yet; the entries are hidden there and on desktop.
+- The Greek strings come in the next translation pass.
+- Startup JS +16.5 kB (+5.5 kB gzip) for the conversion UI; the converters are lazy chunks.
 
 ## P7b (2026-10-20)
 
