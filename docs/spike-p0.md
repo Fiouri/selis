@@ -180,6 +180,50 @@ for pages that stay on screen for 600 ms.
 AVD with the same build: peak 388–398 MB, first page 658–857 ms. Not measured on a real
 mid-range phone (see "Still open").
 
+## Sharp pages at every zoom (2026-10-28, AVD)
+
+Tester report on rc.3: page text soft until zoomed in. Cause and fix: ADR 0002 amendment
+(2026-10-27). Measured with `scripts/measure-sharpness.ts`:
+- AVD `selis-midrange-api36` (3 GB, low render tier: 6 MP bitmap cap), cold-booted, two display
+  profiles set with `wm size` / `wm density`.
+- Debug builds of rc.3 ("before") and this branch, interleaved before / after / before / after
+  in one emulator session. The emulator drifts between and during boots.
+- Page 1 of `small-text.pdf` (A4, 9 pt Noto Sans body).
+- SSIM: the screenshot against PDFium's render of the same page at the box's device-pixel
+  size (luma, 8 px windows).
+- Memory: app + WebView renderer PSS peak (`dumpsys meminfo`, sampled like `mem-sampler.ts`)
+  scrolling the 1000-page fixture to the end, then 40 pages at 2.5×.
+
+| | Pixel 7 profile (1080×2400, DPR 2.625) | S23 profile (1080×2340, DPR 3) |
+| --- | --- | --- |
+| Fit-width box (CSS px) → device px wanted | 380 × 538 → 998 | 328 × 464 → 984 |
+| Fit-width bitmap, before | 475 × 672 (0.48 of wanted), SSIM 0.770 | 410 × 580 (0.42), SSIM 0.619 |
+| Fit-width bitmap, after | 998 × 1411 (1.00), SSIM 1.000 | 984 × 1392 (1.00), SSIM 1.000 |
+| 100 % box → device px wanted | 793 × 1122 → 2082 | 794 × 1122 → 2381 |
+| 100 %, before | 993 × 1404 upscaled (0.48), SSIM 0.848 | 993 × 1404 (0.42), SSIM 0.835 |
+| 100 %, after | base 998 × 1411 + 256 px tiles at 2082 × 2945 (1.00), SSIM 0.998 | base 984 × 1392 + tiles at 2381 × 3367 (1.00), SSIM 0.998 |
+| Low-res → full resolution after a zoom (3 zooms × 2 runs) | 70–202 ms | 76–209 ms |
+| … after a scroll at 100 % (5 stops × 2 runs) | ≤ 123 ms | ≤ 106 ms |
+| Scroll fps at fit-width, before → after | 57.3, 56.8 → 56.8, 57.4 | 55.7, 55.3 → 55.5, 54.5 |
+| Scroll fps at 100 %, before → after | 56.1, 56.7 → 55.5, 53.6 | 52.8, 50.3 → 49.9, 46.2 |
+| Memory peak fit / zoomed, before | 371–421 / 397–421 MB | 399–411 / 413–425 MB |
+| Memory peak fit / zoomed, after | 440 / 445 MB | 470 / 466 MB |
+
+- Fit-width pages need no tiles and no low-res pass: sharp as soon as they are drawn
+  (stop-time 0 ms).
+- How the 100 % numbers moved during the work:
+  - The first tiled build took 334–385 ms to sharpen after a zoom. The worker idled ~10 ms
+    between 1.5 ms tile renders: chained `setTimeout(0)` is clamped in the WebView. A
+    `MessageChannel` yield fixed it.
+  - 512 px tiles cost up to 2.4 viewports of pixels. 256 px tiles in 512 px cells fixed that.
+  - Rendering tiles during flings and updating React per frame cost ~8 fps. Tiles now come
+    only after a 50 ms pause, and progress is reported once per frame.
+- Scroll fps at 100 % stays 1–4 fps below rc.3 (the full-resolution tiles drawn after every
+  stop). An earlier fresh-boot pair showed −1.4 fps. Later runs in long sessions spread far more
+  (the emulator slows down), so only fresh-boot interleaved runs are in the table.
+- Memory is +50–70 MB at the fit-width peak: full-DPR bitmaps for the mounted pages. The page
+  cache is byte-bounded. All runs stay ≥ 130 MB under the 600 MB gate.
+
 ## Result: PASS on every target that can run the app — real mid-range device: P5 gate
 
 Final build (adaptive render limits, LRU page cache, engine warm-up):

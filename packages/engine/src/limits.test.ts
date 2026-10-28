@@ -22,10 +22,10 @@ describe("render limits by device memory", () => {
     expect(DEFAULT_RENDER_LIMITS).toEqual(renderLimitsFor(null));
   });
 
-  it("maps tiers to max render scale 2 / 1.5 / 1.25", () => {
-    expect(renderLimitsFor(16 * GB).maxRenderScale).toBe(2);
-    expect(renderLimitsFor(7 * GB).maxRenderScale).toBe(1.5);
-    expect(renderLimitsFor(4 * GB).maxRenderScale).toBe(1.25);
+  it("maps tiers to a bitmap cap of 16 / 8 / 6 MP", () => {
+    expect(renderLimitsFor(16 * GB).maxBitmapPixels).toBe(16_000_000);
+    expect(renderLimitsFor(7 * GB).maxBitmapPixels).toBe(8_000_000);
+    expect(renderLimitsFor(4 * GB).maxBitmapPixels).toBe(6_000_000);
   });
 
   it("shrinks every budget as memory goes down", () => {

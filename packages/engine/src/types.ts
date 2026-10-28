@@ -1,6 +1,7 @@
 /** Page size in PDF points (1/72 in), after the page's own /Rotate is applied. */
 import type { PageRect, QuarterTurns } from "./geometry";
 import type { RenderLimits } from "./limits";
+import type { DeviceRect } from "./tiles";
 import type { PageOp } from "./pages";
 
 export type PageSize = { readonly width: number; readonly height: number };
@@ -45,6 +46,12 @@ export type RenderOptions = {
   rotation?: QuarterTurns;
   /** Night mode: lightness inverted, hues and images kept. */
   night?: boolean;
+  /**
+   * Render only this part of the page (a tile): a rect of the whole-page bitmap at
+   * this scale (`round(width × scale)` × `round(height × scale)` after `rotation`), in
+   * pixels. A tile is the same pixels as the page rendered whole (ADR 0002 amendment).
+   */
+  rect?: DeviceRect;
 };
 
 /** An encoded page preview, ready to store. */

@@ -20,7 +20,6 @@ import {
   PdfErrorCode,
   type PdfErrorReason,
   type PdfLinkTarget,
-  Rotation,
 } from "@embedpdf/models";
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 import wasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
@@ -33,9 +32,10 @@ import { importLosses } from "./import-losses";
 import { applyRedactions } from "./redact";
 import { deletePageObject, eraseArea, ringColor } from "./erase";
 import { applyNightMode, type PageRect, rotateRect } from "./geometry";
+import { renderArea } from "./render-area";
 import { documentPointer, imageRectsOnPage, pageObjects } from "./pdfium-objects";
 import { pageGlyphs, pageTextBoxes } from "./text-geometry";
-import { clampScale, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
+import { clampScale, MAX_BITMAP_PIXELS, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
 import type { Annotation, EngineErrorCode, OutlineItem, SearchHit, TextRun } from "./types";
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -47,7 +47,6 @@ type Job = RenderJob | ThumbnailJob;
 const WEBP_QUALITY = 0.8;
 const JPEG_QUALITY = 0.85;
 
-const ROTATIONS = [Rotation.Degree0, Rotation.Degree90, Rotation.Degree180, Rotation.Degree270] as const;
 /** Pages searched between yields to the render queue. */
 const SEARCH_BATCH = 8;
 
@@ -169,26 +168,32 @@ async function runRender(job: RenderJob): Promise<void> {
     post({ type: "error", reqId: job.reqId, code: "closed", message: "document or page not available" });
     return;
   }
-  const scale = clampScale(page.size, job.scale);
-  if (scale <= 0) {
-    post({ type: "error", reqId: job.reqId, code: "unknown", message: "invalid scale" });
+  // A tile is bounded by its own size; a whole page by the page's.
+  const tile = job.rect;
+  const scale = tile ? job.scale : clampScale(page.size, job.scale);
+  const valid =
+    scale > 0 &&
+    (!tile ||
+      (Number.isInteger(tile.x) &&
+        Number.isInteger(tile.y) &&
+        Number.isInteger(tile.width) &&
+        Number.isInteger(tile.height) &&
+        tile.width > 0 &&
+        tile.height > 0 &&
+        tile.width * tile.height <= MAX_BITMAP_PIXELS));
+  if (!valid) {
+    post({ type: "error", reqId: job.reqId, code: "unknown", message: "invalid scale or tile" });
     return;
   }
   try {
     const engine = await native();
-    const raw = await engine
-      .renderPageRaw(doc, page, {
-        scaleFactor: scale,
-        dpr: 1,
-        rotation: ROTATIONS[job.rotation],
-        withAnnotations: true,
-        withForms: true,
-      })
-      .toPromise();
+    const raw = await renderArea(engine, wasmModule, doc, page, scale, job.rotation, tile);
     if (job.night) {
+      const ox = tile?.x ?? 0;
+      const oy = tile?.y ?? 0;
       const keep = imageRects(engine, doc, job.index).map((r) => {
         const turned = rotateRect(r, page.size, job.rotation);
-        return { x: turned.x * scale, y: turned.y * scale, width: turned.width * scale, height: turned.height * scale };
+        return { x: turned.x * scale - ox, y: turned.y * scale - oy, width: turned.width * scale, height: turned.height * scale };
       });
       applyNightMode(raw.data, raw.width, raw.height, keep);
     }
@@ -248,17 +253,33 @@ function takeNext(): Job | undefined {
   return queue.splice(visible >= 0 ? visible : 0, 1)[0];
 }
 
+/**
+ * Runs `fn` as a new task, after the messages already queued (cancels, newer requests).
+ * A message to ourselves instead of setTimeout(0): chained timeouts are clamped to
+ * ≥ 4 ms (more in the Android WebView), which on the AVD left the worker idle for
+ * ~10 ms between 1.5 ms tile renders.
+ */
+const taskChannel = new MessageChannel();
+const tasks: Array<() => void> = [];
+taskChannel.port1.onmessage = () => tasks.shift()?.();
+function nextTask(fn: () => void): void {
+  tasks.push(fn);
+  taskChannel.port2.postMessage(null);
+}
+
 /** Yields to the event loop between renders so cancels can arrive. */
 function drain(): void {
   if (draining) return;
   draining = true;
-  setTimeout(async () => {
-    const job = takeNext();
-    if (job?.type === "render") await runRender(job);
-    else if (job) await runThumbnail(job);
-    draining = false;
-    if (queue.length > 0) drain();
-  }, 0);
+  nextTask(() => void runNext());
+}
+
+async function runNext(): Promise<void> {
+  const job = takeNext();
+  if (job?.type === "render") await runRender(job);
+  else if (job) await runThumbnail(job);
+  draining = false;
+  if (queue.length > 0) drain();
 }
 
 function destinationPage(target: PdfLinkTarget | undefined): number | null {
@@ -292,7 +313,7 @@ async function handleOutline(req: Extract<WorkerRequest, { type: "outline" }>): 
 
 function yieldToQueue(): Promise<void> {
   return new Promise((resolve) => {
-    setTimeout(resolve, 0);
+    nextTask(resolve);
   });
 }
 

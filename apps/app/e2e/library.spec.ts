@@ -51,6 +51,10 @@ test("sort and grid/list apply at once and survive a restart", async ({ page }) 
   await page.getByRole("button", { name: "Sort" }).click();
   await page.getByRole("radio", { name: "List" }).click();
   await expect(page.getByTestId("document-collection")).toHaveAttribute("data-view", "list");
+  // The sheet's history entry must be gone first: a reload on an overlay entry goes back once
+  // more (installHistorySync), which aborts the reload's navigation.
+  await expect(page.getByTestId("sort-sheet")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (history.state as { overlay?: unknown } | null)?.overlay)).toBeUndefined();
 
   await page.reload();
   // The mock backend keeps documents in memory only; the preferences come from the database.

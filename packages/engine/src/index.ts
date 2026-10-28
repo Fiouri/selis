@@ -17,7 +17,18 @@ export {
   type QuarterTurns,
   rotateRect,
   rotateSize,
+  unrotateRect,
 } from "./geometry";
+export {
+  type DeviceRect,
+  renderPlan,
+  type RenderPlan,
+  SINGLE_BITMAP_VIEWPORTS,
+  snapToDevice,
+  type Tile,
+  TILE_SIZE,
+  visibleTiles,
+} from "./tiles";
 export { DEFAULT_RENDER_LIMITS, memoryTier, type MemoryTier, renderLimitsFor, type RenderLimits } from "./limits";
 export { LruCache } from "./lru";
 export type { PageOp } from "./pages";

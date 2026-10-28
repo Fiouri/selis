@@ -5,7 +5,7 @@ import type * as ScanModule from "@selis/scan";
 import type * as ApiModule from "../../lib/api";
 import type { Document, ImportOutcome } from "../../lib/api";
 
-const limits = { maxRenderScale: 1.25, maxBitmapPixels: 6_000_000, cacheMaxPages: 4, cacheMaxBytes: 1 };
+const limits = { maxBitmapPixels: 6_000_000, cacheMaxPages: 4, cacheMaxBytes: 1 };
 const importUpload = vi.fn<(uploadId: string, title: string) => Promise<ImportOutcome>>();
 const upload = vi.fn<(bytes: ArrayBuffer) => Promise<string>>();
 const session = {

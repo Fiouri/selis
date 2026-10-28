@@ -1,11 +1,11 @@
 /**
  * Render limits chosen from device RAM, so a 1000-page document stays well
- * inside the WebView memory budget on every tier (docs/spike-p0.md).
+ * inside the WebView memory budget on every tier (docs/spike-p0.md). Pages are
+ * always drawn at the full device pixel ratio; above `maxBitmapPixels` the viewer
+ * tiles the visible area instead of lowering the resolution (ADR 0002 amendment).
  */
 export type RenderLimits = {
-  /** Upper bound for device-pixel-ratio used when rendering pages. */
-  readonly maxRenderScale: number;
-  /** Max pixels of a single page bitmap (bounds memory at high zoom). */
+  /** Max pixels of a single bitmap: larger pages are tiled (bounds memory at high zoom). */
   readonly maxBitmapPixels: number;
   /** Rendered-page cache bound: number of pages… */
   readonly cacheMaxPages: number;
@@ -20,9 +20,9 @@ const GB = 1_000_000_000;
 const MB = 1024 * 1024;
 
 const TIERS: Record<MemoryTier, RenderLimits> = {
-  high: { maxRenderScale: 2, maxBitmapPixels: 16_000_000, cacheMaxPages: 12, cacheMaxBytes: 96 * MB },
-  mid: { maxRenderScale: 1.5, maxBitmapPixels: 8_000_000, cacheMaxPages: 8, cacheMaxBytes: 48 * MB },
-  low: { maxRenderScale: 1.25, maxBitmapPixels: 6_000_000, cacheMaxPages: 4, cacheMaxBytes: 24 * MB },
+  high: { maxBitmapPixels: 16_000_000, cacheMaxPages: 12, cacheMaxBytes: 96 * MB },
+  mid: { maxBitmapPixels: 8_000_000, cacheMaxPages: 8, cacheMaxBytes: 48 * MB },
+  low: { maxBitmapPixels: 6_000_000, cacheMaxPages: 4, cacheMaxBytes: 24 * MB },
 };
 
 /** > 8 GB → high, 6–8 GB → mid, < 6 GB (or unknown) → low. */

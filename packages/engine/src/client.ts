@@ -186,7 +186,8 @@ export class WorkerPdfEngine implements PdfEngine {
           return Promise.reject(new RangeError(`page index ${index} out of range`));
         }
         const page = frozenPages[index] as PageSize;
-        const effective = clampScale(page, scale, this.currentLimits.maxBitmapPixels);
+        // A tile is small by construction: the page-wide pixel budget would blur it.
+        const effective = options.rect ? scale : clampScale(page, scale, this.currentLimits.maxBitmapPixels);
         return this.render(docId, index, effective, options);
       },
       outline: async () => {
@@ -509,8 +510,10 @@ export class WorkerPdfEngine implements PdfEngine {
   private async render(docId: string, index: number, scale: number, options: RenderOptions): Promise<ImageData> {
     const { signal, prefetch = false, night = false } = options;
     const rotation: QuarterTurns = options.rotation ?? 0;
+    const { rect } = options;
     if (signal?.aborted) throw new EngineError("cancelled", "aborted");
-    const key = `${docId}:${index}:${scale.toFixed(4)}:${rotation}:${night ? "n" : "d"}`;
+    const area = rect ? `:${String(rect.x)},${String(rect.y)},${String(rect.width)},${String(rect.height)}` : "";
+    const key = `${docId}:${index}:${scale.toFixed(4)}:${rotation}:${night ? "n" : "d"}${area}`;
     const cached = this.cache.get(key);
     if (cached) return cached;
     let reqId = 0;
@@ -521,7 +524,7 @@ export class WorkerPdfEngine implements PdfEngine {
     try {
       const msg = await this.request<Extract<WorkerResponse, { type: "rendered" }>>((id) => {
         reqId = id;
-        return { type: "render", reqId: id, docId, index, scale, prefetch, rotation, night };
+        return { type: "render", reqId: id, docId, index, scale, prefetch, rotation, night, ...(rect ? { rect } : {}) };
       });
       const image = new ImageData(new Uint8ClampedArray(msg.pixels), msg.width, msg.height);
       // Cache even if the caller gave up: scrolling back to it will be instant.
