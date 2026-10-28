@@ -8,6 +8,10 @@ short summaries of these sections.
 
 ## [Unreleased]
 
+## [1.0.0-rc.4] - 2026-10-28
+
+Fourth release candidate: sharper text at every zoom level.
+
 ### Fixed
 
 - Sharper text at every zoom level. Pages were drawn at a per-device scale cap (as low as 1.25
@@ -15,6 +19,11 @@ short summaries of these sections.
   They are now drawn at CSS size × devicePixelRatio on whole device pixels; a page too large
   for one bitmap keeps a quick base image and gets full-resolution tiles over what is on
   screen, replacing the base within 300 ms of a zoom or scroll ending (ADR 0002 amendment).
+
+### Security
+
+- ctutils 0.4.4 (RUSTSEC-2026-0385): constant-time masks and `u128` comparisons in the crypto
+  utilities could compile to branches on secret values.
 
 ## [1.0.0-rc.3] - 2026-10-21
 

@@ -1,0 +1,1 @@
+Sharper text at every zoom level: pages are drawn at your screen's full resolution, and a zoomed page turns sharp a moment after you stop.
