@@ -39,7 +39,7 @@ export async function installRenderLimits(): Promise<void> {
     const next = renderLimitsFor(memory.totalBytes);
     setRenderLimits(next);
     console.info(
-      `[selis:perf] ram=${(memory.totalBytes / 1e9).toFixed(1)}GB (${memory.source}) maxRenderScale=${next.maxRenderScale} cache=${next.cacheMaxPages}p/${Math.round(next.cacheMaxBytes / 1048576)}MB`,
+      `[selis:perf] ram=${(memory.totalBytes / 1e9).toFixed(1)}GB (${memory.source}) maxBitmapPixels=${next.maxBitmapPixels} cache=${next.cacheMaxPages}p/${Math.round(next.cacheMaxBytes / 1048576)}MB`,
     );
   } catch (err) {
     console.warn("selis: device memory unavailable, keeping conservative render limits", err);

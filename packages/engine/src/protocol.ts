@@ -5,6 +5,7 @@ import type {
   SheetImage,
 } from "./types";
 import type { PageOp } from "./pages";
+import type { DeviceRect } from "./tiles";
 import type {
   Annotation,
   EngineErrorCode,
@@ -39,6 +40,8 @@ export type WorkerRequest =
       prefetch: boolean;
       rotation: QuarterTurns;
       night: boolean;
+      /** A tile: pixels of the whole-page bitmap (see RenderOptions.rect). */
+      rect?: DeviceRect;
     }
   | { type: "outline"; reqId: number; docId: string }
   | { type: "search"; reqId: number; docId: string; query: string }

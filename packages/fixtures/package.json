@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./oracle": "./src/oracle.ts",
     "./transfer/*": "./transfer/*",
-    "./scan-samples": "./src/scan-samples.ts"
+    "./scan-samples": "./src/scan-samples.ts",
+    "./ssim": "./src/ssim.ts"
   },
   "scripts": {
     "generate": "node scripts/generate.ts",

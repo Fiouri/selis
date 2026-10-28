@@ -8,6 +8,7 @@ import {
   type QuarterTurns,
   renderWindow,
   rotateSize,
+  snapToDevice,
   visibleRange,
 } from "@selis/engine";
 import {
@@ -23,6 +24,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { PageView } from "./PageView";
+import { sharpness } from "./sharpness";
+import { createViewportBus, useDevicePixelRatio } from "./viewport";
 
 export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 5;
@@ -30,6 +33,10 @@ export const MAX_ZOOM = 5;
 export const DOUBLE_TAP_ZOOM = 2.5;
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_SLOP_PX = 30;
+/** Largest render window reused from the previous layout for one render after a zoom. */
+const STALE_WINDOW_MAX_PAGES = 12;
+/** Scrolling counts as stopped this long after the last scroll event. */
+const SETTLE_MS = 120;
 
 export type PdfViewerHandle = {
   /** Scrolls so that `index` starts at the top; `offsetPts` moves further down the page (PDF points). */
@@ -143,7 +150,9 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const [zoom, setZoom] = useState(1);
   // The render window is tied to the layout it was computed for: a window from a
   // stale layout (e.g. before the width was measured, when every page is 0 px tall)
-  // would mount and render dozens of pages at once.
+  // would mount and render dozens of pages at once. Right after a zoom, the previous
+  // (measured, small) window is kept for the one render before it is recomputed, so
+  // the pages stay mounted and keep their bitmaps instead of flashing a skeleton.
   const [win, setWin] = useState<{ visible: PageRange; window: PageRange; layout: PageLayout } | null>(null);
   const pendingAnchor = useRef<Anchor | null>(null);
   /** Page → canvas slot. Slots are React keys, so canvases are recycled across pages. */
@@ -153,6 +162,19 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   const restored = useRef(initialPage <= 0);
   const lastTap = useRef<{ time: number; x: number; y: number } | null>(null);
   const tapTimer = useRef<number | null>(null);
+  const dpr = useDevicePixelRatio();
+  // The visible area for the pages' tile layers, updated without re-rendering them.
+  const [viewportBus] = useState(createViewportBus);
+  const settleTimer = useRef<number | null>(null);
+  /** Scroll or zoom motion, for the sharpness diagnostics (stopped after SETTLE_MS). */
+  const moved = useCallback(() => {
+    sharpness.motion(true);
+    if (settleTimer.current !== null) window.clearTimeout(settleTimer.current);
+    settleTimer.current = window.setTimeout(() => {
+      settleTimer.current = null;
+      sharpness.motion(false);
+    }, SETTLE_MS);
+  }, []);
 
   const pages = useMemo(() => (rotation === 0 ? doc.pages : doc.pages.map((p) => rotateSize(p, rotation))), [doc, rotation]);
   const fitWidth = Math.max(0, viewport.width - 2 * gutter);
@@ -178,6 +200,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       setWin(null);
       return;
     }
+    viewportBus.set({ left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth, height: el.clientHeight });
     const y = Math.max(0, el.scrollTop - insetTop);
     const visible = visibleRange(layout, y, el.clientHeight);
     const renderable = renderWindow(visible, doc.pageCount, buffer);
@@ -194,7 +217,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
         : next,
     );
     onPageChange?.(Math.max(0, pageAt(layout, y + el.clientHeight / 3)));
-  }, [layout, fitWidth, insetTop, doc.pageCount, buffer, onPageChange]);
+  }, [layout, fitWidth, insetTop, doc.pageCount, buffer, onPageChange, viewportBus]);
 
   // After a zoom commit, restore the focal point, then recompute the window.
   useLayoutEffect(() => {
@@ -222,6 +245,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
     if (!el) return;
     let frame = 0;
     const onScrollEvent = () => {
+      moved();
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
@@ -237,7 +261,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       el.removeEventListener("scroll", onScrollEvent);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [update, onScroll]);
+  }, [update, onScroll, moved]);
 
   /**
    * Re-lays out at `nextZoom` so the content point (contentX, contentY) — in
@@ -249,8 +273,9 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       if (Math.abs(z - zoom) < 0.01) return;
       pendingAnchor.current = { ...anchorAt(layout, contentY - insetTop, contentX, contentWidth), screenX, screenY };
       setZoom(z);
+      moved();
     },
-    [zoom, layout, contentWidth, insetTop],
+    [zoom, layout, contentWidth, insetTop, moved],
   );
 
   // Pinch-zoom (touch) and ctrl+wheel / trackpad pinch (desktop).
@@ -293,6 +318,8 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       pinch = { startDist: info.dist, startMidX: info.midX, startMidY: info.midY, originX, originY, ratio: 1, dx: 0, dy: 0 };
       content.style.transformOrigin = `${originX}px ${originY}px`;
       content.style.willChange = "transform";
+      viewportBus.set({ gesture: true });
+      moved();
     };
 
     const onTouchMove = (event: TouchEvent) => {
@@ -311,8 +338,11 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       if (!pinch || event.touches.length >= 2) return;
       const { ratio, startMidX, startMidY, originX, originY, dx, dy } = pinch;
       pinch = null;
+      // No transform left behind: a scaled layer would resample the page bitmaps.
       content.style.transform = "";
       content.style.willChange = "";
+      viewportBus.set({ gesture: false });
+      moved();
       if (Math.abs(ratio - 1) < 0.01) {
         // Two fingers moved without pinching: a pan (one finger draws in annotate mode).
         el.scrollBy(-dx, -dy);
@@ -346,11 +376,12 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
       el.removeEventListener("touchcancel", onTouchEnd);
       el.removeEventListener("wheel", onWheel);
     };
-  }, [zoom, zoomable, commitZoom]);
+  }, [zoom, zoomable, commitZoom, viewportBus, moved]);
 
   useEffect(
     () => () => {
       if (tapTimer.current !== null) window.clearTimeout(tapTimer.current);
+      if (settleTimer.current !== null) window.clearTimeout(settleTimer.current);
     },
     [],
   );
@@ -413,7 +444,12 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
   );
 
   const items = [];
-  if (win && win.layout === layout && fitWidth > 0) {
+  const viewportPixels = viewport.width * viewport.height * dpr * dpr;
+  const usableWindow =
+    win !== null &&
+    fitWidth > 0 &&
+    (win.layout === layout || (win.layout.maxWidth > 0 && win.window.last - win.window.first <= STALE_WINDOW_MAX_PAGES));
+  if (win && usableWindow) {
     const assigned = assignSlots(slots.current, win.window);
     for (let i = win.window.first; i <= win.window.last; i++) {
       const width = layout.widths[i] ?? 0;
@@ -423,11 +459,15 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
           key={assigned.get(i)}
           doc={doc}
           index={i}
-          top={insetTop + (layout.tops[i] ?? 0)}
-          left={(contentWidth - width) / 2}
+          // Whole device pixels: a box at a fractional position would resample its bitmap.
+          top={snapToDevice(insetTop + (layout.tops[i] ?? 0), dpr)}
+          left={snapToDevice((contentWidth - width) / 2, dpr)}
           width={width}
           height={layout.heights[i] ?? 0}
           maxPixels={maxPixels}
+          dpr={dpr}
+          viewport={zoomable ? viewportBus : undefined}
+          viewportPixels={viewportPixels}
           rotation={rotation}
           night={night}
           textLayer={textLayer && rotation === 0 && !prefetch}

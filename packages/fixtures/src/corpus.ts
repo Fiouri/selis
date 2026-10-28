@@ -19,7 +19,8 @@ export type FixtureName =
   | "erase"
   | "shared-xobjects"
   | "rotated-text"
-  | "redact-flatten";
+  | "redact-flatten"
+  | "small-text";
 
 export type Fixture = {
   readonly name: FixtureName;
@@ -925,6 +926,42 @@ function buildRedactFlatten(): Uint8Array {
   return w.toBytes();
 }
 
+/** Body size of `small-text.pdf`: the viewer's sharpness check (ADR 0002 amendment). */
+export const SMALL_TEXT_SIZE = 9;
+
+/**
+ * Two A4 pages of 9 pt body text in embedded Noto Sans, justified only by the
+ * line breaks, with a 14 pt heading: the hardest case for a soft page bitmap.
+ */
+function buildSmallText(): Uint8Array {
+  const w = new PdfWriter("selis-fixture-small-text");
+  const font = new EmbeddedFont(loadNotoSans("latin"), "AAAAAC+NotoSans-Regular");
+  const leading = SMALL_TEXT_SIZE + 2.5;
+  const line = (text: string, size: number, x: number, y: number) => `BT /N ${size} Tf ${x} ${y} Td ${font.encode(text)} Tj ET`;
+  const pages: string[] = [];
+  for (let p = 0; p < 2; p++) {
+    const ops = [line(`Small print, page ${String(p + 1)}`, 14, 56, 780)];
+    let i = p * 7;
+    for (let y = 752; y > 56; y -= leading) {
+      ops.push(line(FILLER[i % FILLER.length] as string, SMALL_TEXT_SIZE, 56, y));
+      i++;
+    }
+    // Hairlines and a fine grid: resampling shows up on them first.
+    ops.push("0.25 w 0 G 56 40 m 539 40 l S");
+    for (let x = 400; x <= 540; x += 4) ops.push(`0.3 w ${String(x)} 20 m ${String(x)} 34 l S`);
+    pages.push(ops.join("\n"));
+  }
+  // Content is generated before the font is written so the used-glyph set is complete.
+  const resources = { Font: { N: font.write(w) } };
+  finishDocument(
+    w,
+    pages.map((content) => ({ size: A4, content })),
+    resources,
+  );
+  w.setInfo({ Title: Str.ascii("Small text fixture") });
+  return w.toBytes();
+}
+
 export const LARGE_PAGE_COUNT = 1000;
 
 export const FIXTURES: readonly Fixture[] = [
@@ -1005,5 +1042,12 @@ export const FIXTURES: readonly Fixture[] = [
     description: "A shading, a tiling pattern with text in its cell, a soft-masked image and soft-masked paint across one band (redaction flattening).",
     pageCount: 1,
     build: buildRedactFlatten,
+  },
+  {
+    name: "small-text",
+    file: "small-text.pdf",
+    description: "Two A4 pages of 9 pt body text in embedded Noto Sans, hairlines (viewer sharpness).",
+    pageCount: 2,
+    build: buildSmallText,
   },
 ];

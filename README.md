@@ -22,7 +22,8 @@ Developed with AI assistance (Claude Code); every change is reviewed and tested 
 
 - **Library** on the device: imports are copies, the original file is never modified; search,
   favorites, tags, versions you can go back to.
-- **Viewer** for large documents (1000+ pages), search in the text, night mode.
+- **Viewer** for large documents (1000+ pages), sharp at the screen's full resolution at every
+  zoom, search in the text, night mode.
 - **Annotate**: highlight, underline, strike, pen, shapes, text and notes.
 - **Sign and fill forms**: draw, type or pick a picture of your signature; fill AcroForm fields.
 - **Pages**: reorder, rotate, delete, insert, extract.

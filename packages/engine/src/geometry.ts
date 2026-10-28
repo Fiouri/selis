@@ -29,6 +29,11 @@ export function rotateRect(rect: PageRect, page: PageSize, turns: QuarterTurns):
   }
 }
 
+/** Inverse of `rotateRect`: a rect on the page turned by `turns` back on the unrotated page. */
+export function unrotateRect(rect: PageRect, page: PageSize, turns: QuarterTurns): PageRect {
+  return rotateRect(rect, rotateSize(page, turns), ((4 - turns) % 4) as QuarterTurns);
+}
+
 /** PDF user-space bounds (bottom-left origin) → top-left page rect. */
 export function fromPdfBounds(left: number, bottom: number, right: number, top: number, page: PageSize): PageRect {
   return { x: left, y: page.height - top, width: right - left, height: top - bottom };
