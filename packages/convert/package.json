@@ -1,0 +1,28 @@
+{
+  "name": "@selis/convert",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "File conversion (ADR 0035): Word, Excel, CSV, text, Markdown and HTML to sanitised print HTML; PDF text structure to Word, text and Markdown; page images to a ZIP. Loaded lazily by the app.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./kind": "./src/kind.ts",
+    "./app": {
+      "types": "./src/app.d.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "docx": "9.11.0",
+    "docx-preview": "0.4.1",
+    "jszip": "3.10.2"
+  },
+  "devDependencies": {
+    "@selis/fixtures": "0.1.0",
+    "jsdom": "30.1.2"
+  }
+}

@@ -60,6 +60,41 @@ pub async fn pick_pdf<R: Runtime>(
         .await
 }
 
+/// File types "Convert to PDF" reads (ADR 0035).
+const CONVERTIBLE: &[&str] = &[
+    "docx", "xlsx", "csv", "txt", "md", "markdown", "html", "htm",
+];
+
+/// Opens the system picker for one document to convert to PDF (Word, Excel, CSV, text,
+/// Markdown, HTML). Cancel yields `Cancelled`. Runs once per `request_id`.
+#[tauri::command]
+#[specta::specta]
+pub async fn pick_document<R: Runtime>(
+    app: AppHandle<R>,
+    results: State<'_, Arc<RequestResults>>,
+    request_id: String,
+) -> CommandResult<PickOutcome> {
+    results
+        .run_once(&request_id, "pick_document", async move {
+            tauri::async_runtime::spawn_blocking(move || {
+                match app
+                    .dialog()
+                    .file()
+                    .add_filter("Documents", CONVERTIBLE)
+                    .blocking_pick_file()
+                {
+                    Some(path) => PickOutcome::Picked {
+                        source: to_source(path),
+                    },
+                    None => PickOutcome::Cancelled,
+                }
+            })
+            .await
+            .map_err(|e| CommandError::new(ErrorCode::Internal, format!("picker task failed: {e}")))
+        })
+        .await
+}
+
 /// Largest picture accepted for a signature (phone photos are 2–8 MB).
 const MAX_IMAGE_BYTES: u64 = 12 * 1024 * 1024;
 

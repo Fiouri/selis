@@ -1,0 +1,48 @@
+# Export from the viewer on Android (P7c, ADR 0035): erase.pdf (text and a picture) as a Word
+# file, then the scanned English fixture (no text layer: read by OCR first) as a Word file; each
+# lands in the share sheet, which is dismissed. PRE_RUN="…/export.sh pre" clears Selis and the
+# share folder; POST_RUN="…/export.sh check" reads both .docx files on the host (export-check.ts).
+# Prerequisite: ./push-fixtures.sh <serial>. Debug build (run-as).
+appId: com.anywecon.selis
+androidWebViewHierarchy: devtools
+name: Selis export Word
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Your library is empty"
+    timeout: 20000
+- tapOn: "Import PDF"
+- tapOn: "erase.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 3.*"
+    timeout: 30000
+- tapOn: "More"
+- tapOn:
+    id: "more-export"
+- assertVisible: ".*Editable text, layout simplified.*"
+- tapOn:
+    id: "export-word"
+# The share sheet (system chooser) opens once the file is in the share folder.
+- extendedWaitUntil:
+    visible: "Sharing 1 file"
+    timeout: 120000
+- back
+- back
+- extendedWaitUntil:
+    visible: "Import PDF"
+    timeout: 15000
+- tapOn: "Import PDF"
+- tapOn: "scanned-english.pdf"
+- extendedWaitUntil:
+    visible: "Page 1 of 2.*"
+    timeout: 30000
+- tapOn: "More"
+- tapOn:
+    id: "more-export"
+- tapOn:
+    id: "export-word"
+# The scan has no text of its own: OCR reads both pages first.
+- extendedWaitUntil:
+    visible: "Sharing 1 file"
+    timeout: 600000
+- back

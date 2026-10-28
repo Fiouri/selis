@@ -31,6 +31,12 @@ export type SearchHit = { readonly rects: readonly PageRect[] };
 /** A run of text on the page, for the selectable text layer (page points, unrotated). */
 export type TextRun = PageRect & { readonly text: string; readonly fontSize: number };
 
+/** A text run with its style (Export as Word, ADR 0035). */
+export type StyledTextRun = TextRun & { readonly bold: boolean; readonly italic: boolean };
+
+/** What a page carries for rebuilding its reading structure: styled text and image placements. */
+export type PageContent = { readonly runs: readonly StyledTextRun[]; readonly images: readonly PageRect[] };
+
 export type SearchOptions = {
   signal?: AbortSignal;
   /** Called per page with matches, in page order, while the search runs. */
@@ -179,6 +185,8 @@ export interface DocHandle {
   renderPageGray(index: number, options: { readonly dpi: number; readonly maxPixels: number; readonly maxSide: number }): Promise<GrayPage>;
   /** Text on page `index` besides Selis' OCR layer, and whether it has that layer. */
   pageTextInfo(index: number): Promise<PageTextInfo>;
+  /** Styled text runs and image placements of page `index`, as shown (Export as Word). */
+  pageContent(index: number): Promise<PageContent>;
   /** Bumped by every change to the list of pages (count, order, sizes). */
   structureRevision(): number;
   onStructureChange(listener: () => void): () => void;

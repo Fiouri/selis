@@ -2,6 +2,7 @@
 //! No business logic lives here.
 
 pub mod camera;
+pub mod convert;
 pub mod device;
 pub mod library;
 pub mod open_with;

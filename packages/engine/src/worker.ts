@@ -35,6 +35,7 @@ import { applyNightMode, type PageRect, rotateRect } from "./geometry";
 import { renderArea } from "./render-area";
 import { documentPointer, imageRectsOnPage, pageObjects } from "./pdfium-objects";
 import { pageGlyphs, pageTextBoxes } from "./text-geometry";
+import { readPageContent } from "./page-content";
 import { clampScale, MAX_BITMAP_PIXELS, RAW_RGBA, thumbnailScale, type WorkerRequest, type WorkerResponse } from "./protocol";
 import type { Annotation, EngineErrorCode, OutlineItem, SearchHit, TextRun } from "./types";
 
@@ -367,6 +368,23 @@ async function handleText(req: Extract<WorkerRequest, { type: "text" }>): Promis
       .map((b, i) => ({ x: b.x, y: b.y, width: b.width, height: b.height, text: texts[i] ?? "", fontSize: b.fontSize }))
       .filter((r) => r.text.trim() !== "");
     post({ type: "text", reqId: req.reqId, runs });
+  } catch (err) {
+    post({ type: "error", reqId: req.reqId, ...toError(err) });
+  }
+}
+
+async function handleContent(req: Extract<WorkerRequest, { type: "content" }>): Promise<void> {
+  const doc = docs.get(req.docId);
+  const page = doc?.pages[req.index];
+  if (!doc || !page) {
+    post({ type: "error", reqId: req.reqId, code: "closed", message: "document or page not available" });
+    return;
+  }
+  try {
+    const engine = await native();
+    if (!wasmModule) throw new Error("engine not ready");
+    const content = readPageContent(engine, wasmModule, textStamps, doc, page, imageRects(engine, doc, req.index));
+    post({ type: "content", reqId: req.reqId, content });
   } catch (err) {
     post({ type: "error", reqId: req.reqId, ...toError(err) });
   }
@@ -918,6 +936,9 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       break;
     case "text":
       void handleText(req);
+      break;
+    case "content":
+      void handleContent(req);
       break;
     case "glyphs":
       void handleGlyphs(req);

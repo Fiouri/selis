@@ -815,5 +815,50 @@
     "saved": "Text is now searchable — saved as a new version.",
     "nothingToDo": "Every page already has text.",
     "failed": "The text could not be read. The pages read so far are kept."
+  },
+  "convert": {
+    "open": "Convert to PDF",
+    "title": "Convert to PDF",
+    "close": "Close",
+    "converting": "Converting {name}…",
+    "layoutNote": "Layout may differ from Word/Excel",
+    "fileName": "{title}.pdf",
+    "pages": "{count, plural, one {# page} other {# pages}}",
+    "save": "Save to library",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "saved": "Saved to your library",
+    "saveFailed": "The PDF could not be saved. Try again.",
+    "problem": {
+      "unsupportedFile": "{name} can't be converted. Selis converts Word (.docx), Excel (.xlsx), CSV, text, Markdown and HTML files.",
+      "unsupported": "Converting to PDF isn't available on this device.",
+      "damaged": "{name} couldn't be read. It may be damaged.",
+      "tooLarge": "{name} is too large to convert (50 MB at most).",
+      "failed": "Converting {name} didn't work. Try again."
+    }
+  },
+  "export": {
+    "open": "Export",
+    "title": "Export",
+    "word": "Word document (.docx)",
+    "wordNote": "Editable text, layout simplified",
+    "text": "Text (.txt)",
+    "textNote": "Just the text, page by page",
+    "markdown": "Markdown (.md)",
+    "markdownNote": "Text with headings and emphasis",
+    "images": "All pages as images",
+    "imagesNote": "A ZIP of PNG or JPEG pictures",
+    "imagesTitle": "All pages as images",
+    "format": "Format",
+    "png": "PNG",
+    "jpeg": "JPEG",
+    "imagesHint": "{count, plural, one {# page} other {# pages}} at 150 dpi, in one ZIP file",
+    "save": "Export",
+    "running": "Exporting… {done} of {total} pages",
+    "notice": {
+      "shared": "Export ready",
+      "failed": "The export didn't work. Try again.",
+      "cancelled": "Export not saved"
+    }
   }
 }

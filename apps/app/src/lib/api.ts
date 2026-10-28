@@ -46,6 +46,8 @@ const PICK: LongCallOptions = { checkAfterMs: null, pollMs: 2_000 };
 const UPLOAD: ShortCallOptions = { timeoutMs: 20_000, retry: true };
 /** Hashing a large working copy takes a moment; check for a lost reply after 5 s. */
 const SAVE: LongCallOptions = { checkAfterMs: 5_000, pollMs: 2_000 };
+/** Laying out and printing a long document takes a while; Rust gives up after 2 minutes. */
+const CONVERT: LongCallOptions = { checkAfterMs: 10_000, pollMs: 2_000 };
 /** Binding the endpoint and finding a relay take a few seconds at most. */
 const NETWORK: ShortCallOptions = { timeoutMs: 20_000, retry: true };
 /** Importing large files by reference and waiting for a relay address. */
@@ -128,6 +130,14 @@ export const api = {
   stagePhoto: (source: string) => unwrap(ipc().long("stage_photo", (requestId) => commands.stagePhoto(requestId, source), IMPORT)),
   shareExport: (uploadId: string, name: string, mime: string) =>
     unwrap(ipc().long("share_export", (requestId) => commands.shareExport(requestId, uploadId, name, mime), PICK)),
+  // File conversion (P7c, ADR 0035): printing HTML to PDF is Android-only for now.
+  convertAvailable: () => unwrap(ipc().short("convert_available", () => commands.convertAvailable(), READ)),
+  pickDocument: () => unwrap(ipc().long("pick_document", (requestId) => commands.pickDocument(requestId), PICK)),
+  stageSource: (source: string) => unwrap(ipc().long("stage_source", (requestId) => commands.stageSource(requestId, source), IMPORT)),
+  convertHtmlToPdf: (uploadId: string, widthPt: number, heightPt: number) =>
+    unwrap(ipc().long("convert_html_to_pdf", (requestId) => commands.convertHtmlToPdf(requestId, uploadId, widthPt, heightPt), CONVERT)),
+  importStaged: (path: string, title: string) =>
+    unwrap(ipc().long("import_staged", (requestId) => commands.importStaged(requestId, path, title), IMPORT)),
   // Document scan (P4c, ADR 0016): Android only; the UI offers it there.
   openAppSettings: () => unwrap(ipc().short("open_app_settings", () => commands.openAppSettings(), READ)),
   scanHaptic: () => unwrap(ipc().short("scan_haptic", () => commands.scanHaptic(), READ)),

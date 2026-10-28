@@ -8,6 +8,20 @@ short summaries of these sections.
 
 ## [Unreleased]
 
+### Added
+
+- File conversion (ADR 0035). "Convert to PDF" in the library (and "Open with" / "Share" from
+  other apps) turns Word (.docx), Excel (.xlsx), CSV, text, Markdown and HTML files into a PDF
+  on the device. The file is laid out as HTML that loads and runs nothing, then printed by the
+  Android WebView without a print dialog. A preview notes that the layout may differ from
+  Word/Excel; Save adds the PDF as a new document, and the original is only read. Android
+  only for now.
+- Viewer ⋮ → Export:
+  - an editable Word file: text, headings, bold and italic, pictures in place, a page break
+    per page; scanned pages are read by OCR first;
+  - text or Markdown;
+  - every page as a PNG or JPEG image in one ZIP.
+
 ## [1.0.0-rc.4] - 2026-10-28
 
 Fourth release candidate: sharper text at every zoom level.

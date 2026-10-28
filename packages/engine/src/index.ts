@@ -65,6 +65,8 @@ export {
   type SearchHit,
   type SearchOptions,
   type StampImage,
+  type PageContent,
+  type StyledTextRun,
   type TextRun,
   type Thumbnail,
 } from "./types";

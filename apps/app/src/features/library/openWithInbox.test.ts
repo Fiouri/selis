@@ -31,6 +31,8 @@ function setup(pending: PendingOpen[][]) {
     onImported: vi.fn(),
     onFailed: vi.fn(),
     onPack: vi.fn(),
+    isConvertible: (name: string) => /\.(docx|xlsx|csv|txt|md)$/i.test(name),
+    onConvert: vi.fn(),
     log: vi.fn(),
   };
   const inbox = new OpenWithInbox(deps);
@@ -119,6 +121,17 @@ describe("OpenWithInbox", () => {
     expect(t.deps.onPack).toHaveBeenCalledWith(expect.objectContaining({ id: "p1" }));
     expect(t.deps.dismiss).toHaveBeenCalledWith("p1");
     expect(t.deps.importSource).toHaveBeenCalledTimes(1);
+    expect(t.deps.importSource).toHaveBeenCalledWith("content://a", "A.pdf", expect.anything());
+  });
+
+  it("hands a Word or Excel file to the conversion instead of importing it", async () => {
+    const t = setup([[item("w", "Report.docx"), item("a", "A.pdf")]]);
+    await t.inbox.check();
+    expect(t.deps.onConvert).toHaveBeenCalledWith(expect.objectContaining({ id: "w", name: "Report.docx" }));
+    expect(t.deps.dismiss).toHaveBeenCalledWith("w");
+    expect(t.deps.importSource).not.toHaveBeenCalled();
+    // The PDF waits for the next check (the conversion preview is open meanwhile).
+    await t.inbox.check();
     expect(t.deps.importSource).toHaveBeenCalledWith("content://a", "A.pdf", expect.anything());
   });
 });

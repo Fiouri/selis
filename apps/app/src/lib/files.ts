@@ -26,11 +26,34 @@ export async function pickPdf(): Promise<string | null> {
   return registerMockFile(file);
 }
 
-function pickWithInput(): Promise<File | null> {
+/**
+ * Opens the system picker for a document to convert to PDF (ADR 0035). Resolves to a source
+ * for `api.stageSource` and the file's name, or null if the user cancelled.
+ */
+export async function pickConvertible(): Promise<{ source: string; name: string } | null> {
+  if (isTauri()) {
+    const outcome = await api.pickDocument();
+    if (outcome.status !== "picked") return null;
+    const source = outcome.source;
+    // The path's or URI's last segment; a SAF URI may carry no name ("…/document/msf:12"),
+    // and then the conversion recognises the file by its content.
+    const last = decodeURIComponent(source).split("/").at(-1) ?? "";
+    const name = last.includes(".") ? last.slice(last.lastIndexOf(":") + 1) : "document";
+    return { source, name };
+  }
+  const file = await pickWithInput(CONVERTIBLE_ACCEPT);
+  if (!file) return null;
+  const { registerMockFile } = await import("./mock-ipc");
+  return { source: registerMockFile(file), name: file.name };
+}
+
+const CONVERTIBLE_ACCEPT = ".docx,.xlsx,.csv,.txt,.md,.markdown,.html,.htm";
+
+function pickWithInput(accept = "application/pdf,.pdf"): Promise<File | null> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "application/pdf,.pdf";
+    input.accept = accept;
     input.style.display = "none";
     input.dataset.testid = "file-input";
     const done = (file: File | null) => {

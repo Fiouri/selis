@@ -11,6 +11,13 @@ describe("dependency policy", () => {
     expect(licenseAllowed("SEE LICENSE IN LICENSE")).toBe(false);
   });
 
+  it("allows an AND of permissive licences only when every part is allowed", () => {
+    expect(licenseAllowed("(MIT AND Zlib)")).toBe(true);
+    expect(licenseAllowed("MIT AND GPL-3.0-only")).toBe(false);
+    expect(licenseAllowed("(MIT OR GPL-3.0-or-later)")).toBe(true);
+    expect(licenseAllowed("GPL-3.0-only OR MIT AND Zlib")).toBe(true);
+  });
+
   it("names proprietary SDKs in every ecosystem and leaves open libraries alone", () => {
     expect(forbiddenReason("com.google.android.gms:play-services-base")).toBe("Google Play Services");
     expect(forbiddenReason("com.google.firebase:firebase-analytics")).toBe("Firebase");

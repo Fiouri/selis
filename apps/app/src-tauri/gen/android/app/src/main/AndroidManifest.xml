@@ -59,6 +59,21 @@
                 <data android:scheme="content" />
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
+            <!-- "Convert to PDF" (ADR 0035): Word, Excel, CSV, text and Markdown files opened with or
+                 shared to Selis; OpenWithPlugin.kt collects them, the UI converts by the file name
+                 (content URIs only, read access granted by the sender: no new permission). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="text/x-markdown" />
+            </intent-filter>
             <!-- Transfer links (QR code scanned with the camera app): the Receive tab. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

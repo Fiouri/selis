@@ -227,6 +227,12 @@ export class WorkerPdfEngine implements PdfEngine {
         }
         return this.thumbnail(docId, index, maxWidth, maxHeight, options.signal);
       },
+      pageContent: async (index) => {
+        ensureOpen();
+        checkIndex(index);
+        const msg = await this.request<Extract<WorkerResponse, { type: "content" }>>((reqId) => ({ type: "content", reqId, docId, index }));
+        return msg.content;
+      },
       glyphs: async (index) => {
         ensureOpen();
         checkIndex(index);
