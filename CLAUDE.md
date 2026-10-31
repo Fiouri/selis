@@ -77,6 +77,11 @@ action (not in P0).
   builds, `scripts/check-android-release.sh` (16 KB LOAD + RELRO, zipalign -P 16, SDK levels,
   versionCode, no debug code), signing from secrets only (`scripts/android-keystore.md`),
   reproducible second build. No tags are pushed without the owner's go.
+- Release signing happens **only in CI** (GitHub secrets → `scripts/android-sign.sh`; ADR 0021
+  amendment 1). No Gradle `signingConfig`, no local release-signing script, no `Signing.psm1`,
+  and no signing password in `gradle.properties`, `keystore.properties` or environment variables.
+  `F:\keys` holds the keystores only for one-off owner tasks (key generation, PEPK export, the
+  upload certificate, GitHub secrets); never for builds. Claude never reads it.
 - Store, F-Droid and name-check drafts: `docs/store/`. Listings in `fastlane/metadata/`; store
   screenshots (English only; other locales use en-US) with `apps/app/e2e/maestro/store-screenshots.sh <serial> en light|dark` on the AVD
   (release `measure` build; 7 screens, the last one Scan's Adjust step from the sample photo
