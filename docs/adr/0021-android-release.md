@@ -71,3 +71,17 @@ Measured on the existing builds: the Rust library's LOAD segments were 16 KB ali
 - The AAB is checked through bundletool (`PAGE_ALIGNMENT_16K`, manifest), the APKs directly.
 - F-Droid readiness gaps and decisions (prebuilt WebAssembly in npm packages, the n0 relay
   anti-feature question) are in `docs/store/fdroid/README.md`.
+
+## Amendment 1 (2026-10-31): release signing stays CI-only
+
+- **Decision (owner):** the cross-project "prompt for signing passwords at run time" pattern
+  (`Signing.psm1` + a local release script + a Gradle `signingConfig` read from environment
+  variables) is **not** applied to Selis. Release signing happens only in
+  `release-android.yml` from the GitHub secrets, as above.
+- **Why:** Selis stores no signing password anywhere to begin with: `build.gradle.kts` has no
+  signing config, so release builds are unsigned by design and must stay buildable without any
+  secret (CI's unsigned build and the F-Droid reproducible build). A Gradle `signingConfig` that
+  fails `bundleRelease` without secrets would break both, and an unused `Signing.psm1` would be
+  noise.
+- `F:\keys` holds the keystores only for one-off owner tasks (key generation, PEPK export, the
+  upload certificate, setting the GitHub secrets; `scripts/android-keystore.md`), never for builds.

@@ -27,9 +27,11 @@ ever installs a build signed with Google's key). We use RSA 4096 and 10 000 days
 validity for both keys; Android checks expiry only at install time, but Play has long required
 validity past 2033.
 
-Everything below runs in **PowerShell**, in a folder **outside the repository** (for example
-`D:\keys`), with JDK 17's tools on the PATH
-(`$env:Path = "C:\Program Files\Eclipse Adoptium\jdk-17*\bin;$env:Path"` or the full path).
+Everything below runs in **PowerShell**, in `F:\keys` (outside the repository), with JDK 17's
+tools on the PATH (`$env:Path = "C:\Program Files\Eclipse Adoptium\jdk-17*\bin;$env:Path"` or the
+full path). `F:\keys` is only for these one-off steps and no build reads it: release signing
+happens only in CI from the GitHub secrets (ADR 0021 amendment 1), and no signing password goes
+into `gradle.properties`, `keystore.properties` or an environment variable.
 
 ## 1. App signing key
 
@@ -97,7 +99,7 @@ When the app exists in Play Console (needs the developer account), **before any 
 2. **Change the app signing key** › **Provide a copy of your app signing key** › "Export and
    upload a key from Java keystore".
 3. Download **`pepk.jar`** and the **encryption public key** (`encryption_public_key.pem`) the page
-   offers into `D:\keys`.
+   offers into `F:\keys`.
 4. Run the command the page shows; with our names it is:
 
    ```powershell
@@ -132,7 +134,7 @@ rotate it), and a lost or leaked upload key can be reset through Play Console (A
   being unavailable.
 - Once a year: open each copy and run `keytool -list -keystore selis-release.jks` with the stored
   password, to prove the backup and the password still match.
-- Then delete the working copies in `D:\keys` (unless `D:\keys` is one of the encrypted copies).
+- Then delete the working copies in `F:\keys` (unless `F:\keys` is one of the encrypted copies).
 
 ## 7. Check
 

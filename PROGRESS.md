@@ -3,7 +3,7 @@
 - review and publish the draft pre-release;
 - upload selis-1.0.0-rc.4.aab to Play Internal testing;
 - on the S23, check text sharpness at fit-width and 100 %, and Convert/Export on a main build.
-**Last session:** 2026-10-28. #85 RUSTSEC-2026-0385, #86 sharp pages (ADR 0002 amendment), #89 translation pass, #91 release rc.4, #92 P7c conversion (ADR 0035). CI green on every PR and on main. Maestro on AVD 36: 25/25 flows, plus convert-docx and export-word.
+**Last session:** 2026-10-31. Release signing recorded as CI-only (ADR 0021 amendment 1; no Signing.psm1, no local release script; `F:\keys` only for one-off key tasks). Docs only; Tier 1 green, Android debug APK builds without signing secrets.
 
 
 ## v1.0.0-rc.4 (2026-10-28)
