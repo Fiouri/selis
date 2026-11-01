@@ -3,9 +3,17 @@
 Source of truth (live doc): https://claude.ai/code/artifact/ad84c752-ae7a-4a76-8814-1f00839654fc
 Exported: 2026-10-09. Αν αλλάξει το live doc, ξανακάνε export εδώ.
 
+## Current status (2026-11-01)
+
+- **Release:** v1.0.0-rc.4, μόνο Android: δημοσιευμένο στα GitHub Releases (updates με Obtainium) και στο Play Internal testing. Το Play Closed testing τρέχει ακόμη το rc.1 και θέλει 12 opted-in testers. iOS και desktop δεν έχουν κυκλοφορήσει (iOS μόνο builds στο CI).
+- **Phases:** P7a (Scan 2.0, ADR 0032), P7b (Erase, ADR 0033) και P7c (μετατροπή αρχείων από/προς PDF, ADR 0035) έγιναν. Το P7c είναι στο main, όχι σε release.
+- **Επόμενο:** AI features, με απόφαση πρώτα στο ADR 0036.
+- **English first** (ADR 0030 + amendment): η εφαρμογή ανοίγει στα αγγλικά· νέα strings μόνο στο `en.json`, τα ελληνικά συμπληρώνονται στο translation pass πριν από κάθε release candidate.
+- **Signing μόνο στο CI** (ADR 0021 + amendment 1): release builds unsigned by design, υπογραφή μόνο στο `release-android.yml` από GitHub secrets· κανένα signing password σε αρχεία ή environment variables.
+
 ## Στόχος και αρχές
 
-Ένα δωρεάν, open-source PDF editor για Windows, macOS, Linux, Android και iOS από **ένα codebase**, χωρίς λογαριασμό, χωρίς server, με ποιοτικό UI. Δημόσιο repo στο GitHub με links για App Store, Google Play, F-Droid και GitHub Releases, όπως το [Organic Maps](https://github.com/organicmaps/organicmaps).
+Ένα δωρεάν, open-source PDF editor για Windows, macOS, Linux, Android και iOS από **ένα codebase**, χωρίς λογαριασμό, χωρίς server, με ποιοτικό UI. Δημόσιο repo στο GitHub με links για App Store, Google Play, F-Droid και GitHub Releases.
 
 **Αρχές προϊόντος (μη διαπραγματεύσιμες):**
 
@@ -23,7 +31,7 @@ Exported: 2026-10-09. Αν αλλάξει το live doc, ξανακάνε export
 | Working name | Selis (από «σελίς») — έλεγχος trademark, domain, store names πριν το publish |
 | Repo | github.com/Fiouri/selis (public) |
 | Bundle / package ID | com.anywecon.selis |
-| Άδεια κώδικα | Apache-2.0 (ίδια με Organic Maps και EmbedPDF, store-compatible) |
+| Άδεια κώδικα | Apache-2.0 (ίδια με EmbedPDF, store-compatible) |
 | Publisher | Any WeCon |
 | Χρηματοδότηση | GitHub Sponsors / Liberapay στο README και site — όχι μέσα στο iOS app |
 
@@ -354,7 +362,7 @@ Public repo = δωρεάν GitHub Actions minutes, μαζί με macOS runners. 
 
 **Desktop updates:** Tauri updater (signed manifests) μόνο στα GitHub builds, ρητά opt-in στις ρυθμίσεις, απενεργοποιημένο σε store builds. Συμβατό με την αρχή «μηδέν network by default».
 
-**README όπως Organic Maps:** logo, μία πρόταση, σειρά από badges (App Store, Google Play, F-Droid, Obtainium, GitHub Releases, winget, Microsoft Store), 4 screenshots, λίστα «No ads · No tracking · No account · No cloud», Exodus Privacy badge για Android, Features, Build from source, Contributing, Translations, License. Τα badges ζουν στο `docs/badges/` με τα επίσημα artwork κάθε store.
+**README:** logo, μία πρόταση, σειρά από badges (App Store, Google Play, F-Droid, Obtainium, GitHub Releases, winget, Microsoft Store), 4 screenshots, λίστα «No ads · No tracking · No account · No cloud», Exodus Privacy badge για Android, Features, Build from source, Contributing, Translations, License. Τα badges ζουν στο `docs/badges/` με τα επίσημα artwork κάθε store.
 
 **Versioning (ADR 0020):** SemVer (`X.Y.Z`, `X.Y.Z-rc.N`) με μία πηγή, το `version` του root `package.json` (`tools/release/version.ts`), Conventional Commits, `CHANGELOG.md` (Keep a Changelog, χειροκίνητο). build = ((major·100 + minor)·100 + patch)·100 + (N ή 99)· Android versionCode = build·10 + ψηφίο ABI· iOS CFBundleVersion = build.
 
@@ -375,14 +383,13 @@ Public repo = δωρεάν GitHub Actions minutes, μαζί με macOS runners. 
 **Αποφάσεις (9 Οκτωβρίου 2026):**
 
 - **Όνομα:** Selis, bundle ID com.anywecon.selis. Σε πρόχειρη αναζήτηση δεν βρέθηκε PDF app με ίδιο όνομα. Τυπικός έλεγχος σε EUIPO/USPTO και στα stores πριν το P5.
-- **Άδεια:** Apache-2.0. Ίδια με EmbedPDF και Organic Maps, με ρητό patent grant και απλή για contributors. Το MPL προστατεύει μόνο ανά αρχείο, άρα δεν αξίζει την πολυπλοκότητα.
+- **Άδεια:** Apache-2.0. Ίδια με EmbedPDF, με ρητό patent grant και απλή για contributors. Το MPL προστατεύει μόνο ανά αρχείο, άρα δεν αξίζει την πολυπλοκότητα.
 - **Relay:** ενεργό by default, αλλά μόνο όσο είναι ανοιχτή η οθόνη Μεταφοράς. Η μεταφορά πρέπει να δουλεύει παντού χωρίς ρυθμίσεις, και το περιεχόμενο μένει πάντα E2E κρυπτογραφημένο. Στις ρυθμίσεις υπάρχει toggle «Μόνο τοπικό δίκτυο». Η οθόνη δείχνει ποιος δρόμος χρησιμοποιείται: LAN, direct ή relay.
 - **Microsoft Store:** μαζί με το Desktop 1.0 (P6), όχι νωρίτερα.
 - **SignPath:** αίτηση στην αρχή του P6, όταν θα υπάρχουν desktop builds από το CI και δημόσια mobile releases ως ιστορικό του project.
 
 ## Πηγές
 
-- [Organic Maps — GitHub repo, README και badges](https://github.com/organicmaps/organicmaps)
 - [EmbedPDF — GitHub repo (άδεια, v2/v3 status)](https://github.com/embedpdf/embed-pdf-viewer)
 - [EmbedPDF — PDFium JavaScript API docs](https://www.embedpdf.com/docs/pdfium/introduction)
 - [iroh 1.0 — release announcement](https://iroh.computer/blog/v1)
