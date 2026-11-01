@@ -1,9 +1,9 @@
-**Current:** v1.0.0-rc.4 tagged on d2c9d48. The draft pre-release is built, signed and verified (run 40640409688). P7c file conversion (#92) is on main and not in rc.4.
+**Current:** v1.0.0-rc.4 is published on GitHub Releases and in Play Internal testing. Play Closed testing still runs rc.1. P7c file conversion (#92) is on main, not released.
 **Next step:** owner:
-- review and publish the draft pre-release;
-- upload selis-1.0.0-rc.4.aab to Play Internal testing;
+- get 12 opted-in testers into Play Closed testing, then move Closed testing from rc.1 to the current RC;
 - on the S23, check text sharpness at fit-width and 100 %, and Convert/Export on a main build.
-**Last session:** 2026-10-31. Release signing recorded as CI-only (ADR 0021 amendment 1; no Signing.psm1, no local release script; `F:\keys` only for one-off key tasks). Docs only; Tier 1 green, Android debug APK builds without signing secrets.
+Next development: AI features, decided first in ADR 0036.
+**Last session:** 2026-11-01. #95 release signing recorded as CI-only (ADR 0021 amendment 1; no Signing.psm1, no local release script; `F:\keys` only for one-off key tasks). #96 docs refresh: README status and Install agree (GitHub Releases + Obtainium now, Play in closed testing, iOS/desktop later), SPEC "Current status", "native debug symbols" open before 1.0. Docs only; Tier 1 green, Android debug APK builds without signing secrets.
 
 
 ## v1.0.0-rc.4 (2026-10-28)
@@ -34,7 +34,7 @@ Verified:
   - 16 KB LOAD, reproducible build. The S23 was not used.
 
 Open:
-- The draft is unpublished; the Play upload is manual.
+- Published by the owner on GitHub and in Play Internal testing; Closed testing stays on rc.1 until it has 12 opted-in testers.
 - Scroll fps at 100 % zoom is 1–4 fps below rc.3 on the AVD.
 - Fit-width memory is +50–70 MB.
 

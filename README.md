@@ -4,7 +4,7 @@
 
 <h1 align="center">Selis</h1>
 
-<p align="center">A free, open-source PDF editor for Android, iOS, Windows, macOS and Linux — your documents never leave your device.</p>
+<p align="center">A free, open-source PDF editor for Android — your documents never leave your device.</p>
 
 <p align="center"><strong>No ads · No tracking · No account · No cloud</strong></p>
 
@@ -14,7 +14,8 @@
   Official artwork lives in docs/badges/. Do not add placeholder links.
 -->
 
-> **Status:** release candidate 1.0 — not yet in the stores.
+> **Status:** release candidate 1.0 for Android — available now from GitHub Releases (updates
+> with Obtainium); Google Play is in closed testing. iOS and desktop: see [Coming later](#coming-later).
 
 Developed with AI assistance (Claude Code); every change is reviewed and tested by the maintainer.
 
@@ -57,9 +58,10 @@ Developed with AI assistance (Claude Code); every change is reviewed and tested 
 
 ## Install
 
-Selis 1.0 is distributed through **Google Play** and **GitHub Releases** (signed APKs); the App
-Store follows. Android needs version 8.0 or newer with **Android System WebView 111** or newer
-(updated through Google Play); on an older WebView Selis shows an "Update Android System WebView"
+Selis 1.0 is a release candidate for Android, available now from **GitHub Releases** (signed
+APKs), with updates through **Obtainium**. Google Play is in closed testing; its link is added
+here when the listing is public. Android needs version 8.0 or newer with **Android System
+WebView 111** or newer (updated through Google Play); on an older WebView Selis shows an "Update Android System WebView"
 screen ([ADR 0031](docs/adr/0031-webview-minimum-and-fgs-below-android-14.md)). Not yet in F-Droid (see [docs/store/fdroid/README.md](docs/store/fdroid/README.md)).
 
 **GitHub Releases:** every release has one signed APK per ABI and a universal APK, named
@@ -74,8 +76,13 @@ published on the [download page](https://fiouri.github.io/selis/download/).
    your device, or `universal\.apk$`). Asset names keep this pattern from release to release.
 3. Optional: **Include prereleases** to get release candidates (`1.0.0-rc.N`) too.
 4. Add, then Install. Obtainium checks GitHub for new releases and installs updates signed with the
-   same key; Play and GitHub installs use the same app signing key, so you can switch between
-   them without reinstalling.
+   same key. Google Play builds use the same app signing key, so once Selis is public on Play you
+   can switch between the two without reinstalling.
+
+### Coming later
+
+- **iOS** (App Store): builds run in CI; not released yet.
+- **Desktop** (Windows, macOS, Linux): compiled in CI; released after the mobile apps.
 
 ## Transfer (device to device, no account)
 
