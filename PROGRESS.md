@@ -3,7 +3,7 @@
 - get 12 opted-in testers into Play Closed testing, then move Closed testing from rc.1 to the current RC;
 - on the S23, check text sharpness at fit-width and 100 %, and Convert/Export on a main build.
 Next development: AI features, decided first in ADR 0036.
-**Last session:** 2026-11-01. #95 release signing recorded as CI-only (ADR 0021 amendment 1; no Signing.psm1, no local release script; `F:\keys` only for one-off key tasks). #96 docs refresh: README status and Install agree (GitHub Releases + Obtainium now, Play in closed testing, iOS/desktop later), SPEC "Current status", "native debug symbols" open before 1.0. Docs only; Tier 1 green, Android debug APK builds without signing secrets.
+**Last session:** 2026-11-02 — no secret cleanup needed (keys verified and backed up offline); the backup location is no longer recorded in tracked docs and the "delete the working copies" step is removed. Docs only; Tier 1 green, no secret files tracked.
 
 
 ## v1.0.0-rc.4 (2026-10-28)
