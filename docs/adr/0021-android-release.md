@@ -83,5 +83,6 @@ Measured on the existing builds: the Rust library's LOAD segments were 16 KB ali
   secret (CI's unsigned build and the F-Droid reproducible build). A Gradle `signingConfig` that
   fails `bundleRelease` without secrets would break both, and an unused `Signing.psm1` would be
   noise.
-- `F:\keys` holds the keystores only for one-off owner tasks (key generation, PEPK export, the
-  upload certificate, setting the GitHub secrets; `scripts/android-keystore.md`), never for builds.
+- The keystores live in an offline backup kept by the owner (location not recorded here), used
+  only for one-off owner tasks (key generation, PEPK export, the upload certificate, setting the
+  GitHub secrets; `scripts/android-keystore.md`), never for builds.
