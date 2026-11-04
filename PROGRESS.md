@@ -1,10 +1,41 @@
-**Current:** v1.0.0-rc.4 is published on GitHub Releases and in Play Internal testing. Play Closed testing still runs rc.1. P7c file conversion (#92) is on main, not released.
+**Current:** v1.0.0-rc.5 is a draft on GitHub Releases, built and signed by CI; not published and not on Play yet. Play Internal testing runs rc.4, Closed testing rc.1.
 **Next step:** owner:
+- publish the rc.5 draft and upload `selis-1.0.0-rc.5.aab` to Play Internal testing;
 - get 12 opted-in testers into Play Closed testing, then move Closed testing from rc.1 to the current RC;
-- on the S23, check text sharpness at fit-width and 100 %, and Convert/Export on a main build.
+- on the S23, check text sharpness at fit-width and 100 %, and Convert/Export on the rc.5 build.
 Next development: AI features, decided first in ADR 0036.
-**Last session:** 2026-11-02 — no secret cleanup needed (keys verified and backed up offline); the backup location is no longer recorded in tracked docs and the "delete the working copies" step is removed. Docs only; Tier 1 green, no secret files tracked.
+**Last session:** 2026-11-04 — zip security fix and rc.5 tagged. CI green on main and the tag; Maestro 27/27 on AVD 36; locally two mDNS transfer tests fail because of this host's network (they pass in CI).
 
+
+## v1.0.0-rc.5 (2026-11-04)
+
+Done:
+- #100 — GHSA-m665-v7pm-7grj (critical, zip <= 9.0.4; ADR 0012 amendment):
+  - zip `=9.0.5` in both locks.
+  - The fix is opt-in in the crate, so `import_pack` now calls `validate_header_consistency`.
+  - Selis only reads through `ZipArchive` into its own staging names, so the advisory's file overwrite did not apply. The risk was a pack reading differently here and in other tools.
+  - async-executor 1.14.1: 1.14.0 was yanked and failed `cargo deny` on every branch.
+- #87 — undici 8.12.3. #104 — zod 4.6.7 (plain update, no override). Both dev-only. #99 closed as superseded.
+- #102 — translation pass: 37 Greek keys for conversion and export; 3 Greek baselines (`viewer-more`).
+- #106 — version 1.0.0-rc.5: versionCode 10000050 (10000051–54 per ABI), CHANGELOG, Play "What's new" en-US and el-GR. Annotated tag `v1.0.0-rc.5` on 91ada52.
+
+Verified:
+- Regression test `refuses_local_header_that_disagrees_with_central_directory`: fails without the new call on 9.0.5, passes with it. Packs written by rc.1 code (zip 9.0.3), plain and protected, still import (one-off check).
+- `.selispack` fuzz target: 60 s in CI with zip 9.0.5, 193,956 runs, no crash.
+- osv-scanner on main's locks: nothing for zip, undici or zod; no finding scored HIGH or CRITICAL. Ten findings have no score in OSV.
+- Playwright en + el, strict CI of #102: 293 passed, 4 skipped.
+- Maestro, full suite on AVD 36: 27/27 with no retries, including `pack`, `convert-docx` and `upgrade-locale`. The S23 was not used.
+- Release run 41901811965:
+  - SHA256SUMS, SBOMs, 16 KB LOAD, F-Droid scanner, reproducible build.
+  - `selis-1.0.0-rc.5.aab`: 65,757,140 bytes, versionCode 10000050, upload key d7dee4ae…9d0762.
+  - APKs signed with the app key 2b9682e1…af1598.
+
+Open:
+- Draft: published by the owner.
+- No TestFlight build: the App Store Connect secrets are not set, so the iOS job skips signing and upload.
+- Local `cargo test` on this host: two `selis-transfer` tests that find peers over mDNS fail, also on an older commit where they had passed the same day. They pass in CI. Cause not confirmed.
+- CI's Tier 1 job ran out of disk once (#100, `No space left on device`); the rerun passed. It may recur.
+- #103 would move zip to 9.2.1 past the exact pin; the regression test guards the check if it is merged.
 
 ## v1.0.0-rc.4 (2026-10-28)
 
@@ -29,7 +60,7 @@ Verified:
 - Tier 1 local and CI. Playwright en 155 + visual baselines; 70 en and 69 el baselines reviewed.
 - Maestro, full suite on AVD 36: 25/25. The 7 picker flows passed after #86's fixture-order fix.
 - Release run 40640409688:
-  - SHA256SUMS, SBOMs, TestFlight upload.
+  - SHA256SUMS, SBOMs. No TestFlight upload (corrected 2026-11-04): the iOS job skipped it, the App Store Connect secrets are not set.
   - APKs signed with the app key 2b9682e1…af1598; the AAB with the upload key d7dee4ae…9d0762.
   - 16 KB LOAD, reproducible build. The S23 was not used.
 
