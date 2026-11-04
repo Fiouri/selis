@@ -8,6 +8,11 @@ short summaries of these sections.
 
 ## [Unreleased]
 
+## [1.0.0-rc.5] - 2026-11-04
+
+Fifth release candidate. Convert Word, Excel, CSV, text and Markdown to PDF; export PDF as Word,
+text or images. Security: safer handling of damaged .selispack files.
+
 ### Added
 
 - File conversion (ADR 0035). "Convert to PDF" in the library (and "Open with" / "Share" from
@@ -149,7 +154,9 @@ desktop shell (P6).
 - No analytics, crash reporting, advertising or account; nothing is collected
   ([PRIVACY.md](docs/PRIVACY.md)).
 
-[Unreleased]: https://github.com/Fiouri/selis/compare/v1.0.0-rc.3...HEAD
+[Unreleased]: https://github.com/Fiouri/selis/compare/v1.0.0-rc.5...HEAD
+[1.0.0-rc.5]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.5
+[1.0.0-rc.4]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.4
 [1.0.0-rc.3]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/Fiouri/selis/releases/tag/v1.0.0-rc.1
