@@ -692,6 +692,10 @@ impl Library {
         if zip.len() > MAX_ENTRIES {
             return Err(Error::Pack(PackError::TooLarge));
         }
+        // Every local header must agree with the central directory (GHSA-m665-v7pm-7grj).
+        // The reader below only trusts the central directory, and zip 9.0.5 checks
+        // this only when asked: a pack that reads differently elsewhere is refused.
+        zip.validate_header_consistency().map_err(damaged)?;
         let manifest = {
             let mut entry = zip.by_name(MANIFEST).map_err(damaged)?;
             if entry.compression() != CompressionMethod::Stored || entry.size() > MAX_MANIFEST_BYTES
@@ -1104,6 +1108,128 @@ mod tests {
         }
         assert!(!dir.path().join("evil.pdf").exists());
         Ok(())
+    }
+
+    /// Every entry's local header, as (start of the header, length of its name).
+    fn local_headers(bytes: &[u8]) -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        let mut i = HEADER_PLAIN;
+        while i + 30 <= bytes.len() {
+            if bytes[i..i + 4] == [0x50, 0x4b, 0x01, 0x02] {
+                break;
+            }
+            assert_eq!(bytes[i..i + 4], [0x50, 0x4b, 0x03, 0x04], "local header");
+            let le16 = |at: usize| usize::from(u16::from_le_bytes([bytes[at], bytes[at + 1]]));
+            let le32 = |at: usize| {
+                u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
+            };
+            let name = le16(i + 26);
+            out.push((i, name));
+            i += 30 + name + le16(i + 28) + le32(i + 18) as usize;
+        }
+        out
+    }
+
+    /// The GHSA-m665-v7pm-7grj shape: the data and the central directory are
+    /// those of a valid pack (hashes included), only a local header disagrees.
+    #[test]
+    fn refuses_local_header_that_disagrees_with_central_directory() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let ok = crafted(dir.path(), "ok.selispack", "")?;
+        let good = std::fs::read(&ok).map_err(|e| Error::io(&ok, e))?;
+        let headers = local_headers(&good);
+        assert_eq!(headers.len(), 2, "the manifest and one document");
+
+        let mut variants: Vec<(&str, Vec<u8>)> = Vec::new();
+        for &(at, name_len) in &headers {
+            assert!(
+                name_len >= 3,
+                "entry names are longer than the prefix below"
+            );
+            // A different path of the same length.
+            let mut path = good.clone();
+            path[at + 30] ^= 0x01;
+            variants.push(("path", path));
+            // A traversal in the local name: what a streaming reader would write.
+            let mut traversal = good.clone();
+            traversal[at + 30..at + 30 + 3].copy_from_slice(b"../");
+            variants.push(("traversal", traversal));
+            // A different uncompressed size, then a different compressed size.
+            for field in [22, 18] {
+                let mut size = good.clone();
+                size[at + field] ^= 0x01;
+                variants.push(("size", size));
+            }
+        }
+
+        let dst = library(dir.path(), "b")?;
+        let before = fingerprint(&dst)?;
+        for (i, (what, bytes)) in variants.iter().enumerate() {
+            let path = dir.path().join(format!("cloaked-{i}.selispack"));
+            std::fs::write(&path, bytes).map_err(|e| Error::io(&path, e))?;
+            assert_eq!(
+                pack_err(dst.import_pack(&path, None)),
+                Some(PackError::Damaged),
+                "variant {i}: {what}"
+            );
+            assert_eq!(fingerprint(&dst)?, before, "variant {i}: {what}");
+            let staging = dst.root.join("pack-in");
+            let left = std::fs::read_dir(&staging)
+                .map_err(|e| Error::io(&staging, e))?
+                .count();
+            assert_eq!(left, 0, "variant {i}: {what}: staging folder");
+        }
+        // The unmodified pack is still accepted, so the refusals above are the headers'.
+        assert_eq!(dst.import_pack(&ok, None)?.document_ids.len(), 1);
+        Ok(())
+    }
+
+    /// Packs are written with `large_file(true)`: their local headers carry a
+    /// Zip64 extra field the central directory does not, and they must keep
+    /// importing.
+    #[test]
+    fn header_check_accepts_the_packs_export_writes() -> Result<()> {
+        let dir = tempfile::tempdir().map_err(|e| Error::io("tempdir", e))?;
+        let src = stocked(dir.path())?;
+        let pack = dir.path().join("whole.selispack");
+        let summary = src.export_pack(&pack, &whole(None))?;
+        let body = std::fs::read(&pack).map_err(|e| Error::io(&pack, e))?;
+        assert_eq!(
+            local_headers_zip64(&body),
+            summary.files as usize + 1,
+            "every local header carries the Zip64 extra field"
+        );
+        let dst = library(dir.path(), "b")?;
+        assert_eq!(dst.import_pack(&pack, None)?.document_ids.len(), 3);
+        assert_eq!(fingerprint(&dst)?, fingerprint(&src)?);
+        Ok(())
+    }
+
+    /// How many local headers start their extra field with the Zip64 id.
+    fn local_headers_zip64(bytes: &[u8]) -> usize {
+        let mut count = 0;
+        let mut i = HEADER_PLAIN;
+        while i + 30 <= bytes.len() && bytes[i..i + 4] == [0x50, 0x4b, 0x03, 0x04] {
+            let le16 = |at: usize| usize::from(u16::from_le_bytes([bytes[at], bytes[at + 1]]));
+            let (name, extra) = (le16(i + 26), le16(i + 28));
+            let extra_at = i + 30 + name;
+            let mut size = u64::from(u32::from_le_bytes([
+                bytes[i + 18],
+                bytes[i + 19],
+                bytes[i + 20],
+                bytes[i + 21],
+            ]));
+            if extra >= 20 && bytes[extra_at..extra_at + 2] == [0x01, 0x00] {
+                count += 1;
+                if size == u64::from(u32::MAX) {
+                    let mut compressed = [0u8; 8];
+                    compressed.copy_from_slice(&bytes[extra_at + 12..extra_at + 20]);
+                    size = u64::from_le_bytes(compressed);
+                }
+            }
+            i += 30 + name + extra + usize::try_from(size).unwrap_or(usize::MAX / 2);
+        }
+        count
     }
 
     #[test]

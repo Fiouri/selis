@@ -88,3 +88,14 @@ library in clear text) could sit in the app cache for a day. Now every `.selispa
 deleted when the app starts (private import copies included: nothing is in flight) and before
 every export (an import running meanwhile keeps its copy). The receiving app still has until
 then to read the file; one that held it open keeps reading after the delete. PRIVACY.md says so.
+
+## Amendment (2026-11-04): local headers must match the central directory
+
+A ZIP names and sizes every entry twice, in its local header and in the central directory, and
+readers can trust different ones (GHSA-m665-v7pm-7grj). Import reads through the central
+directory only, so a pack whose local headers say something else would have imported while
+reading differently in any other tool. Import now calls zip 9.0.5's
+`ZipArchive::validate_header_consistency` right after opening the archive: any disagreement,
+a duplicate name or overlapping entries is the ordinary "damaged pack" error and nothing is
+added. The check is opt-in in the crate, so the version bump alone did not do this.
+Packs written by earlier versions pass: their writer gave both headers the same values.

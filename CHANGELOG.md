@@ -22,6 +22,12 @@ short summaries of these sections.
   - text or Markdown;
   - every page as a PNG or JPEG image in one ZIP.
 
+### Security
+
+- Safer handling of damaged .selispack files: a pack whose ZIP local headers disagree with its
+  central directory is refused as damaged, and nothing is added to the library (zip 9.0.5,
+  GHSA-m665-v7pm-7grj; ADR 0012 amendment).
+
 ## [1.0.0-rc.4] - 2026-10-28
 
 Fourth release candidate: sharper text at every zoom level.
