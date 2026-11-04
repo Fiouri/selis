@@ -1,0 +1,1 @@
+Convert Word, Excel, CSV, text and Markdown to PDF; export PDF as Word, text or images. Security: safer handling of damaged .selispack files.
